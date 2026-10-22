@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Yahoo Finance data source for FluxTick: stocks, ETFs, indices, forex and commodities via polling. Unofficial API.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluxTick.Abstractions\FluxTick.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluxTick.Providers.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Deterministic random-walk data source for demos, screenshots and tests.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluxTick.Abstractions\FluxTick.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

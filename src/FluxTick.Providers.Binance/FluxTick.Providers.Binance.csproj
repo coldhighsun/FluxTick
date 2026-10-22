@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Binance spot market data source for FluxTick (WebSocket streaming, no API key).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluxTick.Abstractions\FluxTick.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluxTick.Providers.Tests" />
+  </ItemGroup>
+
+</Project>
