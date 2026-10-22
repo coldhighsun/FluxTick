@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+  # NuGet packages (versions are centrally managed in Directory.Packages.props).
+  # Major bumps go into one PR, minor/patch bumps into another.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      nuget-major:
+        update-types:
+          - major
+      nuget-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Actions used by the workflows under .github/workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions-major:
+        update-types:
+          - major
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch
