@@ -23,11 +23,11 @@ jobs:
           - { os: ubuntu-latest, rid: linux-x64 }
           - { os: macos-latest, rid: osx-arm64 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -47,7 +47,7 @@ jobs:
             zip -j ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.rid }}
           path: FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip
@@ -61,7 +61,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: package-*
           merge-multiple: true
@@ -70,7 +70,7 @@ jobs:
         run: sha256sum FluxTick-*.zip > SHA256SUMS.txt
 
       # A tag with a SemVer pre-release suffix (e.g. v1.2.0-beta.1, v1.2.0-rc.1) is published as a pre-release.
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             FluxTick-*.zip
