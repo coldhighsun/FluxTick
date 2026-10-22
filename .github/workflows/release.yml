@@ -2,10 +2,14 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -27,6 +31,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Test
+        run: dotnet test --solution FluxTick.slnx -c Release
+
       - name: Publish single-file, self-contained build
         run: dotnet publish src/FluxTick.App -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
 
@@ -40,7 +47,33 @@ jobs:
             zip -j ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick
           fi
 
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip
+          name: package-${{ matrix.rid }}
+          path: FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip
+          retention-days: 1
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: sha256sum FluxTick-*.zip > SHA256SUMS.txt
+
+      # A tag with a SemVer pre-release suffix (e.g. v1.2.0-beta.1, v1.2.0-rc.1) is published as a pre-release.
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: |
+            FluxTick-*.zip
+            SHA256SUMS.txt
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
