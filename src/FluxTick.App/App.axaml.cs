@@ -1,0 +1,187 @@
+using System.Globalization;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using FluxTick.App.Services;
+using FluxTick.App.ViewModels;
+using FluxTick.App.Views;
+using FluxTick.Core.Application;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace FluxTick.App;
+
+/// <summary>
+/// The Avalonia application: wires up services, the main window and the tray icon.
+/// </summary>
+public sealed partial class App : Application
+{
+    /// <summary>
+    /// The service provider, created on startup.
+    /// </summary>
+    private ServiceProvider? _services;
+
+    /// <summary>
+    /// The settings store.
+    /// </summary>
+    private SettingsManager? _settings;
+
+    /// <summary>
+    /// The main window.
+    /// </summary>
+    private MainWindow? _window;
+
+    /// <summary>
+    /// Saves the window geometry once it stops changing.
+    /// </summary>
+    private Debouncer? _geometrySave;
+
+    /// <summary>
+    /// Gets a value indicating whether the application is shutting down, so closing the window really closes it.
+    /// </summary>
+    public bool IsExiting { get; private set; }
+
+    /// <inheritdoc />
+    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+
+    /// <inheritdoc />
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            var demo = desktop.Args?.Contains("--demo", StringComparer.OrdinalIgnoreCase) == true;
+            _services = AppHost.Build(demo);
+            _settings = _services.GetRequiredService<SettingsManager>();
+            _geometrySave = new Debouncer(TimeSpan.FromMilliseconds(600), TimeProvider.System);
+
+            Task.Run(() => _settings.LoadAsync(DefaultSettings.Create(demo))).GetAwaiter().GetResult();
+
+            var viewModel = _services.GetRequiredService<MainViewModel>();
+            _window = new MainWindow { DataContext = viewModel };
+            _window.RestoreGeometry(_settings.Current.Window);
+            _window.GeometryChanged += OnGeometryChanged;
+            desktop.MainWindow = _window;
+
+            ActualThemeVariantChanged += (_, _) => ApplyPalette();
+            _settings.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyPalette);
+            ApplyPalette();
+
+            desktop.Exit += (_, _) =>
+            {
+                IsExiting = true;
+                _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            };
+
+            _ = StartAsync(viewModel, desktop.Args ?? []);
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Starts the view model and honors the developer option <c>--page=add|settings</c>, which opens that page on startup.
+    /// </summary>
+    /// <param name="viewModel">
+    /// The main view model.
+    /// </param>
+    /// <param name="args">
+    /// The command line arguments.
+    /// </param>
+    /// <returns>
+    /// A task that completes once startup finished.
+    /// </returns>
+    private static async Task StartAsync(MainViewModel viewModel, string[] args)
+    {
+        await viewModel.InitializeAsync();
+        var page = args.FirstOrDefault(a => a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))?["--page=".Length..];
+        Dispatcher.UIThread.Post(() =>
+        {
+            switch (page?.ToLowerInvariant())
+            {
+                case "add":
+                    viewModel.ShowAdd();
+                    break;
+                case "settings":
+                    viewModel.ShowSettings();
+                    break;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Replaces the up and down brushes according to the color convention and the active theme.
+    /// </summary>
+    private void ApplyPalette()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        var redUp = ColorConventionResolver.IsRedUp(_settings.Current.Appearance.ColorConvention, CultureInfo.CurrentUICulture);
+        var variant = ActualThemeVariant ?? ThemeVariant.Dark;
+        if (TryGetResource("GainColor", variant, out var gain) && gain is Color gainColor
+            && TryGetResource("LossColor", variant, out var loss) && loss is Color lossColor)
+        {
+            Resources["UpBrush"] = new SolidColorBrush(redUp ? lossColor : gainColor);
+            Resources["DownBrush"] = new SolidColorBrush(redUp ? gainColor : lossColor);
+        }
+    }
+
+    /// <summary>
+    /// Persists the window geometry after it settled.
+    /// </summary>
+    /// <param name="sender">
+    /// The window.
+    /// </param>
+    /// <param name="geometry">
+    /// The new geometry.
+    /// </param>
+    private void OnGeometryChanged(object? sender, WindowGeometry geometry) =>
+        _geometrySave?.Run(() => _settings!.UpdateAsync(s =>
+        {
+            s.Window.X = geometry.X;
+            s.Window.Y = geometry.Y;
+            s.Window.Width = geometry.Width;
+            s.Window.Height = geometry.Height;
+        }));
+
+    /// <summary>
+    /// Toggles the window when the tray icon is clicked.
+    /// </summary>
+    /// <param name="sender">
+    /// The tray icon.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnTrayClicked(object? sender, EventArgs e) => _window?.ToggleVisibility();
+
+    /// <summary>
+    /// Toggles the window from the tray menu.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnToggleWindow(object? sender, EventArgs e) => _window?.ToggleVisibility();
+
+    /// <summary>
+    /// Exits the application from the tray menu.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnExit(object? sender, EventArgs e)
+    {
+        IsExiting = true;
+        (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+    }
+}

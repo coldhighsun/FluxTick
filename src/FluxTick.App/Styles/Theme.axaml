@@ -1,0 +1,162 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:FluxTick.App.Controls">
+
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <Color x:Key="WindowBgColor">#0B0D10</Color>
+          <Color x:Key="SurfaceColor">#151A22</Color>
+          <Color x:Key="SurfaceHoverColor">#1C232D</Color>
+          <Color x:Key="BorderColor">#252D39</Color>
+          <Color x:Key="TextColor">#E6EDF3</Color>
+          <Color x:Key="MutedColor">#7D8590</Color>
+          <Color x:Key="AccentColor">#2EE59D</Color>
+          <Color x:Key="WarnColor">#F5B94A</Color>
+          <Color x:Key="GainColor">#2EE59D</Color>
+          <Color x:Key="LossColor">#FF5C7A</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <Color x:Key="WindowBgColor">#F6F8FA</Color>
+          <Color x:Key="SurfaceColor">#FFFFFF</Color>
+          <Color x:Key="SurfaceHoverColor">#EEF1F4</Color>
+          <Color x:Key="BorderColor">#D0D7DE</Color>
+          <Color x:Key="TextColor">#1F2328</Color>
+          <Color x:Key="MutedColor">#656D76</Color>
+          <Color x:Key="AccentColor">#12A66D</Color>
+          <Color x:Key="WarnColor">#B7791F</Color>
+          <Color x:Key="GainColor">#12A66D</Color>
+          <Color x:Key="LossColor">#E0405E</Color>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <SolidColorBrush x:Key="WindowBgBrush" Color="{DynamicResource WindowBgColor}" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="{DynamicResource SurfaceColor}" />
+      <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{DynamicResource SurfaceHoverColor}" />
+      <SolidColorBrush x:Key="BorderBrush" Color="{DynamicResource BorderColor}" />
+      <SolidColorBrush x:Key="TextBrush" Color="{DynamicResource TextColor}" />
+      <SolidColorBrush x:Key="MutedBrush" Color="{DynamicResource MutedColor}" />
+      <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}" />
+      <SolidColorBrush x:Key="WarnBrush" Color="{DynamicResource WarnColor}" />
+      <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace</FontFamily>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+  </Style>
+  <Style Selector="TextBlock.section">
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Margin" Value="0,14,0,6" />
+  </Style>
+  <Style Selector="TextBlock.warn">
+    <Setter Property="Foreground" Value="{DynamicResource WarnBrush}" />
+  </Style>
+  <Style Selector="TextBlock.up">
+    <Setter Property="Foreground" Value="{DynamicResource UpBrush}" />
+  </Style>
+  <Style Selector="TextBlock.down">
+    <Setter Property="Foreground" Value="{DynamicResource DownBrush}" />
+  </Style>
+
+  <Style Selector="controls|SparklineControl">
+    <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="controls|SparklineControl.up">
+    <Setter Property="Stroke" Value="{DynamicResource UpBrush}" />
+  </Style>
+  <Style Selector="controls|SparklineControl.down">
+    <Setter Property="Stroke" Value="{DynamicResource DownBrush}" />
+  </Style>
+
+  <Style Selector="Button.icon">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Width" Value="26" />
+    <Setter Property="Height" Value="26" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+  <Style Selector="Button.icon Path">
+    <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
+    <Setter Property="StrokeThickness" Value="1.6" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+  </Style>
+  <Style Selector="Button.icon:pointerover Path">
+    <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <Style Selector="Button.icon.active Path">
+    <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="#0B0D10" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Opacity" Value="0.85" />
+  </Style>
+
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="10" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+
+  <Style Selector="Border.chip">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="4,1" />
+  </Style>
+
+  <Style Selector="Ellipse.dot">
+    <Setter Property="Width" Value="7" />
+    <Setter Property="Height" Value="7" />
+    <Setter Property="Fill" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="Ellipse.dot.good">
+    <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <Style Selector="Ellipse.dot.bad">
+    <Setter Property="Fill" Value="{DynamicResource WarnBrush}" />
+  </Style>
+
+  <Style Selector="Border.row">
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Border.row:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  </Style>
+  <Style Selector="Border.row.dimmed > Grid">
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
+
+  <Style Selector="ToggleSwitch">
+    <Setter Property="OnContent" Value="" />
+    <Setter Property="OffContent" Value="" />
+  </Style>
+</Styles>

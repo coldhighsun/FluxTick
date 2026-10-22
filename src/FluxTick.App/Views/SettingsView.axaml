@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:abs="using:FluxTick.Abstractions"
+             xmlns:core="using:FluxTick.Core.Application"
+             xmlns:vm="using:FluxTick.App.ViewModels"
+             x:Class="FluxTick.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="14,0,14,12">
+
+      <TextBlock Text="APPEARANCE" Classes="section" Margin="0,4,0,6" />
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Text="Opacity" VerticalAlignment="Center" />
+            <Slider Grid.Column="1" Minimum="0.3" Maximum="1" Value="{Binding Opacity}" Margin="12,0" />
+            <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat={}{0:P0}}" Classes="muted mono" VerticalAlignment="Center" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Keep on top" VerticalAlignment="Center" />
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Compact (hide charts)" VerticalAlignment="Center" />
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Compact}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Lock position" VerticalAlignment="Center" />
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="Up / down colors" />
+              <TextBlock Text="Auto: red-up for Chinese UI" Classes="muted" FontSize="11" />
+            </StackPanel>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding ColorConventions}" SelectedItem="{Binding SelectedColorConvention}" MinWidth="110" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="DATA SOURCES" Classes="section" />
+      <ItemsControl ItemsSource="{Binding Providers}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProviderSettingsViewModel">
+            <Border Classes="card">
+              <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Ellipse Classes="dot" Classes.good="{Binding StatusGood}" Classes.bad="{Binding StatusBad}" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="190" />
+                    </StackPanel>
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" />
+                </Grid>
+                <TextBlock Text="{Binding Description}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="10" />
+
+                <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Enabled}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:OptionViewModel">
+                      <StackPanel Spacing="3" Margin="0,6,0,0">
+                        <TextBlock FontSize="11" Classes="muted">
+                          <Run Text="{Binding Label}" /><Run Text="{Binding Unit}" />
+                        </TextBlock>
+                        <TextBox Text="{Binding Text, UpdateSourceTrigger=LostFocus}" IsVisible="{Binding IsText}" PasswordChar="{Binding PasswordChar}" />
+                        <ToggleSwitch IsChecked="{Binding BoolValue}" IsVisible="{Binding IsBool}" />
+                        <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" IsVisible="{Binding IsChoice}" HorizontalAlignment="Stretch" />
+                        <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Classes="muted" FontSize="10" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Error}" Classes="warn" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <TextBlock Text="DEFAULT SOURCE PER ASSET CLASS" Classes="section" />
+      <Border Classes="card">
+        <ItemsControl ItemsSource="{Binding Routing}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:RoutingRowViewModel">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Providers}" SelectedItem="{Binding Selected}"
+                          IsVisible="{Binding HasProviders}" MinWidth="130">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="abs:ProviderDescriptor">
+                      <TextBlock Text="{Binding DisplayName}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Grid.Column="1" Text="No source enabled" IsVisible="{Binding !HasProviders}" Classes="warn" FontSize="11" VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <TextBlock Text="Every market. Every tick." Classes="muted" FontSize="11" HorizontalAlignment="Center" Margin="0,16,0,2" />
+      <TextBlock Text="Market data may be delayed or inaccurate and is not investment advice." Classes="muted" FontSize="10"
+                 TextWrapping="Wrap" TextAlignment="Center" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

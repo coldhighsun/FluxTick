@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:abs="using:FluxTick.Abstractions"
+             xmlns:vm="using:FluxTick.App.ViewModels"
+             x:Class="FluxTick.App.Views.AddAssetView"
+             x:DataType="vm:AddAssetViewModel">
+
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="12,4,12,0">
+
+    <Grid Grid.Row="0" ColumnDefinitions="*,8,*">
+      <StackPanel Spacing="3">
+        <TextBlock Text="ASSET CLASS" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding AssetClasses}" SelectedItem="{Binding SelectedAssetClass}"
+                  IsEnabled="{Binding CanChangeClass}" HorizontalAlignment="Stretch" />
+      </StackPanel>
+      <StackPanel Grid.Column="2" Spacing="3">
+        <TextBlock Text="DATA SOURCE" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding AvailableProviders}" SelectedItem="{Binding SelectedProvider}" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="abs:ProviderDescriptor">
+              <TextBlock Text="{Binding DisplayName}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+      <TextBox Text="{Binding Query}" PlaceholderText="Search name or symbol" />
+      <Button Grid.Column="1" Classes="primary" Content="Add" Margin="8,0,0,0"
+              IsVisible="{Binding !CanSearch}" Command="{Binding AddTypedCommand}" />
+    </Grid>
+
+    <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding IsSearching}" Height="2" Margin="0,6,0,0" />
+
+    <TextBlock Grid.Row="3" Text="{Binding Message}" Classes="muted" FontSize="12" TextWrapping="Wrap" Margin="2,8,2,0" />
+
+    <ScrollViewer Grid.Row="4" Margin="0,6,0,0" VerticalScrollBarVisibility="Auto">
+      <ItemsControl ItemsSource="{Binding Results}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="abs:Asset">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" Padding="8,6"
+                    Command="{Binding $parent[UserControl].((vm:AddAssetViewModel)DataContext).AddCommand}"
+                    CommandParameter="{Binding}">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel>
+                  <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding DisplayName}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding AssetClass}" Classes="muted" FontSize="10" VerticalAlignment="Center" />
+              </Grid>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

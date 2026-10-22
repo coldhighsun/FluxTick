@@ -1,0 +1,38 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="FluxTick.App.App"
+             RequestedThemeVariant="Default">
+
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#2EE59D" />
+        <ColorPaletteResources x:Key="Light" Accent="#12A66D" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://FluxTick/Styles/Theme.axaml" />
+  </Application.Styles>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <!-- Replaced at runtime by App.ApplyPalette according to the color convention. -->
+      <SolidColorBrush x:Key="UpBrush" Color="#2EE59D" />
+      <SolidColorBrush x:Key="DownBrush" Color="#FF5C7A" />
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="/Assets/fluxtick.png" ToolTipText="FluxTick — Every market. Every tick." Clicked="OnTrayClicked">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Show / hide" Click="OnToggleWindow" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Exit" Click="OnExit" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
+
+</Application>

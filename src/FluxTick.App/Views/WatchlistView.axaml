@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FluxTick.App.ViewModels"
+             xmlns:views="using:FluxTick.App.Views"
+             x:Class="FluxTick.App.Views.WatchlistView"
+             x:DataType="vm:MainViewModel">
+
+  <Grid>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0">
+      <ItemsControl ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:AssetRowViewModel">
+            <views:AssetRowView>
+              <views:AssetRowView.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="Move up"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).MoveUpCommand}"
+                            CommandParameter="{Binding}" />
+                  <MenuItem Header="Move down"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).MoveDownCommand}"
+                            CommandParameter="{Binding}" />
+                  <MenuItem Header="Change data source…"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
+                            CommandParameter="{Binding}" />
+                  <Separator />
+                  <MenuItem Header="Remove"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveCommand}"
+                            CommandParameter="{Binding}" />
+                </ContextMenu>
+              </views:AssetRowView.ContextMenu>
+            </views:AssetRowView>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <StackPanel IsVisible="{Binding IsEmpty}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
+      <TextBlock Text="Nothing to watch yet" FontWeight="SemiBold" HorizontalAlignment="Center" />
+      <TextBlock Text="Press + to add a stock, coin, currency or index." Classes="muted" FontSize="12" HorizontalAlignment="Center" />
+    </StackPanel>
+  </Grid>
+</UserControl>

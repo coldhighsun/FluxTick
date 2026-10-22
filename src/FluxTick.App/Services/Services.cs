@@ -1,0 +1,121 @@
+using System.Globalization;
+using FluxTick.Abstractions;
+using FluxTick.Core.Application;
+
+namespace FluxTick.App.Services;
+
+/// <summary>
+/// Marshals work onto the UI thread so view models never touch the UI framework directly.
+/// </summary>
+public interface IUiDispatcher
+{
+    /// <summary>
+    /// Queues an action to run on the UI thread. Runs inline when already on it.
+    /// </summary>
+    /// <param name="action">
+    /// The action to run.
+    /// </param>
+    void Post(Action action);
+}
+
+/// <summary>
+/// Well-known locations of the application's files.
+/// </summary>
+public static class AppPaths
+{
+    /// <summary>
+    /// Gets the per-user directory for settings and logs.
+    /// </summary>
+    public static string DataDirectory { get; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluxTick");
+
+    /// <summary>
+    /// Gets the path of the settings file.
+    /// </summary>
+    /// <param name="demo">
+    /// Whether the app runs in demo mode, which uses a separate file so real settings are never touched.
+    /// </param>
+    /// <returns>
+    /// The full path of the settings file.
+    /// </returns>
+    public static string SettingsFile(bool demo) => Path.Combine(DataDirectory, demo ? "settings.demo.json" : "settings.json");
+
+    /// <summary>
+    /// Gets the rolling log file path pattern.
+    /// </summary>
+    public static string LogFile => Path.Combine(DataDirectory, "logs", "fluxtick-.log");
+}
+
+/// <summary>
+/// Resolves which colors mean up and down.
+/// </summary>
+public static class ColorConventionResolver
+{
+    /// <summary>
+    /// Determines whether gains are shown in red.
+    /// </summary>
+    /// <param name="convention">
+    /// The configured convention.
+    /// </param>
+    /// <param name="culture">
+    /// The UI culture used when the convention is <see cref="ColorConvention.Auto"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when gains are red and losses are green.
+    /// </returns>
+    public static bool IsRedUp(ColorConvention convention, CultureInfo culture) => convention switch
+    {
+        ColorConvention.RedUp => true,
+        ColorConvention.GreenUp => false,
+        _ => culture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase),
+    };
+}
+
+/// <summary>
+/// Formats prices and changes for display.
+/// </summary>
+public static class PriceFormatter
+{
+    /// <summary>
+    /// The text shown when a value is unavailable.
+    /// </summary>
+    public const string Unavailable = "—";
+
+    /// <summary>
+    /// Formats a price with a precision suited to its magnitude and asset class.
+    /// </summary>
+    /// <param name="price">
+    /// The price.
+    /// </param>
+    /// <param name="assetClass">
+    /// The asset class, which decides how many decimals small prices need.
+    /// </param>
+    /// <returns>
+    /// The formatted price.
+    /// </returns>
+    public static string FormatPrice(decimal price, AssetClass assetClass)
+    {
+        var abs = Math.Abs(price);
+        var format = abs switch
+        {
+            >= 1000m => "#,##0.00",
+            >= 10m => assetClass == AssetClass.Forex ? "0.000" : "0.00",
+            >= 1m => assetClass is AssetClass.Forex or AssetClass.Crypto ? "0.0000" : "0.00",
+            >= 0.01m => "0.00000",
+            _ => "0.00000000",
+        };
+        return price.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Formats a relative change with an explicit sign.
+    /// </summary>
+    /// <param name="percent">
+    /// The change in percent, or <see langword="null"/> when unknown.
+    /// </param>
+    /// <returns>
+    /// Text such as <c>+1.23%</c>, or <see cref="Unavailable"/>.
+    /// </returns>
+    public static string FormatPercent(decimal? percent) =>
+        percent is null ? Unavailable : percent.Value.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + "%";
+}

@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FluxTick.App.ViewModels"
+             xmlns:controls="using:FluxTick.App.Controls"
+             x:Class="FluxTick.App.Views.AssetRowView"
+             x:DataType="vm:AssetRowViewModel">
+
+  <Border Classes="row" Classes.dimmed="{Binding IsDimmed}" ToolTip.Tip="{Binding Tooltip}">
+    <Grid ColumnDefinitions="*,Auto,Auto">
+
+      <!-- Tick flash: briefly tints the row in the direction of the last move. -->
+      <Border Name="Flash" Grid.ColumnSpan="3" CornerRadius="6" Opacity="0" IsHitTestVisible="False" Margin="-6,-4" />
+
+      <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="1">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
+          <Border Classes="chip" VerticalAlignment="Center">
+            <TextBlock Text="{Binding ClassLabel}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
+          </Border>
+        </StackPanel>
+        <TextBlock Text="{Binding Name}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+
+      <controls:SparklineControl Grid.Column="1" Width="64" Height="26" Margin="8,0"
+                                 IsVisible="{Binding ShowSparkline}"
+                                 Points="{Binding Sparkline}"
+                                 Classes.up="{Binding IsUp}"
+                                 Classes.down="{Binding IsDown}" />
+
+      <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="86" Spacing="1">
+        <TextBlock Text="{Binding PriceText}" Classes="mono" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" />
+        <TextBlock Text="{Binding ChangeText}" IsVisible="{Binding !HasStatus}" Classes="mono"
+                   Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" FontSize="11" HorizontalAlignment="Right" />
+        <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" Classes="warn" FontSize="11" HorizontalAlignment="Right" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>
