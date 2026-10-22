@@ -2,19 +2,15 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AnalysisLevel>latest</AnalysisLevel>
-    <Version>0.1.0</Version>
-    <Authors>FluxTick contributors</Authors>
+    <Authors>coldhighsun</Authors>
     <Product>FluxTick</Product>
-    <Description>Every market. Every tick.</Description>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-  </PropertyGroup>
+  <Import Project="Directory.Build.user" Condition="Exists('Directory.Build.user')" />
 
 </Project>
