@@ -115,6 +115,19 @@ Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The setti
 and validates input from the definition. `ProviderOptions` always returns a valid value, falling back to the default
 for anything missing or malformed.
 
+How the settings page stores options, so you know what your declaration promises:
+
+- An option that equals its declared `DefaultValue` is **not written** to `settings.json`. If you change a default in a
+  later version, it reaches every user who never customised that option, and only those. Files written by earlier
+  builds, which stored every option explicitly, are cleaned up when the app starts: stored values that are valid and
+  equal the default are removed. Invalid values are left in place (they are ignored at run time).
+- `Int`, `Bool` and `Duration` values are compared by meaning, not by text (`05` and `5`, `True` and `true`, or
+  `00:00:05` and `00:00:05.0000000` are the same value), so rewriting such a value in another form never restarts a
+  running provider. `String`, `Secret` and `Choice` values are compared as exact text.
+- A stored value that does not validate is treated as the default, in the provider and in the editor alike.
+- Each data source that declares options has a **Restore defaults** button that puts its options back to their declared
+  defaults. `Secret` options (keys, tokens) are left alone, because they are credentials rather than settings.
+
 ## 5. Register it
 
 In `src/FluxTick.App/Services/AppHost.cs`:

@@ -90,6 +90,50 @@ public class AbstractionsTests
     }
 
     /// <summary>
+    /// Verifies values that mean the same are written in one canonical form, and values that cannot be read stay as they are.
+    /// </summary>
+    [Theory]
+    [InlineData(ProviderOptionType.Int, "05", "5")]
+    [InlineData(ProviderOptionType.Int, " 5 ", "5")]
+    [InlineData(ProviderOptionType.Int, "x", "x")]
+    [InlineData(ProviderOptionType.Bool, "True", "true")]
+    [InlineData(ProviderOptionType.Bool, "FALSE", "false")]
+    [InlineData(ProviderOptionType.Bool, "yes", "yes")]
+    [InlineData(ProviderOptionType.Duration, "00:00:05.0000000", "00:00:05")]
+    [InlineData(ProviderOptionType.Duration, "00:00:00.5", "00:00:00.5000000")]
+    [InlineData(ProviderOptionType.Duration, "5", "5")]
+    [InlineData(ProviderOptionType.String, " keep as typed ", " keep as typed ")]
+    [InlineData(ProviderOptionType.Secret, "Key", "Key")]
+    public void Canonicalize_ByType_WritesEquivalentValuesTheSameWay(ProviderOptionType type, string value, string expected)
+    {
+        var definition = new ProviderOptionDefinition("k", "k", type, "0");
+
+        definition.Canonicalize(value).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies stored durations are read and written in one form, and a bare number is not taken for days.
+    /// </summary>
+    [Theory]
+    [InlineData("00:00:05", true, "00:00:05")]
+    [InlineData("00:00:05.0000000", true, "00:00:05")]
+    [InlineData("1.00:00:00", true, "1.00:00:00")]
+    [InlineData("5", false, null)]
+    [InlineData("", false, null)]
+    [InlineData("soon", false, null)]
+    [InlineData(null, false, null)]
+    public void TryParseDuration_ReadsOnlyTheStoredForm(string? value, bool valid, string? formatted)
+    {
+        var ok = ProviderOptionDefinition.TryParseDuration(value, out var duration);
+
+        ok.Should().Be(valid);
+        if (valid)
+        {
+            ProviderOptionDefinition.FormatDuration(duration).Should().Be(formatted);
+        }
+    }
+
+    /// <summary>
     /// Verifies a choice option only accepts listed values.
     /// </summary>
     [Fact]

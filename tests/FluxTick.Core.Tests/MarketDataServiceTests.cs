@@ -186,6 +186,26 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies writing a value out explicitly and leaving it to the default are the same configuration,
+    /// so the running provider is neither restarted when the explicit default is dropped nor when it is added.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ExplicitDefaultVersusAbsent_KeepsProvider()
+    {
+        await using var service = NewService();
+        var settings = SettingsFor(Btc);
+        settings.Providers["crypto"] = new ProviderSettings { Options = { ["Endpoint"] = "default" } };
+        await service.ApplyAsync(settings);
+
+        settings.Providers["crypto"] = new ProviderSettings();
+        await service.ApplyAsync(settings);
+        settings.Providers["crypto"] = new ProviderSettings { Options = { ["Endpoint"] = "default" } };
+        await service.ApplyAsync(settings);
+
+        _crypto.Created.Should().ContainSingle();
+    }
+
+    /// <summary>
     /// Verifies removing an instrument from the watchlist unsubscribes and forgets it.
     /// </summary>
     [Fact]
@@ -272,6 +292,77 @@ public class MarketDataServiceTests
         missing.Should().BeEmpty();
         service.SupportsSearch("crypto").Should().BeTrue();
         service.SupportsSearch("nope").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a value that means the same but is written differently from the default (a duration with extra
+    /// zeros) does not restart the provider when it is rewritten in canonical form or dropped.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_EquivalentlyWrittenValue_KeepsProvider()
+    {
+        var factory = new OptionsFactory([new ProviderOptionDefinition("Wait", "Wait", ProviderOptionType.Duration, "00:00:05")]);
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        var settings = SettingsFor(Btc);
+        settings.Providers["crypto"] = new ProviderSettings { Options = { ["Wait"] = "00:00:05.0000000" } };
+        await service.ApplyAsync(settings);
+
+        settings.Providers["crypto"] = new ProviderSettings { Options = { ["Wait"] = "00:00:05" } };
+        await service.ApplyAsync(settings);
+        settings.Providers["crypto"] = new ProviderSettings();
+        await service.ApplyAsync(settings);
+
+        factory.Created.Should().ContainSingle();
+
+        settings.Providers["crypto"] = new ProviderSettings { Options = { ["Wait"] = "00:00:07" } };
+        await service.ApplyAsync(settings);
+
+        factory.Created.Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Verifies a descriptor that declares an option key twice does not break applying the settings.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_DescriptorWithDuplicateOptionKeys_StillStartsTheProvider()
+    {
+        var factory = new OptionsFactory(
+        [
+            new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "a"),
+            new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "b"),
+        ]);
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+
+        var act = () => service.ApplyAsync(SettingsFor(Btc));
+
+        await act.Should().NotThrowAsync();
+        factory.Created.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// A factory with configurable option declarations that counts the providers it created.
+    /// </summary>
+    /// <param name="options">
+    /// The declared options.
+    /// </param>
+    private sealed class OptionsFactory(IReadOnlyList<ProviderOptionDefinition> options) : IMarketDataProviderFactory
+    {
+        /// <summary>
+        /// Gets the providers created so far.
+        /// </summary>
+        public List<FakeProvider> Created { get; } = [];
+
+        /// <inheritdoc />
+        public ProviderDescriptor Descriptor { get; } =
+            new("crypto", "Crypto", "Test", [AssetClass.Crypto], ProviderUpdateMode.Streaming, Options: options);
+
+        /// <inheritdoc />
+        public IMarketDataProvider Create(ProviderCreationContext context)
+        {
+            var provider = new FakeProvider(Descriptor, context.Options);
+            Created.Add(provider);
+            return provider;
+        }
     }
 
     /// <summary>

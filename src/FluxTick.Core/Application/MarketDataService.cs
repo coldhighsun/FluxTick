@@ -245,9 +245,7 @@ public sealed class MarketDataService : IAsyncDisposable
             var desired = new Dictionary<string, IReadOnlyDictionary<string, string>>();
             foreach (var descriptor in _registry.Descriptors.Where(settings.IsProviderEnabled))
             {
-                desired[descriptor.Id] = settings.Providers.TryGetValue(descriptor.Id, out var ps)
-                    ? new Dictionary<string, string>(ps.Options)
-                    : new Dictionary<string, string>();
+                desired[descriptor.Id] = EffectiveOptions(descriptor, settings.Providers.GetValueOrDefault(descriptor.Id)?.Options);
             }
 
             await RetireProvidersAsync(desired).ConfigureAwait(false);
@@ -627,6 +625,34 @@ public sealed class MarketDataService : IAsyncDisposable
         return _timeProvider.GetUtcNow() - state.LastReceivedAt.Value > _options.StaleAfter
             ? (AssetHealth.Stale, null)
             : (AssetHealth.Live, null);
+    }
+
+    /// <summary>
+    /// Resolves the option values a provider really runs with: the stored value when valid, otherwise the declared
+    /// default, written in canonical form. Comparing these instead of the raw stored values means a value written out
+    /// explicitly, written differently or left to the default are the same configuration, so the provider is not
+    /// restarted for it.
+    /// </summary>
+    /// <param name="descriptor">
+    /// The descriptor that declares the options.
+    /// </param>
+    /// <param name="stored">
+    /// The stored values, or <see langword="null"/> when none are stored.
+    /// </param>
+    /// <returns>
+    /// The effective value of every declared option.
+    /// </returns>
+    private static Dictionary<string, string> EffectiveOptions(ProviderDescriptor descriptor, IReadOnlyDictionary<string, string>? stored)
+    {
+        var options = new ProviderOptions(descriptor, stored);
+        var effective = new Dictionary<string, string>();
+        foreach (var definition in descriptor.OptionDefinitions)
+        {
+            // An indexer, not Add, so a descriptor that declares a key twice cannot break applying the settings.
+            effective[definition.Key] = definition.Canonicalize(options.GetString(definition.Key));
+        }
+
+        return effective;
     }
 
     /// <summary>

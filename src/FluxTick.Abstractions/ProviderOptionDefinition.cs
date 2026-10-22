@@ -101,7 +101,7 @@ public sealed record ProviderOptionDefinition(
             case ProviderOptionType.Bool:
                 return bool.TryParse(value, out _) ? null : "Must be true or false.";
             case ProviderOptionType.Duration:
-                if (!value.Contains(':') || !TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out var span))
+                if (!TryParseDuration(value, out var span))
                 {
                     return "Must be a duration.";
                 }
@@ -113,6 +113,60 @@ public sealed record ProviderOptionDefinition(
                 return null;
         }
     }
+
+    /// <summary>
+    /// Writes a valid stored value in one canonical text form, so values that mean the same compare as equal
+    /// whichever way they were written (for example <c>05</c> and <c>5</c>, or <c>00:00:05</c> and <c>00:00:05.0000000</c>).
+    /// A value that cannot be read for its type is returned unchanged.
+    /// </summary>
+    /// <param name="value">
+    /// The stored value.
+    /// </param>
+    /// <returns>
+    /// The canonical text form.
+    /// </returns>
+    internal string Canonicalize(string value) => Type switch
+    {
+        ProviderOptionType.Int when int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
+            => number.ToString(CultureInfo.InvariantCulture),
+        ProviderOptionType.Bool when bool.TryParse(value, out var flag)
+            => flag ? "true" : "false",
+        ProviderOptionType.Duration when TryParseDuration(value, out var span)
+            => FormatDuration(span),
+        _ => value,
+    };
+
+    /// <summary>
+    /// Reads a duration in its stored text form (the invariant constant format, such as <c>00:00:05</c>).
+    /// A bare number is not accepted, although the format itself would read it as a number of days.
+    /// </summary>
+    /// <param name="value">
+    /// The stored text.
+    /// </param>
+    /// <param name="duration">
+    /// The duration when the text is valid.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the text is a valid stored duration.
+    /// </returns>
+    internal static bool TryParseDuration(string? value, out TimeSpan duration)
+    {
+        duration = default;
+        return value is not null
+            && value.Contains(':')
+            && TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out duration);
+    }
+
+    /// <summary>
+    /// Writes a duration in its stored text form.
+    /// </summary>
+    /// <param name="duration">
+    /// The duration.
+    /// </param>
+    /// <returns>
+    /// The stored text.
+    /// </returns>
+    internal static string FormatDuration(TimeSpan duration) => duration.ToString("c", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Checks a numeric value against <see cref="Min"/> and <see cref="Max"/>.

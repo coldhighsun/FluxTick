@@ -89,5 +89,8 @@ public sealed class ProviderOptions
     /// <returns>
     /// The parsed value.
     /// </returns>
-    public TimeSpan GetDuration(string key) => TimeSpan.ParseExact(GetString(key), "c", CultureInfo.InvariantCulture);
+    public TimeSpan GetDuration(string key) =>
+        ProviderOptionDefinition.TryParseDuration(GetString(key), out var duration)
+            ? duration
+            : throw new FormatException($"Option '{key}' is not a valid duration.");
 }
