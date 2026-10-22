@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: ubuntu-latest, rid: linux-x64 }
+          - { os: macos-latest, rid: osx-arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish single-file, self-contained build
+        run: dotnet publish src/FluxTick.App -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
+
+      - name: Package
+        shell: bash
+        run: |
+          cd publish/${{ matrix.rid }}
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            7z a ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick.exe
+          else
+            zip -j ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip
+          generate_release_notes: true

@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FluxTick.Abstractions/FluxTick.Abstractions.csproj" />
+    <Project Path="src/FluxTick.App/FluxTick.App.csproj" />
+    <Project Path="src/FluxTick.Core/FluxTick.Core.csproj" />
+    <Project Path="src/FluxTick.Providers.Binance/FluxTick.Providers.Binance.csproj" />
+    <Project Path="src/FluxTick.Providers.Simulated/FluxTick.Providers.Simulated.csproj" />
+    <Project Path="src/FluxTick.Providers.Yahoo/FluxTick.Providers.Yahoo.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FluxTick.App.Tests/FluxTick.App.Tests.csproj" />
+    <Project Path="tests/FluxTick.Core.Tests/FluxTick.Core.Tests.csproj" />
+    <Project Path="tests/FluxTick.Providers.Tests/FluxTick.Providers.Tests.csproj" />
+  </Folder>
+</Solution>
