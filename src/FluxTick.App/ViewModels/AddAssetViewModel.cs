@@ -91,7 +91,7 @@ public sealed partial class AddAssetViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Raised when the page is finished (added, replaced or cancelled) and the watchlist should be shown again.
+    /// Raised when the page is finished (added, replaced or cancelled) and its window should be closed.
     /// </summary>
     public event EventHandler? Completed;
 
@@ -181,7 +181,7 @@ public sealed partial class AddAssetViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Adds (or re-targets to) the chosen instrument and returns to the watchlist.
+    /// Adds (or re-targets to) the chosen instrument and finishes the page.
     /// </summary>
     /// <param name="asset">
     /// The instrument to add.

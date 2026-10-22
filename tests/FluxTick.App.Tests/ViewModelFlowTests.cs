@@ -63,7 +63,7 @@ public class ViewModelFlowTests
         await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl));
         await h.Main.InitializeAsync();
 
-        await h.Main.MoveDownCommand.ExecuteAsync(h.Main.Rows[0]);
+        await h.Main.MoveToAsync(h.Main.Rows[0], 1);
         await Harness.EventuallyAsync(() => h.Main.Rows[0].Symbol == "AAPL");
         h.Store.Stored!.Watchlist.Select(e => e.Symbol).Should().Equal("AAPL", "BTC");
 
@@ -155,25 +155,364 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies navigation between pages and the derived visibility flags.
+    /// Verifies opening the add instrument page prepares it and raises a request for its window.
     /// </summary>
     [Fact]
-    public async Task Navigation_SwitchesPagesAndFlags()
+    public async Task ShowAdd_PreparesPageAndRaisesRequest()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
-        h.Main.IsWatchlistPage.Should().BeTrue();
         h.Main.IsEmpty.Should().BeTrue();
+        var requests = 0;
+        h.Main.AddAssetRequested += (_, _) => requests++;
 
         h.Main.ShowAddCommand.Execute(null);
-        h.Main.IsAddPage.Should().BeTrue();
-        h.Main.IsWatchlistPage.Should().BeFalse();
+
+        requests.Should().Be(1);
+        h.AddAsset.Title.Should().Be("Add instrument");
+        h.AddAsset.CanChangeClass.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies opening settings raises a request for the settings window each time.
+    /// </summary>
+    [Fact]
+    public async Task ShowSettings_RaisesRequest()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var requests = 0;
+        h.Main.SettingsRequested += (_, _) => requests++;
 
         h.Main.ShowSettingsCommand.Execute(null);
-        h.Main.IsSettingsPage.Should().BeTrue();
-
         h.Main.ShowSettingsCommand.Execute(null);
-        h.Main.IsWatchlistPage.Should().BeTrue();
+
+        requests.Should().Be(2);
+    }
+
+    /// <summary>
+    /// Verifies no window is requested and no page state is reset while a tool window is already open.
+    /// </summary>
+    [Fact]
+    public async Task WhileToolWindowIsOpen_RequestsAreIgnoredAndStateIsKept()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Aapl));
+        await h.Main.InitializeAsync();
+        h.Main.ShowAddCommand.Execute(null);
+        h.AddAsset.Query = "kept";
+        h.Main.BeginToolWindow(ToolWindowKind.AddAsset);
+        h.Main.IsToolWindowOpen.Should().BeTrue();
+        h.Main.IsSettingsOpen.Should().BeFalse();
+        var requests = 0;
+        h.Main.AddAssetRequested += (_, _) => requests++;
+        h.Main.SettingsRequested += (_, _) => requests++;
+
+        h.Main.ShowAddCommand.Execute(null);
+        h.Main.ShowSettingsCommand.Execute(null);
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[0]);
+
+        requests.Should().Be(0);
+        h.AddAsset.Query.Should().Be("kept");
+        h.AddAsset.Title.Should().Be("Add instrument");
+    }
+
+    /// <summary>
+    /// Verifies requests are served again once the tool window is closed.
+    /// </summary>
+    [Fact]
+    public async Task AfterToolWindowCloses_RequestsAreServedAgain()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var requests = 0;
+        h.Main.SettingsRequested += (_, _) => requests++;
+        h.Main.BeginToolWindow(ToolWindowKind.Settings);
+        h.Main.IsSettingsOpen.Should().BeTrue();
+        h.Main.ShowSettingsCommand.Execute(null);
+
+        h.Main.EndToolWindow();
+        h.Main.IsToolWindowOpen.Should().BeFalse();
+        h.Main.ShowSettingsCommand.Execute(null);
+
+        requests.Should().Be(1);
+    }
+
+    /// <summary>
+    /// Verifies data sources start collapsed, also after the page is reloaded, and expand independently.
+    /// </summary>
+    [Fact]
+    public async Task ProviderEntries_StartCollapsedAndExpandIndependently()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.SettingsPage.Reload();
+        var providers = h.SettingsPage.Providers;
+        providers.Should().OnlyContain(p => !p.IsExpanded);
+
+        providers[0].IsExpanded = true;
+
+        providers.Skip(1).Should().OnlyContain(p => !p.IsExpanded);
+        providers[0].IsExpanded = false;
+        providers[0].IsExpanded.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies switching a data source on opens its options so required settings are not hidden.
+    /// </summary>
+    [Fact]
+    public async Task EnablingProvider_ExpandsItsOptions()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        provider.Enabled = false;
+        provider.IsExpanded = false;
+
+        provider.Enabled = true;
+
+        provider.IsExpanded.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies an invalid option opens the section and flags it, and a valid value clears the flag.
+    /// </summary>
+    [Fact]
+    public async Task InvalidOption_ExpandsProviderAndFlagsError()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
+        provider.IsExpanded = false;
+        provider.HasOptionError.Should().BeFalse();
+
+        interval.Text = "not a number";
+
+        provider.HasOptionError.Should().BeTrue();
+        provider.IsExpanded.Should().BeTrue();
+        interval.Text = "10";
+        provider.HasOptionError.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies restoring defaults resets every option of a source, saves the defaults and keeps the enabled state.
+    /// </summary>
+    [Fact]
+    public async Task RestoreDefaults_ResetsOptionsPersistsAndKeepsEnabledState()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        var id = provider.Descriptor.Id;
+        var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
+        var url = provider.Options.Single(o => o.Definition.Key == "Url");
+        interval.Text = "10";
+        url.Text = "https://b";
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Interval") == "00:00:10");
+        var enabled = provider.Enabled;
+
+        provider.RestoreDefaultsCommand.Execute(null);
+
+        interval.Text.Should().Be("5");
+        url.Text.Should().Be("https://a");
+        provider.Enabled.Should().Be(enabled);
+
+        // Defaults are not written out, so they keep following the default of the installed version.
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.Count == 0);
+    }
+
+    /// <summary>
+    /// Verifies only options that differ from the default are persisted.
+    /// </summary>
+    [Fact]
+    public async Task CollectOptions_LeavesOutValuesAtTheirDefault()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        provider.CollectOptions().Should().BeEmpty();
+
+        provider.Options.Single(o => o.Definition.Key == "Interval").Text = "10";
+
+        provider.CollectOptions().Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("Interval", "00:00:10"));
+    }
+
+    /// <summary>
+    /// Verifies settings written by earlier versions, which stored every option explicitly, load as defaults
+    /// and are written back without the values that equal the default.
+    /// </summary>
+    [Fact]
+    public async Task ExplicitDefaultsFromEarlierVersions_AreDroppedOnTheNextSave()
+    {
+        var settings = new AppSettings();
+        settings.Providers[Harness.Crypto] = new ProviderSettings { Options = { ["Interval"] = "00:00:05", ["Url"] = "https://a" } };
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+        h.SettingsPage.Reload();
+        var provider = h.SettingsPage.Providers.Single(p => p.Descriptor.Id == Harness.Crypto);
+        provider.Options.Single(o => o.Definition.Key == "Interval").Text.Should().Be("5");
+        provider.CollectOptions().Should().BeEmpty();
+
+        provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
+
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[Harness.Crypto].Options.Count == 1);
+        h.Store.Stored!.Providers[Harness.Crypto].Options.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("Url", "https://b"));
+    }
+
+    /// <summary>
+    /// Verifies an invalid input in one option does not drop the saved value of that option when another option is saved.
+    /// </summary>
+    [Fact]
+    public async Task InvalidInput_DoesNotRevertTheSavedValueWhenAnotherOptionIsSaved()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        var id = provider.Descriptor.Id;
+        var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
+        interval.Text = "10";
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Interval") == "00:00:10");
+
+        interval.Text = "not a number";
+        provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
+
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Url") == "https://b");
+        h.Store.Stored!.Providers[id].Options["Interval"].Should().Be("00:00:10");
+        interval.Error.Should().NotBeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies restoring only saves when it changes something, so clicking it on an unchanged source does no work.
+    /// </summary>
+    [Fact]
+    public void RestoreDefaults_SavesOnlyWhenSomethingChanged()
+    {
+        var descriptor = new ProviderDescriptor(
+            "plain",
+            "Plain",
+            "Test",
+            [AssetClass.Crypto],
+            ProviderUpdateMode.Streaming,
+            Options: [new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "https://a")]);
+        var saves = 0;
+        var provider = new ProviderSettingsViewModel(descriptor, _ => saves++);
+
+        provider.RestoreDefaultsCommand.Execute(null);
+        saves.Should().Be(0, "everything is already at the default");
+
+        provider.Options.Single().Text = "https://b";
+        saves.Should().Be(1, "committing the edit saves");
+        provider.RestoreDefaultsCommand.Execute(null);
+
+        saves.Should().Be(2);
+        provider.Options.Single().Text.Should().Be("https://a");
+    }
+
+    /// <summary>
+    /// Verifies restoring defaults leaves secret options such as keys untouched.
+    /// </summary>
+    [Fact]
+    public void RestoreDefaults_KeepsSecretOptions()
+    {
+        var descriptor = new ProviderDescriptor(
+            "secret",
+            "Secret",
+            "Test",
+            [AssetClass.Crypto],
+            ProviderUpdateMode.Streaming,
+            Options:
+            [
+                new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "https://a"),
+                new ProviderOptionDefinition("Key", "Key", ProviderOptionType.Secret, string.Empty),
+            ]);
+        var provider = new ProviderSettingsViewModel(descriptor, _ => { });
+        provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
+        provider.Options.Single(o => o.Definition.Key == "Key").Text = "my-key";
+
+        provider.RestoreDefaultsCommand.Execute(null);
+
+        provider.Options.Single(o => o.Definition.Key == "Url").Text.Should().Be("https://a");
+        provider.Options.Single(o => o.Definition.Key == "Key").Text.Should().Be("my-key");
+        provider.CollectOptions().Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("Key", "my-key"));
+    }
+
+    /// <summary>
+    /// Verifies restoring defaults also clears an invalid input and its error flag.
+    /// </summary>
+    [Fact]
+    public async Task RestoreDefaults_AfterInvalidInput_ClearsTheError()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
+        interval.Text = "not a number";
+        provider.HasOptionError.Should().BeTrue();
+
+        provider.RestoreDefaultsCommand.Execute(null);
+
+        interval.Error.Should().BeEmpty();
+        provider.HasOptionError.Should().BeFalse();
+        interval.Text.Should().Be("5");
+    }
+
+    /// <summary>
+    /// Verifies restoring is always possible: with every option already at its default it simply keeps the defaults.
+    /// </summary>
+    [Fact]
+    public async Task RestoreDefaults_WhenAlreadyAtDefaults_KeepsTheDefaults()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
+
+        provider.RestoreDefaultsCommand.CanExecute(null).Should().BeTrue();
+        provider.RestoreDefaultsCommand.Execute(null);
+
+        interval.Text.Should().Be("5");
+        provider.CollectOptions().Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies an invalid option is only flagged while its data source is enabled, because a disabled source hides its options.
+    /// </summary>
+    [Fact]
+    public async Task InvalidOption_OfDisabledProvider_IsNotFlagged()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        provider.Options.Single(o => o.Definition.Key == "Interval").Text = "not a number";
+        provider.HasOptionError.Should().BeTrue();
+
+        provider.Enabled = false;
+
+        provider.HasOptionError.Should().BeFalse();
+        provider.Enabled = true;
+        provider.HasOptionError.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies expanding a data source neither changes its enabled state nor publishes any settings change.
+    /// </summary>
+    [Fact]
+    public async Task ExpandingProvider_DoesNotChangeEnabledStateOrWriteSettings()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var provider = h.SettingsPage.Providers.First();
+        var enabled = provider.Enabled;
+        var changes = 0;
+        h.Settings.Changed += (_, _) => changes++;
+
+        provider.IsExpanded = true;
+
+        // Updates are serialized, so a barrier update completes after any update the expansion might have started;
+        // it is the only change that may be published.
+        await h.Settings.UpdateAsync(_ => { });
+        changes.Should().Be(1);
+        provider.Enabled.Should().Be(enabled);
     }
 
     /// <summary>
@@ -194,14 +533,16 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies adding an instrument from search results saves it and returns to the watchlist.
+    /// Verifies adding an instrument from search results saves it and finishes the page.
     /// </summary>
     [Fact]
-    public async Task AddAsync_FromSearchResult_SavesAndReturns()
+    public async Task AddAsync_FromSearchResult_SavesAndCompletes()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
         h.StocksFactory.Fake.SearchResults = [Aapl];
+        var completed = 0;
+        h.AddAsset.Completed += (_, _) => completed++;
         h.Main.ShowAddCommand.Execute(null);
         h.AddAsset.SelectedAssetClass = AssetClass.Equity;
         h.AddAsset.SelectedProvider = h.AddAsset.AvailableProviders.Single(p => p.Id == Harness.Stocks);
@@ -212,7 +553,7 @@ public class ViewModelFlowTests
         await h.AddAsset.AddCommand.ExecuteAsync(h.AddAsset.Results[0]);
 
         h.Store.Stored!.Watchlist.Should().ContainSingle().Which.Symbol.Should().Be("AAPL");
-        h.Main.IsWatchlistPage.Should().BeTrue();
+        completed.Should().Be(1);
         await Harness.EventuallyAsync(() => h.Main.Rows.Count == 1);
     }
 
@@ -224,12 +565,14 @@ public class ViewModelFlowTests
     {
         await using var h = new Harness(Harness.WatchlistOf(Aapl));
         await h.Main.InitializeAsync();
+        var completed = 0;
+        h.AddAsset.Completed += (_, _) => completed++;
         h.Main.ShowAddCommand.Execute(null);
 
         await h.AddAsset.AddCommand.ExecuteAsync(Aapl);
 
         h.AddAsset.Message.Should().Contain("already");
-        h.Main.IsAddPage.Should().BeTrue();
+        completed.Should().Be(0);
         h.Store.Stored!.Watchlist.Should().ContainSingle();
     }
 
@@ -285,7 +628,11 @@ public class ViewModelFlowTests
         await h.Main.InitializeAsync();
         var target = new Asset(Harness.Plain, "B", "B", AssetClass.Equity);
 
+        var requests = 0;
+        h.Main.AddAssetRequested += (_, _) => requests++;
+
         h.Main.ChangeSourceCommand.Execute(h.Main.Rows[1]);
+        requests.Should().Be(1);
         h.AddAsset.SelectedProvider.Should().NotBeNull();
         h.AddAsset.SelectedProvider!.Id.Should().Be(Harness.Plain, "the current source is avoided when an alternative exists");
         await h.AddAsset.AddCommand.ExecuteAsync(target);

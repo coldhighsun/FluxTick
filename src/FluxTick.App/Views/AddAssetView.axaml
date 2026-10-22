@@ -5,7 +5,7 @@
              x:Class="FluxTick.App.Views.AddAssetView"
              x:DataType="vm:AddAssetViewModel">
 
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="12,4,12,0">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="14,14,14,0">
 
     <Grid Grid.Row="0" ColumnDefinitions="*,8,*">
       <StackPanel Spacing="3">

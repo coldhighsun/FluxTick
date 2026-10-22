@@ -1,0 +1,68 @@
+using Avalonia;
+
+namespace FluxTick.App.Views;
+
+/// <summary>
+/// Decides where a tool window opens relative to the main window.
+/// </summary>
+public static class ToolWindowPlacement
+{
+    /// <summary>
+    /// The distance between the main window and the tool window in screen pixels.
+    /// </summary>
+    private const int Gap = 8;
+
+    /// <summary>
+    /// Places a tool window beside the owner, preferring the left side, and keeps it inside the work area.
+    /// </summary>
+    /// <param name="owner">
+    /// The main window bounds in screen pixels.
+    /// </param>
+    /// <param name="size">
+    /// The tool window size in screen pixels.
+    /// </param>
+    /// <param name="workArea">
+    /// The usable screen area in screen pixels.
+    /// </param>
+    /// <returns>
+    /// The top-left position of the tool window.
+    /// </returns>
+    public static PixelPoint Place(PixelRect owner, PixelSize size, PixelRect workArea)
+    {
+        var left = owner.X - Gap - size.Width;
+        var right = owner.Right + Gap;
+
+        int x;
+        if (left >= workArea.X)
+        {
+            x = left;
+        }
+        else if (right + size.Width <= workArea.Right)
+        {
+            x = right;
+        }
+        else
+        {
+            x = left;
+        }
+
+        return new PixelPoint(Clamp(x, workArea.X, workArea.Right - size.Width), Clamp(owner.Y, workArea.Y, workArea.Bottom - size.Height));
+    }
+
+    /// <summary>
+    /// Clamps a value into a range, favoring the lower bound when the range is empty.
+    /// </summary>
+    /// <param name="value">
+    /// The value.
+    /// </param>
+    /// <param name="min">
+    /// The lower bound.
+    /// </param>
+    /// <param name="max">
+    /// The upper bound.
+    /// </param>
+    /// <returns>
+    /// The clamped value.
+    /// </returns>
+    private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(value, max));
+}

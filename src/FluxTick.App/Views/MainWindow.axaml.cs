@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
+using Microsoft.Extensions.Logging;
 
 namespace FluxTick.App.Views;
 
@@ -35,6 +36,16 @@ public sealed partial class MainWindow : Window
     private const int ScreenMargin = 24;
 
     /// <summary>
+    /// The open tool window (settings or add instrument), if any.
+    /// </summary>
+    private ToolWindow? _toolWindow;
+
+    /// <summary>
+    /// The view model whose window requests are being observed.
+    /// </summary>
+    private MainViewModel? _observed;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
     /// </summary>
     public MainWindow()
@@ -48,6 +59,11 @@ public sealed partial class MainWindow : Window
     /// Raised when the user moved or resized the window.
     /// </summary>
     public event EventHandler<WindowGeometry>? GeometryChanged;
+
+    /// <summary>
+    /// Gets the logger used to record failures of the tool windows.
+    /// </summary>
+    public ILogger<MainWindow>? Logger { get; init; }
 
     /// <summary>
     /// Restores a saved geometry, or places the window in the top-right corner when none is usable.
@@ -104,6 +120,140 @@ public sealed partial class MainWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    /// <summary>
+    /// Follows the window requests of the current view model.
+    /// </summary>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        if (_observed is not null)
+        {
+            _observed.SettingsRequested -= OnSettingsRequested;
+            _observed.AddAssetRequested -= OnAddAssetRequested;
+        }
+
+        _observed = DataContext as MainViewModel;
+        if (_observed is not null)
+        {
+            _observed.SettingsRequested += OnSettingsRequested;
+            _observed.AddAssetRequested += OnAddAssetRequested;
+        }
+
+        base.OnDataContextChanged(e);
+    }
+
+    /// <summary>
+    /// Closes the open tool window together with the main window when it is hidden.
+    /// </summary>
+    /// <param name="change">
+    /// The property change data.
+    /// </param>
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty && !IsVisible)
+        {
+            _toolWindow?.Close();
+        }
+    }
+
+    /// <summary>
+    /// Opens the settings window modally.
+    /// </summary>
+    /// <param name="sender">
+    /// The view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private async void OnSettingsRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        await ShowToolWindowAsync(viewModel, ToolWindowKind.Settings, new SettingsWindow { DataContext = viewModel.Settings });
+    }
+
+    /// <summary>
+    /// Opens the window for adding an instrument or changing its source modally.
+    /// </summary>
+    /// <param name="sender">
+    /// The view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private async void OnAddAssetRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var window = new AddAssetWindow { DataContext = viewModel.AddAsset };
+        void Finish(object? s, EventArgs a) => window.Close();
+        viewModel.AddAsset.Completed += Finish;
+        await ShowToolWindowAsync(viewModel, ToolWindowKind.AddAsset, window, () => viewModel.AddAsset.Completed -= Finish);
+    }
+
+    /// <summary>
+    /// Shows a tool window modally and keeps the bookkeeping consistent until it is gone, even when showing it fails.
+    /// </summary>
+    /// <param name="viewModel">
+    /// The main view model.
+    /// </param>
+    /// <param name="kind">
+    /// The kind of window, published to the view model while it is open.
+    /// </param>
+    /// <param name="window">
+    /// The window to show.
+    /// </param>
+    /// <param name="onClosed">
+    /// An optional cleanup to run once the window is gone.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the window is closed.
+    /// </returns>
+    private async Task ShowToolWindowAsync(MainViewModel viewModel, ToolWindowKind kind, ToolWindow window, Action? onClosed = null)
+    {
+        var cleanedUp = false;
+
+        void CleanUp()
+        {
+            if (cleanedUp)
+            {
+                return;
+            }
+
+            cleanedUp = true;
+            _toolWindow = null;
+            viewModel.EndToolWindow();
+            onClosed?.Invoke();
+        }
+
+        _toolWindow = window;
+        viewModel.BeginToolWindow(kind);
+        window.Closed += (_, _) => CleanUp();
+
+        try
+        {
+            await window.ShowBesideAsync(this);
+        }
+        catch (Exception ex)
+        {
+            // Called from async void event handlers, where an escaping exception would end the application.
+            Logger?.LogError(ex, "A tool window could not be shown");
+        }
+        finally
+        {
+            CleanUp();
+        }
     }
 
     /// <summary>
