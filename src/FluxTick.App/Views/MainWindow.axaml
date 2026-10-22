@@ -30,18 +30,13 @@
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <Image Source="/Assets/fluxtick.png" Width="16" Height="16" />
             <TextBlock Text="FluxTick" FontWeight="SemiBold" FontSize="13" />
-            <TextBlock Text="{Binding AddAsset.Title}" IsVisible="{Binding IsAddPage}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
-            <TextBlock Text="Settings" IsVisible="{Binding IsSettingsPage}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
           </StackPanel>
 
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-            <Button Classes="icon" ToolTip.Tip="Back" Command="{Binding ShowWatchlistCommand}" IsVisible="{Binding !IsWatchlistPage}">
-              <Path Data="M9 2L4 7l5 5" />
-            </Button>
-            <Button Classes="icon" ToolTip.Tip="Add instrument" Command="{Binding ShowAddCommand}" IsVisible="{Binding IsWatchlistPage}">
+            <Button Classes="icon" ToolTip.Tip="Add instrument" Command="{Binding ShowAddCommand}">
               <Path Data="M7 2v10M2 7h10" />
             </Button>
-            <Button Classes="icon" ToolTip.Tip="Settings" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsPage}">
+            <Button Classes="icon" ToolTip.Tip="Settings" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}">
               <Canvas Width="14" Height="14">
                 <Path Data="M1 4h5M10 4h3M1 10h3M8 10h5" />
                 <Ellipse Canvas.Left="6" Canvas.Top="2" Width="4" Height="4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" />
@@ -58,16 +53,8 @@
         </Grid>
       </Border>
 
-      <!-- Pages -->
-      <Grid Grid.Row="1">
-        <views:WatchlistView IsVisible="{Binding IsWatchlistPage}" />
-        <Grid IsVisible="{Binding IsAddPage}">
-          <views:AddAssetView DataContext="{Binding AddAsset}" />
-        </Grid>
-        <Grid IsVisible="{Binding IsSettingsPage}">
-          <views:SettingsView DataContext="{Binding Settings}" />
-        </Grid>
-      </Grid>
+      <!-- Watchlist; settings and add instrument open in their own windows. -->
+      <views:WatchlistView Grid.Row="1" />
 
       <!-- Footer: data source status and resize grip -->
       <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="14,2,4,6">

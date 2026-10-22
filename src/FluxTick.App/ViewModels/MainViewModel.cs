@@ -9,24 +9,24 @@ using Microsoft.Extensions.Logging;
 namespace FluxTick.App.ViewModels;
 
 /// <summary>
-/// The page shown inside the window.
+/// The modal window opened from the main window.
 /// </summary>
-public enum MainPage
+public enum ToolWindowKind
 {
     /// <summary>
-    /// The watchlist.
+    /// No tool window is open.
     /// </summary>
-    Watchlist,
+    None,
 
     /// <summary>
-    /// The add / change source page.
-    /// </summary>
-    AddAsset,
-
-    /// <summary>
-    /// The settings page.
+    /// The settings window.
     /// </summary>
     Settings,
+
+    /// <summary>
+    /// The add instrument / change source window.
+    /// </summary>
+    AddAsset,
 }
 
 /// <summary>
@@ -145,7 +145,6 @@ public sealed partial class MainViewModel : ObservableObject
         AddAsset = addAsset;
         Settings = settingsPage;
 
-        AddAsset.Completed += (_, _) => CurrentPage = MainPage.Watchlist;
         Settings.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SettingsViewModel.Compact))
@@ -176,25 +175,31 @@ public sealed partial class MainViewModel : ObservableObject
     public SettingsViewModel Settings { get; }
 
     /// <summary>
-    /// Gets or sets the page currently shown.
+    /// Gets the modal tool window that is currently open. The view reports it through
+    /// <see cref="BeginToolWindow"/> and <see cref="EndToolWindow"/>.
     /// </summary>
     [ObservableProperty]
-    public partial MainPage CurrentPage { get; set; }
+    public partial ToolWindowKind ActiveTool { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the watchlist page is shown.
+    /// Gets a value indicating whether a modal tool window (settings or add instrument) is open.
     /// </summary>
-    public bool IsWatchlistPage => CurrentPage == MainPage.Watchlist;
+    public bool IsToolWindowOpen => ActiveTool != ToolWindowKind.None;
 
     /// <summary>
-    /// Gets a value indicating whether the add instrument page is shown.
+    /// Gets a value indicating whether the settings window is open.
     /// </summary>
-    public bool IsAddPage => CurrentPage == MainPage.AddAsset;
+    public bool IsSettingsOpen => ActiveTool == ToolWindowKind.Settings;
 
     /// <summary>
-    /// Gets a value indicating whether the settings page is shown.
+    /// Raised when the settings window should be shown.
     /// </summary>
-    public bool IsSettingsPage => CurrentPage == MainPage.Settings;
+    public event EventHandler? SettingsRequested;
+
+    /// <summary>
+    /// Raised when the window for adding an instrument or changing its source should be shown.
+    /// </summary>
+    public event EventHandler? AddAssetRequested;
 
     /// <summary>
     /// Gets a value indicating whether the watchlist is empty and a hint should be shown.
@@ -217,30 +222,46 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Opens the add instrument page.
+    /// Notifies bindings of the derived flags when the open tool window changes.
+    /// </summary>
+    /// <param name="value">
+    /// The new tool window.
+    /// </param>
+    partial void OnActiveToolChanged(ToolWindowKind value)
+    {
+        OnPropertyChanged(nameof(IsToolWindowOpen));
+        OnPropertyChanged(nameof(IsSettingsOpen));
+    }
+
+    /// <summary>
+    /// Requests the add instrument window, which is shown by the view.
     /// </summary>
     [RelayCommand]
     public void ShowAdd()
     {
+        if (IsToolWindowOpen)
+        {
+            return;
+        }
+
         AddAsset.BeginAdd();
-        CurrentPage = MainPage.AddAsset;
+        AddAssetRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
-    /// Opens the settings page.
+    /// Requests the settings window, which is shown by the view.
     /// </summary>
     [RelayCommand]
     public void ShowSettings()
     {
-        Settings.Reload();
-        CurrentPage = CurrentPage == MainPage.Settings ? MainPage.Watchlist : MainPage.Settings;
-    }
+        if (IsToolWindowOpen)
+        {
+            return;
+        }
 
-    /// <summary>
-    /// Returns to the watchlist.
-    /// </summary>
-    [RelayCommand]
-    public void ShowWatchlist() => CurrentPage = MainPage.Watchlist;
+        Settings.Reload();
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Toggles the always-on-top flag.
@@ -249,7 +270,7 @@ public sealed partial class MainViewModel : ObservableObject
     public void TogglePin() => Settings.AlwaysOnTop = !Settings.AlwaysOnTop;
 
     /// <summary>
-    /// Opens the page that moves an instrument to another data source.
+    /// Requests the window that moves an instrument to another data source.
     /// </summary>
     /// <param name="row">
     /// The row to re-target.
@@ -257,14 +278,27 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     public void ChangeSource(AssetRowViewModel? row)
     {
-        if (row is null)
+        if (row is null || IsToolWindowOpen)
         {
             return;
         }
 
         AddAsset.BeginReplace(row.Asset);
-        CurrentPage = MainPage.AddAsset;
+        AddAssetRequested?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Records that a modal tool window is about to be shown, so further requests are ignored until it is closed.
+    /// </summary>
+    /// <param name="kind">
+    /// The window that is opened.
+    /// </param>
+    public void BeginToolWindow(ToolWindowKind kind) => ActiveTool = kind;
+
+    /// <summary>
+    /// Records that the modal tool window is gone.
+    /// </summary>
+    public void EndToolWindow() => ActiveTool = ToolWindowKind.None;
 
     /// <summary>
     /// Removes an instrument from the watchlist.
@@ -280,30 +314,6 @@ public sealed partial class MainViewModel : ObservableObject
         row is null
             ? Task.CompletedTask
             : _settings.UpdateAsync(s => s.Watchlist.RemoveAll(e => e.ProviderId == row.Asset.ProviderId && e.Symbol == row.Asset.Symbol));
-
-    /// <summary>
-    /// Moves an instrument one position up.
-    /// </summary>
-    /// <param name="row">
-    /// The row to move.
-    /// </param>
-    /// <returns>
-    /// A task that completes once the watchlist is saved.
-    /// </returns>
-    [RelayCommand]
-    public Task MoveUpAsync(AssetRowViewModel? row) => MoveAsync(row, -1);
-
-    /// <summary>
-    /// Moves an instrument one position down.
-    /// </summary>
-    /// <param name="row">
-    /// The row to move.
-    /// </param>
-    /// <returns>
-    /// A task that completes once the watchlist is saved.
-    /// </returns>
-    [RelayCommand]
-    public Task MoveDownAsync(AssetRowViewModel? row) => MoveAsync(row, 1);
 
     /// <summary>
     /// Moves an instrument to an absolute position, for example after a drag and drop.
@@ -351,39 +361,6 @@ public sealed partial class MainViewModel : ObservableObject
             s.Watchlist.RemoveAt(index);
             s.Watchlist.Insert(target, entry);
         });
-    }
-
-    /// <summary>
-    /// Notifies bindings of the page flags when the page changes.
-    /// </summary>
-    /// <param name="value">
-    /// The new page.
-    /// </param>
-    partial void OnCurrentPageChanged(MainPage value)
-    {
-        OnPropertyChanged(nameof(IsWatchlistPage));
-        OnPropertyChanged(nameof(IsAddPage));
-        OnPropertyChanged(nameof(IsSettingsPage));
-    }
-
-    /// <summary>
-    /// Moves a row within the watchlist.
-    /// </summary>
-    /// <param name="row">
-    /// The row to move.
-    /// </param>
-    /// <param name="delta">
-    /// The number of positions to move; negative moves up.
-    /// </param>
-    /// <returns>
-    /// A task that completes once the watchlist is saved.
-    /// </returns>
-    private Task MoveAsync(AssetRowViewModel? row, int delta)
-    {
-        var index = row is null ? -1 : Rows.IndexOf(row);
-
-        // MoveToAsync clamps to the ends, so moving the first row up or the last row down is a no-op.
-        return index < 0 ? Task.CompletedTask : MoveToAsync(row, index + delta);
     }
 
     /// <summary>

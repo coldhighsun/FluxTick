@@ -1,0 +1,13 @@
+<views:ToolWindow xmlns="https://github.com/avaloniaui"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:vm="using:FluxTick.App.ViewModels"
+                  xmlns:views="using:FluxTick.App.Views"
+                  x:Class="FluxTick.App.Views.AddAssetWindow"
+                  x:DataType="vm:AddAssetViewModel"
+                  Title="{Binding Title}"
+                  Icon="/Assets/fluxtick.png">
+
+  <views:ToolWindowFrame Title="{Binding Title}">
+    <views:AddAssetView />
+  </views:ToolWindowFrame>
+</views:ToolWindow>

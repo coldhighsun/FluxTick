@@ -68,13 +68,17 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | --- | --- |
 | Move the window | Drag the header (unless *Lock position* is on) |
 | Resize | Drag the bottom-right grip |
-| Add an instrument | **+** in the header, pick an asset class and a data source, search |
-| Reorder, remove, change source | Right-click a row |
+| Add an instrument | **+** in the header opens a window; pick an asset class and a data source, search |
+| Reorder | Drag a row up or down |
+| Remove, change source | Right-click a row |
+| Move the Settings / Add window | Drag its header; **Esc** closes it |
+| Settings | The sliders icon in the header opens a window with the tabs *Appearance*, *Data sources* and *Routing*; expand a data source to edit its options |
+| Restore a data source | *Restore defaults* in its expanded card puts its options back to the built-in values (secret values such as keys are kept) |
 | Compact mode | Double-click the header, or toggle in Settings |
 | Hide / show | **×** hides to the tray; click the tray icon to bring it back; *Exit* in the tray menu quits |
 
 Settings and logs live in `%APPDATA%\FluxTick` on Windows and `~/.config/FluxTick` on Linux and macOS.
-Delete `settings.json` to reset.
+Options that are at their built-in default are not written to `settings.json`. Delete it to reset everything.
 
 ## Project layout
 

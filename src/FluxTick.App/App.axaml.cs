@@ -5,11 +5,13 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using FluxTick.Abstractions;
 using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.App.Views;
 using FluxTick.Core.Application;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FluxTick.App;
 
@@ -57,9 +59,10 @@ public sealed partial class App : Application
             _geometrySave = new Debouncer(TimeSpan.FromMilliseconds(600), TimeProvider.System);
 
             Task.Run(() => _settings.LoadAsync(DefaultSettings.Create(demo))).GetAwaiter().GetResult();
+            CleanUpOptionsAtDefault(_services.GetRequiredService<ProviderRegistry>().Descriptors);
 
             var viewModel = _services.GetRequiredService<MainViewModel>();
-            _window = new MainWindow { DataContext = viewModel };
+            _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
             _window.RestoreGeometry(_settings.Current.Window);
             _window.GeometryChanged += OnGeometryChanged;
             desktop.MainWindow = _window;
@@ -108,6 +111,23 @@ public sealed partial class App : Application
                     break;
             }
         });
+    }
+
+    /// <summary>
+    /// Removes explicit option values that equal the default, which earlier versions wrote for every option,
+    /// so the settings file only holds real customisations. Does nothing, and saves nothing, when there are none.
+    /// </summary>
+    /// <param name="descriptors">
+    /// The descriptors of the available providers.
+    /// </param>
+    private void CleanUpOptionsAtDefault(IReadOnlyList<ProviderDescriptor> descriptors)
+    {
+        if (!ProviderOptionCleanup.DropOptionsAtDefault(_settings!.Current.Clone(), descriptors))
+        {
+            return;
+        }
+
+        Task.Run(() => _settings.UpdateAsync(s => ProviderOptionCleanup.DropOptionsAtDefault(s, descriptors))).GetAwaiter().GetResult();
     }
 
     /// <summary>

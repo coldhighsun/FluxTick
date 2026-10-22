@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
@@ -23,6 +25,16 @@ public sealed partial class OptionViewModel : ObservableObject
     private bool _loading;
 
     /// <summary>
+    /// The built-in default in the same text form as <see cref="StoredValue"/>.
+    /// </summary>
+    private readonly string _normalizedDefault;
+
+    /// <summary>
+    /// The last valid value the editor held, kept while the user types something invalid.
+    /// </summary>
+    private string? _lastValid;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="OptionViewModel"/> class.
     /// </summary>
     /// <param name="definition">
@@ -38,6 +50,7 @@ public sealed partial class OptionViewModel : ObservableObject
     {
         Definition = definition;
         _committed = committed;
+        _normalizedDefault = definition.Canonicalize(definition.DefaultValue);
         Load(stored);
     }
 
@@ -138,7 +151,11 @@ public sealed partial class OptionViewModel : ObservableObject
                         return null;
                     }
 
-                    stored = TimeSpan.FromSeconds(seconds).ToString("c", CultureInfo.InvariantCulture);
+                    stored = ProviderOptionDefinition.FormatDuration(TimeSpan.FromSeconds(seconds));
+                    break;
+                case ProviderOptionType.Int:
+                    // Written back in one canonical form, so '05' and ' 5' are the same value as '5'.
+                    stored = Definition.Canonicalize(Text);
                     break;
                 default:
                     stored = Text;
@@ -146,6 +163,20 @@ public sealed partial class OptionViewModel : ObservableObject
             }
 
             return Definition.Validate(stored) is null ? stored : null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the value to persist, or <see langword="null"/> when the option should not be stored because it is at the
+    /// built-in default. While the input is invalid the last valid value is kept, so a half-typed edit never reverts
+    /// a saved setting.
+    /// </summary>
+    public string? ValueToPersist
+    {
+        get
+        {
+            var value = StoredValue ?? _lastValid;
+            return value is null || value == _normalizedDefault ? null : value;
         }
     }
 
@@ -160,7 +191,8 @@ public sealed partial class OptionViewModel : ObservableObject
         _loading = true;
         try
         {
-            var value = stored ?? Definition.DefaultValue;
+            // Like ProviderOptions, which is what the provider runs with: an invalid stored value counts as the default.
+            var value = stored is not null && Definition.Validate(stored) is null ? stored : Definition.DefaultValue;
             switch (Definition.Type)
             {
                 case ProviderOptionType.Bool:
@@ -170,7 +202,7 @@ public sealed partial class OptionViewModel : ObservableObject
                     SelectedChoice = value;
                     break;
                 case ProviderOptionType.Duration:
-                    Text = TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out var span)
+                    Text = ProviderOptionDefinition.TryParseDuration(value, out var span)
                         ? span.TotalSeconds.ToString(CultureInfo.InvariantCulture)
                         : value;
                     break;
@@ -180,6 +212,7 @@ public sealed partial class OptionViewModel : ObservableObject
             }
 
             Error = string.Empty;
+            _lastValid = StoredValue;
         }
         finally
         {
@@ -221,7 +254,7 @@ public sealed partial class OptionViewModel : ObservableObject
             return;
         }
 
-        if (StoredValue is null)
+        if (StoredValue is not { } valid)
         {
             Error = Definition.Type == ProviderOptionType.Duration
                 ? "Enter a number of seconds."
@@ -230,6 +263,7 @@ public sealed partial class OptionViewModel : ObservableObject
         }
 
         Error = string.Empty;
+        _lastValid = valid;
         _committed();
     }
 }
@@ -264,6 +298,10 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         _changed = changed;
         Options = new ObservableCollection<OptionViewModel>(
             descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, () => _changed(this))));
+        foreach (var option in Options)
+        {
+            option.PropertyChanged += OnOptionPropertyChanged;
+        }
     }
 
     /// <summary>
@@ -298,10 +336,22 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     public bool HasOptions => Options.Count > 0;
 
     /// <summary>
+    /// Gets a value indicating whether an option of an enabled source currently holds an invalid value.
+    /// The options of a disabled source are hidden, so their errors are not surfaced.
+    /// </summary>
+    public bool HasOptionError => Enabled && Options.Any(o => o.Error.Length > 0);
+
+    /// <summary>
     /// Gets or sets a value indicating whether the provider is in use.
     /// </summary>
     [ObservableProperty]
     public partial bool Enabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the description and options are shown.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
 
     /// <summary>
     /// Gets or sets the status text.
@@ -320,6 +370,27 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial bool StatusBad { get; set; }
+
+    /// <summary>
+    /// Puts every option of this source back to its built-in default and saves it when that changes anything.
+    /// The enabled state is kept, and so are secret options such as keys, which are not settings that can be
+    /// "restored" but credentials.
+    /// </summary>
+    [RelayCommand]
+    public void RestoreDefaults()
+    {
+        var before = CollectOptions();
+        foreach (var option in Options.Where(o => o.Definition.Type != ProviderOptionType.Secret))
+        {
+            option.Load(null);
+        }
+
+        var after = CollectOptions();
+        if (before.Count != after.Count || before.Any(p => !after.TryGetValue(p.Key, out var value) || value != p.Value))
+        {
+            _changed(this);
+        }
+    }
 
     /// <summary>
     /// Loads enabled state and option values from settings without raising a change.
@@ -348,7 +419,8 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Collects the valid option values for persistence.
+    /// Collects the option values that differ from the built-in default for persistence.
+    /// Options at their default are left out, so they keep following the default of the installed version.
     /// </summary>
     /// <returns>
     /// The option values keyed by option key.
@@ -358,7 +430,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         var values = new Dictionary<string, string>();
         foreach (var option in Options)
         {
-            if (option.StoredValue is { } value)
+            if (option.ValueToPersist is { } value)
             {
                 values[option.Definition.Key] = value;
             }
@@ -394,9 +466,41 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// </param>
     partial void OnEnabledChanged(bool value)
     {
-        if (!_loading)
+        OnPropertyChanged(nameof(HasOptionError));
+        if (_loading)
         {
-            _changed(this);
+            return;
+        }
+
+        // Show the options of a source the user just switched on, so required settings are not hidden.
+        if (value && HasOptions)
+        {
+            IsExpanded = true;
+        }
+
+        _changed(this);
+    }
+
+    /// <summary>
+    /// Surfaces an invalid option: flags the header and opens the section so the error is visible.
+    /// </summary>
+    /// <param name="sender">
+    /// The option.
+    /// </param>
+    /// <param name="e">
+    /// The property change data.
+    /// </param>
+    private void OnOptionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OptionViewModel.Error))
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(HasOptionError));
+        if (HasOptionError)
+        {
+            IsExpanded = true;
         }
     }
 }

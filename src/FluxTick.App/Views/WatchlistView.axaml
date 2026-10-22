@@ -17,12 +17,6 @@
             <views:AssetRowView>
               <views:AssetRowView.ContextMenu>
                 <ContextMenu>
-                  <MenuItem Header="Move up"
-                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).MoveUpCommand}"
-                            CommandParameter="{Binding}" />
-                  <MenuItem Header="Move down"
-                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).MoveDownCommand}"
-                            CommandParameter="{Binding}" />
                   <MenuItem Header="Change data source…"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
                             CommandParameter="{Binding}" />
