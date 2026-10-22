@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>FluxTick</AssemblyName>
     <RootNamespace>FluxTick.App</RootNamespace>
-    <Description>FluxTick desktop widget. Every market. Every tick.</Description>
+    <Description>A lightweight, open-source desktop widget for tracking multiple financial markets at a glance.</Description>
     <ApplicationIcon>Assets\fluxtick.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
