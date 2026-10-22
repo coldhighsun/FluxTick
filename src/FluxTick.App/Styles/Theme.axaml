@@ -151,6 +151,10 @@
   <Style Selector="Border.row:pointerover">
     <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
   </Style>
+  <Style Selector="UserControl.dragging Border.row">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="Opacity" Value="0.9" />
+  </Style>
   <Style Selector="Border.row.dimmed > Grid">
     <Setter Property="Opacity" Value="0.55" />
   </Style>
