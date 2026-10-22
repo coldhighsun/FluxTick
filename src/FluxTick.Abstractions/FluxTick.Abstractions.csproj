@@ -8,4 +8,12 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The option helpers used by the settings UI and the market data service are not part of the contract for data sources. -->
+    <InternalsVisibleTo Include="FluxTick" />
+    <InternalsVisibleTo Include="FluxTick.Core" />
+    <InternalsVisibleTo Include="FluxTick.Core.Tests" />
+    <InternalsVisibleTo Include="FluxTick.App.Tests" />
+  </ItemGroup>
+
 </Project>
