@@ -6,8 +6,12 @@
              x:DataType="vm:MainViewModel">
 
   <Grid>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0">
-      <ItemsControl ItemsSource="{Binding Rows}">
+    <ScrollViewer Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0">
+      <ItemsControl Name="RowsHost" ItemsSource="{Binding Rows}"
+                    PointerPressed="OnRowsPointerPressed"
+                    PointerMoved="OnRowsPointerMoved"
+                    PointerReleased="OnRowsPointerReleased"
+                    PointerCaptureLost="OnRowsPointerCaptureLost">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:AssetRowViewModel">
             <views:AssetRowView>
