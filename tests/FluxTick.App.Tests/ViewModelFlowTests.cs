@@ -20,6 +20,11 @@ public class ViewModelFlowTests
     private static readonly Asset Aapl = new(Harness.Stocks, "AAPL", "Apple", AssetClass.Equity);
 
     /// <summary>
+    /// The Ether test asset.
+    /// </summary>
+    private static readonly Asset Eth = new(Harness.Crypto, "ETH", "Ether", AssetClass.Crypto);
+
+    /// <summary>
     /// Verifies rows are built from the persisted watchlist in order.
     /// </summary>
     [Fact]
@@ -65,6 +70,73 @@ public class ViewModelFlowTests
         await h.Main.RemoveCommand.ExecuteAsync(h.Main.Rows[0]);
         await Harness.EventuallyAsync(() => h.Main.Rows.Count == 1);
         h.Store.Stored.Watchlist.Select(e => e.Symbol).Should().Equal("BTC");
+    }
+
+    /// <summary>
+    /// Verifies moving a row to an absolute index reorders the rows and persists the watchlist.
+    /// </summary>
+    [Fact]
+    public async Task MoveToAsync_FirstRowToLastIndex_ReordersAndPersists()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl, Eth));
+        await h.Main.InitializeAsync();
+
+        await h.Main.MoveToAsync(h.Main.Rows[0], 2);
+
+        h.Main.Rows.Select(r => r.Symbol).Should().Equal("AAPL", "ETH", "BTC");
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Watchlist[0].Symbol == "AAPL");
+        h.Store.Stored!.Watchlist.Select(e => e.Symbol).Should().Equal("AAPL", "ETH", "BTC");
+    }
+
+    /// <summary>
+    /// Verifies a target index past the end is clamped to the last position.
+    /// </summary>
+    [Fact]
+    public async Task MoveToAsync_IndexOutOfRange_ClampsToEnds()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl, Eth));
+        await h.Main.InitializeAsync();
+
+        await h.Main.MoveToAsync(h.Main.Rows[0], 99);
+        await h.Main.MoveToAsync(h.Main.Rows[1], -5);
+
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Watchlist[0].Symbol == "ETH");
+        h.Store.Stored!.Watchlist.Select(e => e.Symbol).Should().Equal("ETH", "AAPL", "BTC");
+        h.Main.Rows.Select(r => r.Symbol).Should().Equal("ETH", "AAPL", "BTC");
+    }
+
+    /// <summary>
+    /// Verifies moving a row to its current index leaves the order untouched.
+    /// </summary>
+    [Fact]
+    public async Task MoveToAsync_SameIndex_KeepsOrder()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl));
+        await h.Main.InitializeAsync();
+
+        await h.Main.MoveToAsync(h.Main.Rows[1], 1);
+
+        h.Main.Rows.Select(r => r.Symbol).Should().Equal("BTC", "AAPL");
+        h.Store.Stored.Should().NotBeNull();
+        h.Store.Stored!.Watchlist.Select(e => e.Symbol).Should().Equal("BTC", "AAPL");
+    }
+
+    /// <summary>
+    /// Verifies moving a row that has already been removed, leaving an empty watchlist, is ignored rather than throwing.
+    /// </summary>
+    [Fact]
+    public async Task MoveToAsync_RowRemovedFromEmptyWatchlist_IsIgnored()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+        var staleRow = h.Main.Rows.Single();
+        await h.Main.RemoveCommand.ExecuteAsync(staleRow);
+        await Harness.EventuallyAsync(() => h.Main.Rows.Count == 0);
+
+        var act = () => h.Main.MoveToAsync(staleRow, 0);
+
+        await act.Should().NotThrowAsync();
+        h.Store.Stored!.Watchlist.Should().BeEmpty();
     }
 
     /// <summary>
