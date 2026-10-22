@@ -306,6 +306,54 @@ public sealed partial class MainViewModel : ObservableObject
     public Task MoveDownAsync(AssetRowViewModel? row) => MoveAsync(row, 1);
 
     /// <summary>
+    /// Moves an instrument to an absolute position, for example after a drag and drop.
+    /// </summary>
+    /// <param name="row">
+    /// The row to move.
+    /// </param>
+    /// <param name="newIndex">
+    /// The zero-based target position; values outside the list are clamped to its ends.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the watchlist is saved.
+    /// </returns>
+    public Task MoveToAsync(AssetRowViewModel? row, int newIndex)
+    {
+        if (row is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        // Move the row right away so the UI does not snap back while the settings round-trip completes;
+        // SyncRows finds the rows already in order afterwards.
+        var current = Rows.IndexOf(row);
+        if (current >= 0)
+        {
+            Rows.Move(current, Math.Clamp(newIndex, 0, Rows.Count - 1));
+        }
+
+        return _settings.UpdateAsync(s =>
+        {
+            var index = s.Watchlist.FindIndex(e => e.ProviderId == row.Asset.ProviderId && e.Symbol == row.Asset.Symbol);
+            if (index < 0)
+            {
+                return;
+            }
+
+            // The entry exists, so the list is not empty and the clamp range is valid.
+            var target = Math.Clamp(newIndex, 0, s.Watchlist.Count - 1);
+            if (target == index)
+            {
+                return;
+            }
+
+            var entry = s.Watchlist[index];
+            s.Watchlist.RemoveAt(index);
+            s.Watchlist.Insert(target, entry);
+        });
+    }
+
+    /// <summary>
     /// Notifies bindings of the page flags when the page changes.
     /// </summary>
     /// <param name="value">
@@ -332,22 +380,10 @@ public sealed partial class MainViewModel : ObservableObject
     /// </returns>
     private Task MoveAsync(AssetRowViewModel? row, int delta)
     {
-        if (row is null)
-        {
-            return Task.CompletedTask;
-        }
+        var index = row is null ? -1 : Rows.IndexOf(row);
 
-        return _settings.UpdateAsync(s =>
-        {
-            var index = s.Watchlist.FindIndex(e => e.ProviderId == row.Asset.ProviderId && e.Symbol == row.Asset.Symbol);
-            var target = index + delta;
-            if (index < 0 || target < 0 || target >= s.Watchlist.Count)
-            {
-                return;
-            }
-
-            (s.Watchlist[index], s.Watchlist[target]) = (s.Watchlist[target], s.Watchlist[index]);
-        });
+        // MoveToAsync clamps to the ends, so moving the first row up or the last row down is a no-op.
+        return index < 0 ? Task.CompletedTask : MoveToAsync(row, index + delta);
     }
 
     /// <summary>
