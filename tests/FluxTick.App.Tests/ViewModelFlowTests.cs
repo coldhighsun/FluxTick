@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -184,6 +185,22 @@ public class ViewModelFlowTests
 
         h.Main.Rows.Single().FlashVersion.Should().Be(1);
         h.Main.Rows.Single().FlashUp.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies edge hiding is offered as far as the platform allows, and can be withdrawn while the application runs.
+    /// </summary>
+    [Fact]
+    public async Task AutoHideAvailable_FollowsThePlatformAndCanBeWithdrawn()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+
+        h.Main.Settings.AutoHideAvailable.Should().Be(PlatformCapabilities.CanPlaceWindowsOffScreen);
+
+        h.Main.Settings.AutoHideAvailable = false;
+
+        h.Main.Settings.AutoHideAvailable.Should().BeFalse();
     }
 
     /// <summary>
