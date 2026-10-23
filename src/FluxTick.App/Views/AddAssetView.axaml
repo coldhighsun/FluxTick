@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:FluxTick.App.Localization"
              xmlns:abs="using:FluxTick.Abstractions"
              xmlns:vm="using:FluxTick.App.ViewModels"
              x:Class="FluxTick.App.Views.AddAssetView"
@@ -9,25 +10,19 @@
 
     <Grid Grid.Row="0" ColumnDefinitions="*,8,*">
       <StackPanel Spacing="3">
-        <TextBlock Text="ASSET CLASS" Classes="muted" FontSize="10" FontWeight="SemiBold" />
-        <ComboBox ItemsSource="{Binding AssetClasses}" SelectedItem="{Binding SelectedAssetClass}"
+        <TextBlock Text="{loc:T Add_AssetClass}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <ComboBox ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding AssetClasses}" SelectedItem="{Binding SelectedAssetClass}"
                   IsEnabled="{Binding CanChangeClass}" HorizontalAlignment="Stretch" />
       </StackPanel>
       <StackPanel Grid.Column="2" Spacing="3">
-        <TextBlock Text="DATA SOURCE" Classes="muted" FontSize="10" FontWeight="SemiBold" />
-        <ComboBox ItemsSource="{Binding AvailableProviders}" SelectedItem="{Binding SelectedProvider}" HorizontalAlignment="Stretch">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="abs:ProviderDescriptor">
-              <TextBlock Text="{Binding DisplayName}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
+        <TextBlock Text="{loc:T Add_DataSource}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <ComboBox ItemTemplate="{DynamicResource ProviderNameTemplate}" ItemsSource="{Binding AvailableProviders}" SelectedItem="{Binding SelectedProvider}" HorizontalAlignment="Stretch" />
       </StackPanel>
     </Grid>
 
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
-      <TextBox Text="{Binding Query}" PlaceholderText="Search name or symbol" />
-      <Button Grid.Column="1" Classes="primary" Content="Add" Margin="8,0,0,0"
+      <TextBox Text="{Binding Query}" PlaceholderText="{loc:T Add_SearchPlaceholder}" />
+      <Button Grid.Column="1" Classes="primary" Content="{loc:T Add_Button}" Margin="8,0,0,0"
               IsVisible="{Binding !CanSearch}" Command="{Binding AddTypedCommand}" />
     </Grid>
 
@@ -47,7 +42,8 @@
                   <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" />
                   <TextBlock Text="{Binding DisplayName}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding AssetClass}" Classes="muted" FontSize="10" VerticalAlignment="Center" />
+                <ContentControl Grid.Column="1" Content="{Binding AssetClass}" ContentTemplate="{DynamicResource EnumLabelTemplate}"
+                                Foreground="{DynamicResource MutedBrush}" FontSize="10" VerticalAlignment="Center" />
               </Grid>
             </Button>
           </DataTemplate>

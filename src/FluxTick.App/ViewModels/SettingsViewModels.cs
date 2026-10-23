@@ -4,6 +4,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
 
@@ -30,6 +31,11 @@ public sealed partial class OptionViewModel : ObservableObject
     private readonly string _normalizedDefault;
 
     /// <summary>
+    /// The data source that owns the option, which supplies the translated hint.
+    /// </summary>
+    private readonly ProviderDescriptor? _owner;
+
+    /// <summary>
     /// The last valid value the editor held, kept while the user types something invalid.
     /// </summary>
     private string? _lastValid;
@@ -46,9 +52,13 @@ public sealed partial class OptionViewModel : ObservableObject
     /// <param name="committed">
     /// The callback invoked when the user commits a valid value.
     /// </param>
-    public OptionViewModel(ProviderOptionDefinition definition, string? stored, Action committed)
+    /// <param name="owner">
+    /// The data source that owns the option, used to translate its hint.
+    /// </param>
+    public OptionViewModel(ProviderOptionDefinition definition, string? stored, Action committed, ProviderDescriptor? owner = null)
     {
         Definition = definition;
+        _owner = owner;
         _committed = committed;
         _normalizedDefault = definition.Canonicalize(definition.DefaultValue);
         Load(stored);
@@ -62,17 +72,17 @@ public sealed partial class OptionViewModel : ObservableObject
     /// <summary>
     /// Gets the label.
     /// </summary>
-    public string Label => Definition.Label;
+    public string Label => ProviderText.OptionLabel(Definition);
 
     /// <summary>
     /// Gets the help text, or an empty string.
     /// </summary>
-    public string Description => Definition.Description ?? string.Empty;
+    public string Description => (_owner is null ? Definition.Description : ProviderText.OptionDescription(_owner, Definition)) ?? string.Empty;
 
     /// <summary>
     /// Gets the unit suffix shown next to the label.
     /// </summary>
-    public string Unit => Definition.Type == ProviderOptionType.Duration ? " (seconds)" : string.Empty;
+    public string Unit => Definition.Type == ProviderOptionType.Duration ? Loc.Get("Option_SecondsUnit") : string.Empty;
 
     /// <summary>
     /// Gets a value indicating whether the option is edited as free text or a number.
@@ -245,6 +255,30 @@ public sealed partial class OptionViewModel : ObservableObject
     partial void OnSelectedChoiceChanged(string? value) => Commit();
 
     /// <summary>
+    /// Builds the texts that depend on the language again after the language changed.
+    /// </summary>
+    public void RefreshLanguage()
+    {
+        OnPropertyChanged(nameof(Label));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(Unit));
+        if (Error.Length > 0 && StoredValue is null)
+        {
+            Error = ErrorText();
+        }
+    }
+
+    /// <summary>
+    /// Explains why the current input is not valid.
+    /// </summary>
+    /// <returns>
+    /// The message in the active language.
+    /// </returns>
+    private string ErrorText() => Definition.Type == ProviderOptionType.Duration
+        ? Loc.Get("Option_EnterSeconds")
+        : Definition.Check(Text) is { } problem ? ProviderText.Validation(problem) : Loc.Get("Option_Invalid");
+
+    /// <summary>
     /// Validates the current input and notifies the owner when valid.
     /// </summary>
     private void Commit()
@@ -256,9 +290,7 @@ public sealed partial class OptionViewModel : ObservableObject
 
         if (StoredValue is not { } valid)
         {
-            Error = Definition.Type == ProviderOptionType.Duration
-                ? "Enter a number of seconds."
-                : Definition.Validate(Text) ?? "Invalid value.";
+            Error = ErrorText();
             return;
         }
 
@@ -284,6 +316,11 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     private bool _loading;
 
     /// <summary>
+    /// The status shown last, kept to build its text again when the language changes.
+    /// </summary>
+    private ProviderStatus? _status;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProviderSettingsViewModel"/> class.
     /// </summary>
     /// <param name="descriptor">
@@ -297,7 +334,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         Descriptor = descriptor;
         _changed = changed;
         Options = new ObservableCollection<OptionViewModel>(
-            descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, () => _changed(this))));
+            descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, () => _changed(this), descriptor)));
         foreach (var option in Options)
         {
             option.PropertyChanged += OnOptionPropertyChanged;
@@ -312,18 +349,18 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// <summary>
     /// Gets the display name.
     /// </summary>
-    public string Name => Descriptor.DisplayName;
+    public string Name => ProviderText.Name(Descriptor);
 
     /// <summary>
     /// Gets the description.
     /// </summary>
-    public string Description => Descriptor.Description;
+    public string Description => ProviderText.Description(Descriptor);
 
     /// <summary>
     /// Gets a summary line of the mode and supported asset classes.
     /// </summary>
     public string Summary =>
-        $"{(Descriptor.UpdateMode == ProviderUpdateMode.Streaming ? "Streaming" : "Polling")} · {string.Join(", ", Descriptor.SupportedAssetClasses)}";
+        $"{Loc.Get(Descriptor.UpdateMode == ProviderUpdateMode.Streaming ? "Provider_Streaming" : "Provider_Polling")} · {string.Join(", ", Descriptor.SupportedAssetClasses.Select(c => EnumLabel.Of(c)))}";
 
     /// <summary>
     /// Gets the option editors.
@@ -357,7 +394,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// Gets or sets the status text.
     /// </summary>
     [ObservableProperty]
-    public partial string StatusText { get; set; } = "Off";
+    public partial string StatusText { get; set; } = Loc.Get("Provider_Off");
 
     /// <summary>
     /// Gets or sets a value indicating whether the status is good.
@@ -440,6 +477,21 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Builds the texts that depend on the language again after the language changed.
+    /// </summary>
+    public void RefreshLanguage()
+    {
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(Summary));
+        UpdateStatus(_status);
+        foreach (var option in Options)
+        {
+            option.RefreshLanguage();
+        }
+    }
+
+    /// <summary>
     /// Updates the live status shown to the user.
     /// </summary>
     /// <param name="status">
@@ -447,14 +499,15 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// </param>
     public void UpdateStatus(ProviderStatus? status)
     {
+        _status = status;
         (StatusText, StatusGood, StatusBad) = status switch
         {
-            null => ("Off", false, false),
-            { State: ProviderConnectionState.Connected } => ("Connected", true, false),
-            { State: ProviderConnectionState.Idle } => ("Idle", false, false),
-            { State: ProviderConnectionState.Reconnecting } s => (s.Message is { Length: > 0 } m ? $"Reconnecting: {m}" : "Reconnecting", false, false),
-            { State: ProviderConnectionState.Failed } s => (s.Message is { Length: > 0 } m ? $"Error: {m}" : "Error", false, true),
-            _ => ("Unknown", false, false),
+            null => (Loc.Get("Provider_Off"), false, false),
+            { State: ProviderConnectionState.Connected } => (Loc.Get("Provider_Connected"), true, false),
+            { State: ProviderConnectionState.Idle } => (Loc.Get("Provider_Idle"), false, false),
+            { State: ProviderConnectionState.Reconnecting } s => (s.Message is { Length: > 0 } m ? Loc.Get("Common_LabelValue", Loc.Get("Provider_Reconnecting"), m) : Loc.Get("Provider_Reconnecting"), false, false),
+            { State: ProviderConnectionState.Failed } s => (s.Message is { Length: > 0 } m ? Loc.Get("Common_LabelValue", Loc.Get("Provider_Error"), m) : Loc.Get("Provider_Error"), false, true),
+            _ => (Loc.Get("Provider_Unknown"), false, false),
         };
     }
 
@@ -543,18 +596,17 @@ public sealed partial class RoutingRowViewModel : ObservableObject
     /// <summary>
     /// Gets the label of the asset class.
     /// </summary>
-    public string Label => AssetClass switch
-    {
-        AssetClass.Equity => "Equities & ETFs",
-        AssetClass.Index => "Indices",
-        AssetClass.Commodity => "Commodities",
-        _ => AssetClass.ToString(),
-    };
+    public string Label => Loc.Instance.Find($"Routing_{AssetClass}") ?? EnumLabel.Of(AssetClass);
 
     /// <summary>
     /// Gets the enabled providers that support the class, best first.
     /// </summary>
     public ObservableCollection<ProviderDescriptor> Providers { get; } = [];
+
+    /// <summary>
+    /// Builds the texts that depend on the language again after the language changed.
+    /// </summary>
+    public void RefreshLanguage() => OnPropertyChanged(nameof(Label));
 
     /// <summary>
     /// Gets a value indicating whether at least one provider is available.
@@ -612,7 +664,7 @@ public sealed partial class RoutingRowViewModel : ObservableObject
 /// The settings page: appearance, data sources and per-asset-class routing. Every change is applied and persisted
 /// immediately.
 /// </summary>
-public sealed partial class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : LocalizedViewModel
 {
     /// <summary>
     /// The settings store.
@@ -662,6 +714,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         MarketDataService market,
         IUiDispatcher ui,
         TimeProvider timeProvider)
+        : base(ui)
     {
         _settings = settings;
         _router = router;
@@ -672,9 +725,23 @@ public sealed partial class SettingsViewModel : ObservableObject
             registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p))));
         Routing = new ObservableCollection<RoutingRowViewModel>(
             Enum.GetValues<AssetClass>().Select(c => new RoutingRowViewModel(c, r => _ = SaveRoutingAsync(r))));
-        market.ProviderStatusChanged += (_, _) => ui.Post(RefreshStatuses);
+        market.ProviderStatusChanged += OnProviderStatusChanged;
         Reload();
     }
+
+    /// <inheritdoc />
+    protected override void Detach() => Market.ProviderStatusChanged -= OnProviderStatusChanged;
+
+    /// <summary>
+    /// Shows the new state of the data sources when one changes.
+    /// </summary>
+    /// <param name="sender">
+    /// The market data service.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnProviderStatusChanged(object? sender, ProviderStatusChangedEventArgs e) => Ui.Post(RefreshStatuses);
 
     /// <summary>
     /// Gets the market data service, used to look up provider status.
@@ -690,6 +757,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// Gets the selectable color schemes.
     /// </summary>
     public IReadOnlyList<ThemeMode> ThemeModes { get; } = Enum.GetValues<ThemeMode>();
+
+    /// <summary>
+    /// Gets the languages to choose from.
+    /// </summary>
+    public IReadOnlyList<LanguageMode> Languages { get; } = Enum.GetValues<LanguageMode>();
 
     /// <summary>
     /// Gets the editor of the user-defined groups.
@@ -772,6 +844,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial ThemeMode SelectedThemeMode { get; set; }
 
     /// <summary>
+    /// Gets or sets the interface language.
+    /// </summary>
+    [ObservableProperty]
+    public partial LanguageMode SelectedLanguage { get; set; }
+
+    /// <summary>
     /// Gets or sets how the watchlist is laid out.
     /// </summary>
     [ObservableProperty]
@@ -806,6 +884,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             AutoHideAtEdge = current.Appearance.AutoHideAtEdge;
             SelectedColorConvention = current.Appearance.ColorConvention;
             SelectedThemeMode = current.Appearance.ThemeMode;
+            SelectedLanguage = current.Appearance.Language;
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
             foreach (var provider in Providers)
@@ -892,6 +971,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// The new value.
     /// </param>
     partial void OnSelectedThemeModeChanged(ThemeMode value) => SaveAppearance(s => s.Appearance.ThemeMode = value);
+
+    /// <summary>
+    /// Saves a changed interface language.
+    /// </summary>
+    /// <param name="value">
+    /// The new language.
+    /// </param>
+    partial void OnSelectedLanguageChanged(LanguageMode value) => SaveAppearance(s => s.Appearance.Language = value);
+
+    /// <inheritdoc />
+    protected override void OnLanguageChanged()
+    {
+        foreach (var provider in Providers)
+        {
+            provider.RefreshLanguage();
+        }
+
+        foreach (var row in Routing)
+        {
+            row.RefreshLanguage();
+        }
+    }
 
     /// <summary>
     /// Saves the watchlist layout.

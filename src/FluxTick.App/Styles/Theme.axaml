@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:FluxTick.App.Localization"
         xmlns:controls="using:FluxTick.App.Controls"
         xmlns:views="using:FluxTick.App.Views">
 
@@ -278,7 +279,7 @@
                   <TextBlock Text="{TemplateBinding Title}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
                 </StackPanel>
                 <Button Name="PART_Close" Grid.Column="1" Classes="icon"
-                        AutomationProperties.Name="Close" ToolTip.Tip="Close (Esc)">
+                        AutomationProperties.Name="{loc:T Common_Close}" ToolTip.Tip="{loc:T Common_CloseEsc}">
                   <Path Data="M3 3l8 8M11 3l-8 8" />
                 </Button>
               </Grid>

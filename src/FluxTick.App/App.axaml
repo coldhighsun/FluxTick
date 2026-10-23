@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:FluxTick.App.Localization"
              x:Class="FluxTick.App.App"
              RequestedThemeVariant="Default">
 
@@ -18,20 +19,34 @@
       <!-- Replaced at runtime by App.ApplyPalette according to the color convention. -->
       <SolidColorBrush x:Key="UpBrush" Color="#2EE59D" />
       <SolidColorBrush x:Key="DownBrush" Color="#FF5C7A" />
+      <!-- Shows a data source by its name in the active language; use as ItemTemplate of a list of providers. -->
+      <DataTemplate x:Key="ProviderNameTemplate" x:DataType="x:Object">
+        <TextBlock>
+          <TextBlock.Text>
+            <MultiBinding Converter="{x:Static loc:ProviderText.NameConverter}">
+              <Binding Path="." />
+              <Binding Path="Language" Source="{x:Static loc:Loc.Instance}" />
+            </MultiBinding>
+          </TextBlock.Text>
+        </TextBlock>
+      </DataTemplate>
+      <!-- Shows an enum value by its label in the active language; use as ItemTemplate of a list of enum values. -->
+      <DataTemplate x:Key="EnumLabelTemplate" x:DataType="x:Object">
+        <TextBlock>
+          <TextBlock.Text>
+            <MultiBinding Converter="{x:Static loc:EnumLabel.Converter}">
+              <Binding Path="." />
+              <Binding Path="Language" Source="{x:Static loc:Loc.Instance}" />
+            </MultiBinding>
+          </TextBlock.Text>
+        </TextBlock>
+      </DataTemplate>
     </ResourceDictionary>
   </Application.Resources>
 
   <TrayIcon.Icons>
     <TrayIcons>
-      <TrayIcon Icon="/Assets/fluxtick.png" ToolTipText="FluxTick — Every market. Every tick." Clicked="OnTrayClicked">
-        <TrayIcon.Menu>
-          <NativeMenu>
-            <NativeMenuItem Header="Show / hide" Click="OnToggleWindow" />
-            <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Exit" Click="OnExit" />
-          </NativeMenu>
-        </TrayIcon.Menu>
-      </TrayIcon>
+      <TrayIcon Icon="/Assets/fluxtick.png" ToolTipText="FluxTick" Clicked="OnTrayClicked" />
     </TrayIcons>
   </TrayIcon.Icons>
 

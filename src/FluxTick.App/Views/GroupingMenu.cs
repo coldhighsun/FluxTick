@@ -1,6 +1,6 @@
 using System.Collections;
 using Avalonia.Controls;
-using Avalonia.Data.Converters;
+using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -18,11 +18,6 @@ public static class GroupingMenu
     private const string EntryTag = "grouping-menu";
 
     /// <summary>
-    /// Gets a converter that shows a grouping by its label, for lists that offer the groupings.
-    /// </summary>
-    public static IValueConverter LabelConverter { get; } = new FuncValueConverter<CardGrouping, string>(grouping => Label(grouping));
-
-    /// <summary>
     /// Gets the text that names a grouping.
     /// </summary>
     /// <param name="grouping">
@@ -31,14 +26,7 @@ public static class GroupingMenu
     /// <returns>
     /// The label.
     /// </returns>
-    public static string Label(CardGrouping grouping) => grouping switch
-    {
-        CardGrouping.None => "No grouping",
-        CardGrouping.ByType => "By type",
-        CardGrouping.ByProvider => "By data source",
-        CardGrouping.Custom => "Custom groups",
-        _ => grouping.ToString(),
-    };
+    public static string Label(CardGrouping grouping) => EnumLabel.Of(grouping);
 
     /// <summary>
     /// Puts one radio entry per grouping at the start of a menu, the current one checked, replacing the entries that

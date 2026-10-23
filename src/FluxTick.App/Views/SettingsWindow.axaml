@@ -1,14 +1,15 @@
 <views:ToolWindow xmlns="https://github.com/avaloniaui"
                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:loc="using:FluxTick.App.Localization"
                   xmlns:vm="using:FluxTick.App.ViewModels"
                   xmlns:views="using:FluxTick.App.Views"
                   x:Class="FluxTick.App.Views.SettingsWindow"
                   x:DataType="vm:SettingsViewModel"
-                  Title="FluxTick - Settings"
+                  Title="{loc:T Settings_WindowTitle}"
                   Icon="/Assets/fluxtick.png"
                   Topmost="{Binding AlwaysOnTop}">
 
-  <views:ToolWindowFrame Title="Settings">
+  <views:ToolWindowFrame Title="{loc:T Main_Settings}">
     <views:SettingsView />
   </views:ToolWindowFrame>
 </views:ToolWindow>

@@ -90,6 +90,27 @@ public class AbstractionsTests
     }
 
     /// <summary>
+    /// Verifies a rejected value reports what is wrong with it, so the UI can word it in its own language.
+    /// </summary>
+    [Theory]
+    [InlineData(ProviderOptionType.Int, "x", OptionValidationError.NotWholeNumber, null)]
+    [InlineData(ProviderOptionType.Bool, "yes", OptionValidationError.NotBool, null)]
+    [InlineData(ProviderOptionType.Duration, "5", OptionValidationError.NotDuration, null)]
+    [InlineData(ProviderOptionType.Int, "1", OptionValidationError.BelowMinimum, 2.0)]
+    [InlineData(ProviderOptionType.Int, "9", OptionValidationError.AboveMaximum, 5.0)]
+    public void Check_InvalidValue_ReportsTheReason(ProviderOptionType type, string value, OptionValidationError error, double? limit)
+    {
+        var definition = new ProviderOptionDefinition("k", "k", type, "3", Min: 2, Max: 5);
+
+        var result = definition.Check(value);
+
+        result.Should().NotBeNull();
+        result!.Value.Error.Should().Be(error);
+        result.Value.Limit.Should().Be(limit);
+        result.Value.Message.Should().Be(definition.Validate(value));
+    }
+
+    /// <summary>
     /// Verifies values that mean the same are written in one canonical form, and values that cannot be read stay as they are.
     /// </summary>
     [Theory]

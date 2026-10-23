@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 
 namespace FluxTick.App.Views;
@@ -51,7 +52,7 @@ public sealed partial class SettingsView : UserControl
     {
         if (DataContext is SettingsViewModel { Groups: { } groups })
         {
-            GroupNamePrompt.Show(NewGroupButton, "New group", PlacementMode.TopEdgeAlignedLeft, groups.AddAsync);
+            GroupNamePrompt.Show(NewGroupButton, Loc.Get("Group_NewTitle"), PlacementMode.TopEdgeAlignedLeft, groups.AddAsync);
         }
     }
 }

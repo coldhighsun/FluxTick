@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 
 namespace FluxTick.App.ViewModels;
 
@@ -129,7 +130,7 @@ public sealed partial class WatchSectionViewModel : ObservableObject
     /// <summary>
     /// Gets the text of the delete entry in the header menu, which names the reason when the entry is disabled.
     /// </summary>
-    public string DeleteMenuHeader => DeleteBlockedReason.Length == 0 ? "Delete group" : $"Delete group ({DeleteBlockedReason})";
+    public string DeleteMenuHeader => DeleteBlockedReason.Length == 0 ? Loc.Get("Section_DeleteGroup") : Loc.Get("Section_DeleteGroupBlocked", DeleteBlockedReason);
 
     /// <summary>
     /// Starts editing the title in place. Only user-defined groups can be renamed.

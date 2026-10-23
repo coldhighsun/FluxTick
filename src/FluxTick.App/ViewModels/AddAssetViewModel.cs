@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
+using FluxTick.App.Services;
 using FluxTick.Core.Application;
 using Microsoft.Extensions.Logging;
 
@@ -11,7 +13,7 @@ namespace FluxTick.App.ViewModels;
 /// The "add instrument" page. The user picks an asset class, a data source and searches for a symbol.
 /// The same page re-targets an existing instrument to another data source.
 /// </summary>
-public sealed partial class AddAssetViewModel : ObservableObject
+public sealed partial class AddAssetViewModel : LocalizedViewModel
 {
     /// <summary>
     /// How long to wait after the last keystroke before searching.
@@ -59,6 +61,17 @@ public sealed partial class AddAssetViewModel : ObservableObject
     private bool _resetting;
 
     /// <summary>
+    /// Builds the page title, kept so that it can be built again when the language changes.
+    /// </summary>
+    private Func<string> _titleText = () => string.Empty;
+
+    /// <summary>
+    /// Builds the message, kept so that it can be built again when the language changes; <see langword="null"/>
+    /// when there is no message.
+    /// </summary>
+    private Func<string>? _messageText;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AddAssetViewModel"/> class.
     /// </summary>
     /// <param name="settings">
@@ -70,6 +83,9 @@ public sealed partial class AddAssetViewModel : ObservableObject
     /// <param name="router">
     /// The provider router.
     /// </param>
+    /// <param name="ui">
+    /// The dispatcher of the UI thread.
+    /// </param>
     /// <param name="time">
     /// The clock used for debouncing.
     /// </param>
@@ -80,14 +96,24 @@ public sealed partial class AddAssetViewModel : ObservableObject
         SettingsManager settings,
         MarketDataService market,
         ProviderRouter router,
+        IUiDispatcher ui,
         TimeProvider time,
         ILogger<AddAssetViewModel> logger)
+        : base(ui)
     {
         _settings = settings;
         _market = market;
         _router = router;
         _time = time;
         _logger = logger;
+        ShowTitle(() => Loc.Get("Add_Title"));
+    }
+
+    /// <inheritdoc />
+    protected override void OnLanguageChanged()
+    {
+        Title = _titleText();
+        Message = _messageText?.Invoke() ?? string.Empty;
     }
 
     /// <summary>
@@ -144,7 +170,7 @@ public sealed partial class AddAssetViewModel : ObservableObject
     /// Gets or sets the page title.
     /// </summary>
     [ObservableProperty]
-    public partial string Title { get; set; } = "Add instrument";
+    public partial string Title { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets a value indicating whether the selected data source can search its catalog.
@@ -158,12 +184,36 @@ public sealed partial class AddAssetViewModel : ObservableObject
     public bool CanChangeClass => _replacing is null;
 
     /// <summary>
+    /// Shows a page title that follows the language.
+    /// </summary>
+    /// <param name="text">
+    /// Builds the title in the active language.
+    /// </param>
+    private void ShowTitle(Func<string> text)
+    {
+        _titleText = text;
+        Title = text();
+    }
+
+    /// <summary>
+    /// Shows a message that follows the language, or clears it.
+    /// </summary>
+    /// <param name="text">
+    /// Builds the message in the active language, or <see langword="null"/> for no message.
+    /// </param>
+    private void ShowMessage(Func<string>? text)
+    {
+        _messageText = text;
+        Message = text?.Invoke() ?? string.Empty;
+    }
+
+    /// <summary>
     /// Prepares the page for adding a new instrument.
     /// </summary>
     public void BeginAdd()
     {
         _replacing = null;
-        Title = "Add instrument";
+        ShowTitle(() => Loc.Get("Add_Title"));
         Start(preferredClass: SelectedAssetClass, query: string.Empty, avoidProviderId: null);
     }
 
@@ -176,7 +226,7 @@ public sealed partial class AddAssetViewModel : ObservableObject
     public void BeginReplace(Asset asset)
     {
         _replacing = asset;
-        Title = $"Change source · {asset.Symbol}";
+        ShowTitle(() => Loc.Get("Add_ChangeSourceTitle", asset.Symbol));
         Start(asset.AssetClass, asset.DisplayName, asset.ProviderId);
     }
 
@@ -201,7 +251,7 @@ public sealed partial class AddAssetViewModel : ObservableObject
         var duplicate = _settings.Current.Watchlist.Any(e => e.ProviderId == asset.ProviderId && e.Symbol == asset.Symbol);
         if (duplicate && replacing is null)
         {
-            Message = $"{asset.Symbol} is already on your list.";
+            ShowMessage(() => Loc.Get("Add_AlreadyOnList", asset.Symbol));
             return;
         }
 
@@ -317,7 +367,7 @@ public sealed partial class AddAssetViewModel : ObservableObject
         try
         {
             Results.Clear();
-            Message = string.Empty;
+            ShowMessage(null);
             SelectedAssetClass = preferredClass;
             LoadProviders(preferredClass, avoidProviderId);
             Query = query;
@@ -379,24 +429,25 @@ public sealed partial class AddAssetViewModel : ObservableObject
         var assetClass = SelectedAssetClass;
 
         Results.Clear();
-        Message = string.Empty;
+        ShowMessage(null);
         CanSearch = provider is not null && _market.SupportsSearch(provider.Id);
 
         if (provider is null)
         {
-            Message = "No data source is enabled for this asset class. Enable one in Settings.";
+            ShowMessage(() => Loc.Get("Add_NoSourceEnabled"));
             return;
         }
 
         if (query.Length == 0)
         {
-            Message = CanSearch ? "Type a name or symbol to search." : $"Type the {provider.DisplayName} symbol, then press Add.";
+            var canSearch = CanSearch;
+            ShowMessage(() => canSearch ? Loc.Get("Add_TypeToSearch") : Loc.Get("Add_TypeSymbol", ProviderText.Name(provider)));
             return;
         }
 
         if (!CanSearch)
         {
-            Message = $"{provider.DisplayName} cannot search. Press Add to use \"{query.ToUpperInvariant()}\" as typed.";
+            ShowMessage(() => Loc.Get("Add_CannotSearch", ProviderText.Name(provider), query.ToUpperInvariant()));
             return;
         }
 
@@ -411,7 +462,8 @@ public sealed partial class AddAssetViewModel : ObservableObject
                 Results.Add(asset);
             }
 
-            Message = found.Count == 0 ? "No matches." : string.Empty;
+            var none = found.Count == 0;
+            ShowMessage(none ? () => Loc.Get("Add_NoMatches") : null);
         }
         catch (OperationCanceledException)
         {
@@ -420,7 +472,8 @@ public sealed partial class AddAssetViewModel : ObservableObject
         catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
         {
             _logger.LogWarning(ex, "Search on {Provider} failed", provider.Id);
-            Message = $"Search failed: {ex.Message}";
+            var detail = ex.Message;
+            ShowMessage(() => Loc.Get("Add_SearchFailed", detail));
         }
         finally
         {

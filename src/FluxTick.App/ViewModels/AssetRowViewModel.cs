@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
 
@@ -37,6 +38,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     private decimal? _lastPrice;
 
     /// <summary>
+    /// The snapshot shown last, kept to build the texts again when the language changes.
+    /// </summary>
+    private AssetSnapshot? _lastSnapshot;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AssetRowViewModel"/> class.
     /// </summary>
     /// <param name="asset">
@@ -71,12 +77,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// <summary>
     /// Gets the short label of the asset class.
     /// </summary>
-    public string ClassLabel { get; }
+    public string ClassLabel { get; private set; }
 
     /// <summary>
     /// Gets the display name of the data source.
     /// </summary>
-    public string ProviderName { get; }
+    public string ProviderName { get; private set; }
 
     /// <summary>
     /// Gets or sets the id of the user-defined group the instrument belongs to, or <see langword="null"/> for none.
@@ -178,6 +184,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </param>
     public void Update(AssetSnapshot snapshot)
     {
+        _lastSnapshot = snapshot;
         Health = snapshot.Health;
         StatusText = StatusOf(snapshot);
         Sparkline = snapshot.Sparkline;
@@ -205,6 +212,24 @@ public sealed partial class AssetRowViewModel : ObservableObject
         else
         {
             Tooltip = $"{Asset.DisplayName}\n{ProviderName}";
+        }
+    }
+
+    /// <summary>
+    /// Builds the texts that depend on the language again after the language changed.
+    /// </summary>
+    /// <param name="providerName">
+    /// The display name of the data source in the new language.
+    /// </param>
+    public void RefreshLanguage(string providerName)
+    {
+        ProviderName = providerName;
+        OnPropertyChanged(nameof(ProviderName));
+        ClassLabel = LabelOf(Asset.AssetClass);
+        OnPropertyChanged(nameof(ClassLabel));
+        if (_lastSnapshot is { } snapshot)
+        {
+            Update(snapshot);
         }
     }
 
@@ -247,11 +272,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </returns>
     private static string StatusOf(AssetSnapshot snapshot) => snapshot.Health switch
     {
-        AssetHealth.Stale => "Stale",
-        AssetHealth.Reconnecting => "Reconnecting",
-        AssetHealth.Failed => "Source error",
-        AssetHealth.ProviderDisabled => "Source off",
-        AssetHealth.ProviderMissing => "No source",
+        AssetHealth.Stale => Loc.Get("Status_Stale"),
+        AssetHealth.Reconnecting => Loc.Get("Provider_Reconnecting"),
+        AssetHealth.Failed => Loc.Get("Status_SourceError"),
+        AssetHealth.ProviderDisabled => Loc.Get("Status_SourceOff"),
+        AssetHealth.ProviderMissing => Loc.Get("Status_NoSource"),
         _ => string.Empty,
     };
 
@@ -276,7 +301,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         };
         if (quote.Change is { } change)
         {
-            lines.Add($"Change {PriceFormatter.FormatPrice(change, Asset.AssetClass)} ({PriceFormatter.FormatPercent(quote.ChangePercent)})");
+            lines.Add(Loc.Get("Row_Change", PriceFormatter.FormatPrice(change, Asset.AssetClass), PriceFormatter.FormatPercent(quote.ChangePercent)));
         }
 
         if (!string.IsNullOrEmpty(snapshot.HealthDetail))
@@ -296,13 +321,5 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// <returns>
     /// The label.
     /// </returns>
-    private static string LabelOf(AssetClass assetClass) => assetClass switch
-    {
-        AssetClass.Crypto => "CRYPTO",
-        AssetClass.Equity => "EQUITY",
-        AssetClass.Index => "INDEX",
-        AssetClass.Forex => "FX",
-        AssetClass.Commodity => "COMMODITY",
-        _ => assetClass.ToString().ToUpperInvariant(),
-    };
+    private static string LabelOf(AssetClass assetClass) => Loc.Get($"ClassChip_{assetClass}");
 }

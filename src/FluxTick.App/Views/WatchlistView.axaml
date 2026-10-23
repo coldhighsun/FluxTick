@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:FluxTick.App.Localization"
              xmlns:vm="using:FluxTick.App.ViewModels"
              xmlns:views="using:FluxTick.App.Views"
              xmlns:core="using:FluxTick.Core.Application"
@@ -10,23 +11,23 @@
   <Grid Name="Root" Background="Transparent">
     <Grid.ContextMenu>
       <ContextMenu>
-        <MenuItem Header="Add instrument…" Command="{Binding ShowAddCommand}" />
+        <MenuItem Header="{loc:T Watch_AddInstrument}" Command="{Binding ShowAddCommand}" />
         <Separator />
-        <MenuItem Header="Layout">
-          <MenuItem Header="List" ToggleType="Radio"
+        <MenuItem Header="{loc:T Settings_Layout}">
+          <MenuItem Header="{loc:T WatchlistLayout_List}" ToggleType="Radio"
                     IsChecked="{Binding !IsCardLayout, Mode=OneWay}"
                     Command="{Binding SetLayoutCommand}" CommandParameter="{x:Static core:WatchlistLayout.List}" />
-          <MenuItem Header="Cards" ToggleType="Radio"
+          <MenuItem Header="{loc:T WatchlistLayout_Cards}" ToggleType="Radio"
                     IsChecked="{Binding IsCardLayout, Mode=OneWay}"
                     Command="{Binding SetLayoutCommand}" CommandParameter="{x:Static core:WatchlistLayout.Cards}" />
         </MenuItem>
         <!-- The entries are added in code just before the menu opens (see GroupingMenu), so they exist only once. -->
-        <MenuItem Name="GroupCardsMenu" Header="Group cards" IsVisible="{Binding IsCardLayout}" />
-        <MenuItem Header="New group…" IsVisible="{Binding IsCardLayout}" Click="OnNewGroupFromBlankClicked" />
+        <MenuItem Name="GroupCardsMenu" Header="{loc:T Main_GroupCards}" IsVisible="{Binding IsCardLayout}" />
+        <MenuItem Header="{loc:T Main_NewGroup}" IsVisible="{Binding IsCardLayout}" Click="OnNewGroupFromBlankClicked" />
         <Separator />
         <!-- The check mark is drawn inside an icon of fixed size instead of using ToggleType: the built-in check only
              takes room while it is checked, which moved the entries of the whole menu sideways. -->
-        <MenuItem Header="Compact" Command="{Binding ToggleCompactCommand}">
+        <MenuItem Header="{loc:T Settings_Compact}" Command="{Binding ToggleCompactCommand}">
           <MenuItem.Icon>
             <Border Width="16" Height="16">
               <Path Data="M3 8.5l3.2 3.2L13 5" Stroke="{Binding $parent[MenuItem].Foreground}" StrokeThickness="1.6"
@@ -34,7 +35,7 @@
             </Border>
           </MenuItem.Icon>
         </MenuItem>
-        <MenuItem Header="Flash on price change" Command="{Binding ToggleFlashCommand}">
+        <MenuItem Header="{loc:T Settings_Flash}" Command="{Binding ToggleFlashCommand}">
           <MenuItem.Icon>
             <Border Width="16" Height="16">
               <Path Data="M3 8.5l3.2 3.2L13 5" Stroke="{Binding $parent[MenuItem].Foreground}" StrokeThickness="1.6"
@@ -52,11 +53,11 @@
             <views:AssetRowView>
               <views:AssetRowView.ContextMenu>
                 <ContextMenu>
-                  <MenuItem Header="Change data source…"
+                  <MenuItem Header="{loc:T Watch_ChangeSource}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
                             CommandParameter="{Binding}" />
                   <Separator />
-                  <MenuItem Header="Remove"
+                  <MenuItem Header="{loc:T Watch_Remove}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveCommand}"
                             CommandParameter="{Binding}" />
                 </ContextMenu>
@@ -83,7 +84,7 @@
                   <ToggleButton.ContextMenu>
                     <!-- Only user-defined groups have this menu; OnSectionsContextRequested suppresses it for the others. -->
                     <ContextMenu>
-                      <MenuItem Header="Rename…" Click="OnRenameMenuClicked" />
+                      <MenuItem Header="{loc:T Watch_Rename}" Click="OnRenameMenuClicked" />
                       <MenuItem Header="{Binding DeleteMenuHeader}" IsEnabled="{Binding CanDelete}"
                                 Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).DeleteGroupCommand}"
                                 CommandParameter="{Binding}" />
@@ -102,9 +103,9 @@
                          VerticalAlignment="Top" KeyDown="OnRenameKeyDown" LostFocus="OnRenameLostFocus" />
               </Grid>
               <StackPanel Orientation="Horizontal" Spacing="8" Margin="26,2,6,6" IsVisible="{Binding ShowEmptyHint}">
-                <TextBlock Text="No instruments in this group" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                <TextBlock Text="{loc:T Watch_EmptyGroup}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
                 <!-- An empty group can be removed right here, unless it is the last group. -->
-                <Button Classes="status" Content="Delete group" FontSize="11" Padding="4,0" IsVisible="{Binding CanDelete}"
+                <Button Classes="status" Content="{loc:T Section_DeleteGroup}" FontSize="11" Padding="4,0" IsVisible="{Binding CanDelete}"
                         Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).DeleteGroupCommand}"
                         CommandParameter="{Binding}" />
               </StackPanel>
@@ -124,11 +125,11 @@
                     <views:AssetCardView>
                       <views:AssetCardView.ContextMenu>
                         <ContextMenu>
-                          <MenuItem Header="Change data source…"
+                          <MenuItem Header="{loc:T Watch_ChangeSource}"
                                     Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
                                     CommandParameter="{Binding}" />
                           <Separator />
-                          <MenuItem Header="Remove"
+                          <MenuItem Header="{loc:T Watch_Remove}"
                                     Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveCommand}"
                                     CommandParameter="{Binding}" />
                         </ContextMenu>
@@ -156,14 +157,14 @@
             Background="{DynamicResource WindowBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
             IsVisible="{Binding GroupingSwitchedFrom, Converter={x:Static ObjectConverters.IsNotNull}}">
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="Switched to custom groups" Classes="muted" FontSize="11" VerticalAlignment="Center" />
-        <Button Content="Undo" Classes="status" FontSize="11" Padding="4,0" Command="{Binding UndoGroupingSwitchCommand}" />
+        <TextBlock Text="{loc:T Watch_SwitchedToCustom}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+        <Button Content="{loc:T Watch_Undo}" Classes="status" FontSize="11" Padding="4,0" Command="{Binding UndoGroupingSwitchCommand}" />
       </StackPanel>
     </Border>
 
     <StackPanel IsVisible="{Binding IsEmpty}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
-      <TextBlock Text="Nothing to watch yet" FontWeight="SemiBold" HorizontalAlignment="Center" />
-      <TextBlock Text="Press + to add a stock, coin, currency or index." Classes="muted" FontSize="12" HorizontalAlignment="Center" />
+      <TextBlock Text="{loc:T Watch_EmptyTitle}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+      <TextBlock Text="{loc:T Watch_EmptyHint}" Classes="muted" FontSize="12" HorizontalAlignment="Center" />
     </StackPanel>
   </Grid>
 </UserControl>
