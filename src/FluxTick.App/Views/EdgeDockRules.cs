@@ -102,9 +102,9 @@ internal static class EdgeDockRules
     /// </returns>
     public static PixelPoint ShownPosition(PixelRect window, PixelRect area, DockEdge edge) => edge switch
     {
-        DockEdge.Left => new PixelPoint(area.X, Clamp(window.Y, area.Y, area.Bottom - window.Height)),
-        DockEdge.Right => new PixelPoint(area.Right - window.Width, Clamp(window.Y, area.Y, area.Bottom - window.Height)),
-        DockEdge.Top => new PixelPoint(Clamp(window.X, area.X, area.Right - window.Width), area.Y),
+        DockEdge.Left => new PixelPoint(area.X, ToolWindowPlacement.Clamp(window.Y, area.Y, area.Bottom - window.Height)),
+        DockEdge.Right => new PixelPoint(area.Right - window.Width, ToolWindowPlacement.Clamp(window.Y, area.Y, area.Bottom - window.Height)),
+        DockEdge.Top => new PixelPoint(ToolWindowPlacement.Clamp(window.X, area.X, area.Right - window.Width), area.Y),
         _ => window.Position,
     };
 
@@ -154,20 +154,4 @@ internal static class EdgeDockRules
     public static bool StaysOffOtherScreens(PixelRect hidden, IEnumerable<PixelRect> otherScreens) =>
         !otherScreens.Any(screen => screen.Intersects(hidden));
 
-    /// <summary>
-    /// Clamps a value into a range, favoring the lower bound when the range is empty.
-    /// </summary>
-    /// <param name="value">
-    /// The value.
-    /// </param>
-    /// <param name="min">
-    /// The lower bound.
-    /// </param>
-    /// <param name="max">
-    /// The upper bound.
-    /// </param>
-    /// <returns>
-    /// The clamped value.
-    /// </returns>
-    private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(value, max));
 }

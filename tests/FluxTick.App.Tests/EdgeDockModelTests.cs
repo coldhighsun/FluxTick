@@ -172,4 +172,107 @@ public sealed class EdgeDockModelTests
         model.IsDocked.Should().BeFalse();
         model.Hidden.Should().BeFalse();
     }
+
+    /// <summary>
+    /// A move the window made by itself is not the user's, even when the system reports it after the slide ended.
+    /// </summary>
+    [Fact]
+    public void IsUserMove_AfterTheOwnSlide_IgnoresTheTarget()
+    {
+        var model = new EdgeDockModel();
+        model.SetEnabled(true);
+        model.BeginSlide(new PixelPoint(0, 300));
+
+        model.IsUserMove(new PixelPoint(120, 300)).Should().BeFalse();
+        model.EndSlide();
+        model.IsUserMove(new PixelPoint(0, 300)).Should().BeFalse();
+        model.IsUserMove(new PixelPoint(5, 300)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Nothing is decided while the window slides or the user drags it, or when edge hiding is off.
+    /// </summary>
+    [Fact]
+    public void CanSettle_WhileSlidingMovingOrDisabled_IsFalse()
+    {
+        var model = new EdgeDockModel();
+        model.CanSettle.Should().BeFalse();
+
+        model.SetEnabled(true);
+        model.CanSettle.Should().BeTrue();
+
+        model.SetMoving(true);
+        model.CanSettle.Should().BeFalse();
+        model.SetMoving(false);
+
+        model.BeginSlide(new PixelPoint(0, 0));
+        model.CanSettle.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The geometry is not saved while the window slides or rests hidden.
+    /// </summary>
+    [Fact]
+    public void SuppressesGeometry_WhileSlidingOrHidden_IsTrue()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.SuppressesGeometry.Should().BeFalse();
+
+        model.SetHidden(true);
+        model.SuppressesGeometry.Should().BeTrue();
+
+        model.SetHidden(false);
+        model.BeginSlide(new PixelPoint(0, 300));
+        model.SuppressesGeometry.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// After the platform did not keep the window where it was sent, edge hiding stays off, even when it is switched on.
+    /// </summary>
+    [Fact]
+    public void MarkUnsupported_ThenSetEnabled_StaysOff()
+    {
+        var model = new EdgeDockModel();
+        model.SetEnabled(true);
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.SetHidden(true);
+
+        model.MarkUnsupported();
+        model.SetEnabled(true);
+
+        model.Enabled.Should().BeFalse();
+        model.IsDocked.Should().BeFalse();
+        model.Hidden.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A work area that is still there keeps the dock, and one that changed is replaced by the screen that took its place.
+    /// </summary>
+    [Fact]
+    public void Rebase_AreaStillThereOrChanged_KeepsTheDock()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+
+        model.Rebase([Area]).Should().BeTrue();
+        model.Area.Should().Be(Area);
+
+        var shrunk = new PixelRect(0, 40, 1920, 960);
+        model.Rebase([shrunk]).Should().BeTrue();
+        model.Area.Should().Be(shrunk);
+    }
+
+    /// <summary>
+    /// When the screen the window was docked to is gone, the dock cannot be kept.
+    /// </summary>
+    [Fact]
+    public void Rebase_ScreenGone_ReturnsFalse()
+    {
+        var model = new EdgeDockModel();
+        var second = new PixelRect(1920, 0, 1280, 1000);
+        model.Settle(new PixelRect(3200 - 340 - 2, 200, 340, 420), second, [], 8, 4);
+
+        model.Rebase([new PixelRect(0, 0, 1920, 1000)]).Should().BeFalse();
+    }
 }

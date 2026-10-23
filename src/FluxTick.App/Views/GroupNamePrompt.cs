@@ -13,9 +13,22 @@ namespace FluxTick.App.Views;
 internal static class GroupNamePrompt
 {
     /// <summary>
-    /// Gets the number of pop-ups that are open, so the window does not hide while a name is being typed.
+    /// The pop-ups that were opened and may still be.
     /// </summary>
-    public static int OpenCount { get; private set; }
+    private static readonly HashSet<Flyout> Opened = [];
+
+    /// <summary>
+    /// Gets a value indicating whether a pop-up is open, so the window does not hide while a name is being typed.
+    /// A pop-up that went away without reporting it is not counted.
+    /// </summary>
+    public static bool IsOpen
+    {
+        get
+        {
+            Opened.RemoveWhere(flyout => !flyout.IsOpen);
+            return Opened.Count > 0;
+        }
+    }
 
     /// <summary>
     /// Shows the pop-up next to a control. Enter commits the typed name and Esc, or a click elsewhere, cancels.
@@ -70,10 +83,10 @@ internal static class GroupNamePrompt
 
         flyout.Opened += (_, _) =>
         {
-            OpenCount++;
+            Opened.Add(flyout);
             box.Focus();
         };
-        flyout.Closed += (_, _) => OpenCount--;
+        flyout.Closed += (_, _) => Opened.Remove(flyout);
 
         // The menu that led here is still closing while the click is handled; opening the pop-up right away would
         // let that closing dismiss it again.
