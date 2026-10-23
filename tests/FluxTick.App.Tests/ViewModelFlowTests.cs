@@ -195,9 +195,9 @@ public class ViewModelFlowTests
         await using var h = new Harness(Harness.WatchlistOf(Btc));
         await h.Main.InitializeAsync();
 
-        h.Main.Settings.AutoHideAtEdge = true;
+        h.Main.Settings.AutoHideAtEdge = false;
 
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.AutoHideAtEdge);
+        await Harness.EventuallyAsync(() => !h.Store.Stored!.Appearance.AutoHideAtEdge);
     }
 
     /// <summary>

@@ -134,7 +134,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Routing[AssetClass.Equity] = ["a", "b"];
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.FlashOnUpdate = true;
-        settings.Appearance.AutoHideAtEdge = true;
+        settings.Appearance.AutoHideAtEdge = false;
         settings.Appearance.Layout = WatchlistLayout.Cards;
         settings.Appearance.Grouping = CardGrouping.Custom;
         settings.Appearance.CollapsedTypes.Add(AssetClass.Forex);
@@ -151,7 +151,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Routing[AssetClass.Equity].Should().Equal("a", "b");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.FlashOnUpdate.Should().BeTrue();
-        loaded.Appearance.AutoHideAtEdge.Should().BeTrue();
+        loaded.Appearance.AutoHideAtEdge.Should().BeFalse();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
         loaded.Appearance.Grouping.Should().Be(CardGrouping.Custom);
         loaded.Appearance.CollapsedTypes.Should().Equal(AssetClass.Forex);
@@ -198,10 +198,10 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies the edge auto-hide defaults to off, including for a settings file written before the option existed.
+    /// Verifies the edge auto-hide defaults to on, including for a settings file written before the option existed.
     /// </summary>
     [Fact]
-    public async Task LoadAsync_WithoutAutoHideKey_DefaultsToAutoHideOff()
+    public async Task LoadAsync_WithoutAutoHideKey_DefaultsToAutoHideOn()
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "settings.json");
@@ -210,8 +210,8 @@ public sealed class RoutingAndSettingsTests : IDisposable
 
         var loaded = await store.LoadAsync();
 
-        new AppSettings().Appearance.AutoHideAtEdge.Should().BeFalse();
-        loaded!.Appearance.AutoHideAtEdge.Should().BeFalse();
+        new AppSettings().Appearance.AutoHideAtEdge.Should().BeTrue();
+        loaded!.Appearance.AutoHideAtEdge.Should().BeTrue();
     }
 
     /// <summary>
