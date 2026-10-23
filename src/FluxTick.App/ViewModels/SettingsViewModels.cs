@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
 using FluxTick.App.Services;
+using FluxTick.App.Views;
 using FluxTick.Core.Application;
 
 namespace FluxTick.App.ViewModels;
@@ -740,6 +741,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial bool FlashOnUpdate { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the platform lets a window be placed beyond the screen, which edge hiding needs.
+    /// </summary>
+    public bool AutoHideAvailable => EdgeDockRules.IsPlatformSupported;
 
     /// <summary>
     /// Gets or sets a value indicating whether the window hides at a screen edge and slides out on hover.

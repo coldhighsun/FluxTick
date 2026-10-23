@@ -30,6 +30,12 @@ public sealed partial class MainWindow
     private static readonly TimeSpan DockVerifyDelay = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
+    /// How long the list of screens has to stay as it is before the dock is checked against it, because the system can
+    /// report several incomplete lists while a monitor is plugged in or out.
+    /// </summary>
+    private static readonly TimeSpan DockScreensDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
     /// The context menus that were opened and may still be, so the window does not hide under them.
     /// </summary>
     private static readonly HashSet<ContextMenu> OpenMenus = [];
@@ -37,7 +43,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// The dock state.
     /// </summary>
-    private readonly EdgeDockModel _dock = new();
+    private readonly EdgeDockModel _dock = new(EdgeDockRules.IsPlatformSupported);
 
     /// <summary>
     /// Slides the window to and from its edge.
@@ -54,6 +60,11 @@ public sealed partial class MainWindow
     /// The wait for the position to stop changing, or <see langword="null"/> when none is pending.
     /// </summary>
     private IDisposable? _dockSettle;
+
+    /// <summary>
+    /// The wait for the list of screens to stay as it is, or <see langword="null"/> when none is pending.
+    /// </summary>
+    private IDisposable? _dockScreens;
 
     /// <summary>
     /// The wait for the pointer to stay away, or <see langword="null"/> when none is pending.
@@ -124,8 +135,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void ApplyAutoHide()
     {
-        _dock.SetEnabled(
-            EdgeDockRules.IsPlatformSupported && (DataContext as MainViewModel)?.Settings is { AutoHideAtEdge: true, AlwaysOnTop: true });
+        _dock.SetEnabled((DataContext as MainViewModel)?.Settings is { AutoHideAtEdge: true, AlwaysOnTop: true });
         if (_dock.Enabled)
         {
             ScheduleDockSettle();
@@ -194,7 +204,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Keeps a window that is docked to a screen on a screen that exists.
+    /// Keeps a window that is docked to a screen on a screen that exists, once the list of screens stopped changing.
     /// </summary>
     /// <param name="sender">
     /// The screens.
@@ -202,7 +212,32 @@ public sealed partial class MainWindow
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnScreensChanged(object? sender, EventArgs e) => EnsureDockArea();
+    private void OnScreensChanged(object? sender, EventArgs e)
+    {
+        _dockScreens?.Dispose();
+        _dockScreens = DispatcherTimer.RunOnce(
+            () =>
+            {
+                _dockScreens = null;
+                EnsureDockArea();
+            },
+            DockScreensDelay);
+    }
+
+    /// <summary>
+    /// Closes the menus and pop-ups that are open, so none is left behind where the window was.
+    /// </summary>
+    private void CloseDockPopups()
+    {
+        foreach (var menu in OpenMenus.ToList())
+        {
+            menu.Close();
+        }
+
+        GroupButton.Flyout?.Hide();
+        StatusButton.Flyout?.Hide();
+        GroupNamePrompt.CloseAll();
+    }
 
     /// <summary>
     /// Starts waiting to hide the window again after something that kept it open went away.
@@ -389,8 +424,8 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// Checks a little after the window was sent beyond its edge that the system left it there. A window the system
-    /// kept in sight is not taken for hidden, and when that happens twice in a row edge hiding stays off. Platforms that
-    /// are known not to place windows (see <see cref="EdgeDockRules.IsPlatformSupported"/>) never get this far.
+    /// kept in sight is not taken for hidden, and edge hiding stays off from then on. Platforms that are known not to
+    /// place windows (see <see cref="EdgeDockRules.IsPlatformSupported"/>) never get this far.
     /// </summary>
     /// <param name="target">
     /// The hidden position the window was sent to.
@@ -405,10 +440,9 @@ public sealed partial class MainWindow
                 }
 
                 var tolerance = ScaledPixels(EdgeDockRules.Sliver);
-                var honored = Math.Abs(Position.X - target.X) <= tolerance && Math.Abs(Position.Y - target.Y) <= tolerance;
-                _dock.RecordPlacement(honored);
-                if (!honored)
+                if (Math.Abs(Position.X - target.X) > tolerance || Math.Abs(Position.Y - target.Y) > tolerance)
                 {
+                    _dock.MarkUnsupported();
                     RaiseGeometryChanged();
                 }
             },

@@ -228,46 +228,38 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
-    /// A window the platform did not keep beyond the screen ends the dock, and the second miss in a row turns edge
-    /// hiding off even when it is switched on again.
+    /// A window the platform did not keep beyond the screen ends the dock and turns edge hiding off, even when it is
+    /// switched on again.
     /// </summary>
     [Fact]
-    public void RecordPlacement_MissedTwice_StaysOff()
+    public void MarkUnsupported_AfterDocking_EndsTheDockAndStaysOff()
     {
         var model = new EdgeDockModel();
         model.SetEnabled(true);
         model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
         model.SetHidden(true);
 
-        model.RecordPlacement(honored: false);
+        model.MarkUnsupported();
+        model.SetEnabled(true);
 
+        model.Enabled.Should().BeFalse();
+        model.Supported.Should().BeFalse();
         model.IsDocked.Should().BeFalse();
         model.Hidden.Should().BeFalse();
-        model.Supported.Should().BeTrue();
-        model.SetEnabled(true);
-        model.Enabled.Should().BeTrue();
-
-        model.RecordPlacement(honored: false);
-
-        model.Supported.Should().BeFalse();
-        model.SetEnabled(true);
-        model.Enabled.Should().BeFalse();
     }
 
     /// <summary>
-    /// One miss is forgiven when the window was kept beyond the screen in between.
+    /// A platform that is known not to place windows keeps edge hiding off from the start.
     /// </summary>
     [Fact]
-    public void RecordPlacement_MissThenHonored_KeepsEdgeHidingOn()
+    public void Enabled_PlatformNotSupported_IsFalseEvenWhenWanted()
     {
-        var model = new EdgeDockModel();
+        var model = new EdgeDockModel(supported: false);
+
         model.SetEnabled(true);
 
-        model.RecordPlacement(honored: false);
-        model.RecordPlacement(honored: true);
-        model.RecordPlacement(honored: false);
-
-        model.Supported.Should().BeTrue();
+        model.Enabled.Should().BeFalse();
+        model.CanSettle.Should().BeFalse();
     }
 
     /// <summary>

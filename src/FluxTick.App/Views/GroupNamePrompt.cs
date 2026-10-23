@@ -31,6 +31,17 @@ internal static class GroupNamePrompt
     }
 
     /// <summary>
+    /// Closes the pop-ups that are open.
+    /// </summary>
+    public static void CloseAll()
+    {
+        foreach (var flyout in Opened.ToList())
+        {
+            flyout.Hide();
+        }
+    }
+
+    /// <summary>
     /// Shows the pop-up next to a control. Enter commits the typed name and Esc, or a click elsewhere, cancels.
     /// </summary>
     /// <param name="anchor">

@@ -53,7 +53,7 @@ internal enum TrayToggle
 /// The dock state of the main window: which edge it rests at and whether it is hidden there. It holds no timers and
 /// touches no window, so the transitions can be tested on their own.
 /// </summary>
-internal sealed class EdgeDockModel
+internal sealed class EdgeDockModel(bool supported = true)
 {
     /// <summary>
     /// Gets the edge the window is docked to.
@@ -66,27 +66,27 @@ internal sealed class EdgeDockModel
     public bool Hidden { get; private set; }
 
     /// <summary>
+    /// Whether the settings ask for edge hiding.
+    /// </summary>
+    private bool _wanted;
+
+    /// <summary>
     /// Gets the work area the window was docked in. It is remembered because a hidden window has only a thin strip on
     /// the screen, which the system may not attribute to a screen.
     /// </summary>
     public PixelRect Area { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether edge hiding is on: the setting is on, the window stays above others and the
-    /// platform can place a window beyond the screen.
+    /// Gets a value indicating whether edge hiding is on: the settings ask for it, the window stays above others, and
+    /// the platform can place a window beyond the screen.
     /// </summary>
-    public bool Enabled { get; private set; }
+    public bool Enabled => _wanted && Supported;
 
     /// <summary>
-    /// Gets a value indicating whether the platform keeps a window where it is sent. It stops being the case after the
-    /// window was not kept beyond the screen twice in a row, and then edge hiding stays off.
+    /// Gets a value indicating whether the platform keeps a window beyond the screen where it is sent. It is known
+    /// from the platform up front, and it stops being the case once a window was not kept there.
     /// </summary>
-    public bool Supported { get; private set; } = true;
-
-    /// <summary>
-    /// The number of times in a row the platform did not keep the window beyond the screen.
-    /// </summary>
-    private int _placementFailures;
+    public bool Supported { get; private set; } = supported;
 
     /// <summary>
     /// Gets a value indicating whether the window moves by itself, so that the changes of position it causes are not
@@ -127,12 +127,12 @@ internal sealed class EdgeDockModel
     public bool ShouldWaitToHide => IsDocked && !Hidden;
 
     /// <summary>
-    /// Turns edge hiding on or off. It stays off once the platform turned out not to support it.
+    /// Turns edge hiding on or off. It stays off when the platform does not support it.
     /// </summary>
     /// <param name="on">
     /// Whether the settings ask for edge hiding.
     /// </param>
-    public void SetEnabled(bool on) => Enabled = on && Supported;
+    public void SetEnabled(bool on) => _wanted = on;
 
     /// <summary>
     /// Records that the user started or stopped dragging the window by its header.
@@ -171,27 +171,13 @@ internal sealed class EdgeDockModel
     public bool IsUserMove(PixelPoint position) => Enabled && !Sliding && position != Expected;
 
     /// <summary>
-    /// Records whether the platform kept the window beyond the screen where it was sent. A window that was not kept
-    /// there is in plain sight, so the dock ends; a window that was not kept twice in a row turns edge hiding off,
-    /// because one miss can be a slow window manager.
+    /// Turns edge hiding off for good, because the platform did not keep the window beyond the screen where it was
+    /// sent. The window is in plain sight then, so the dock ends.
     /// </summary>
-    /// <param name="honored">
-    /// <see langword="true"/> when the window was where it was sent.
-    /// </param>
-    public void RecordPlacement(bool honored)
+    public void MarkUnsupported()
     {
-        if (honored)
-        {
-            _placementFailures = 0;
-            return;
-        }
-
+        Supported = false;
         Reset();
-        if (++_placementFailures >= 2)
-        {
-            Supported = false;
-            Enabled = false;
-        }
     }
 
     /// <summary>

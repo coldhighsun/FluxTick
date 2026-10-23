@@ -69,9 +69,12 @@
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Auto-hide at screen edge" />
-                    <TextBlock Text="Needs Always on top. Drag the window to the left, right or top edge; point at the edge to bring it back" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                    <TextBlock Text="Needs Always on top. Drag the window to the left, right or top edge; point at the edge to bring it back" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                               IsVisible="{Binding AutoHideAvailable}" />
+                    <TextBlock Text="Not available here: this system does not let a window be placed beyond the screen edge" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                               IsVisible="{Binding !AutoHideAvailable}" />
                   </StackPanel>
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" />
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsEnabled="{Binding AutoHideAvailable}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
