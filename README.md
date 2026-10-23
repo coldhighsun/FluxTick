@@ -92,6 +92,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Move the Settings / Add window | Drag its header; **Esc** closes it |
 | Settings | The sliders icon in the header opens a window with the tabs *Appearance*, *Data sources* and *Routing*; expand a data source to edit its options |
 | Restore a data source | *Restore defaults* in its expanded card puts its options back to the built-in values (secret values such as keys are kept) |
+| Data source status | The footer shows one dot per data source in use (green connected, orange off or failing, grey idle or reconnecting). Sources with a problem come first; when not all fit, a **+N** chip appears. Click the footer to list every source with its state and error message |
 | Compact mode | Double-click the header, or toggle in Settings |
 | Hide / show | **×** hides to the tray; click the tray icon to bring it back; *Exit* in the tray menu quits |
 
