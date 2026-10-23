@@ -74,7 +74,7 @@
                     <TextBlock Text="Not available here: this system does not let a window be placed beyond the screen edge" Classes="muted" FontSize="11" TextWrapping="Wrap"
                                IsVisible="{Binding !AutoHideAvailable}" />
                   </StackPanel>
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsEnabled="{Binding AutoHideAvailable}" />
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsVisible="{Binding AutoHideAvailable}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">

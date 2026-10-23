@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 
 namespace FluxTick.App.Views;
@@ -43,7 +44,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// The dock state.
     /// </summary>
-    private readonly EdgeDockModel _dock = new(EdgeDockRules.IsPlatformSupported);
+    private readonly EdgeDockModel _dock = new(PlatformCapabilities.CanPlaceWindowsOffScreen);
 
     /// <summary>
     /// Slides the window to and from its edge.
@@ -190,7 +191,8 @@ public sealed partial class MainWindow
     /// </returns>
     private bool EnsureDockArea()
     {
-        if (!_dock.IsDocked || _dock.Rebase(Screens.All.Select(s => s.WorkingArea).ToList()))
+        // While the list of screens is still changing it cannot be trusted, so the dock is kept until it settles.
+        if (!_dock.IsDocked || _dockScreens is not null || _dock.Rebase(Screens.All.Select(s => s.WorkingArea).ToList()))
         {
             return true;
         }
@@ -425,7 +427,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// Checks a little after the window was sent beyond its edge that the system left it there. A window the system
     /// kept in sight is not taken for hidden, and edge hiding stays off from then on. Platforms that are known not to
-    /// place windows (see <see cref="EdgeDockRules.IsPlatformSupported"/>) never get this far.
+    /// place windows (see <see cref="PlatformCapabilities.CanPlaceWindowsOffScreen"/>) never get this far.
     /// </summary>
     /// <param name="target">
     /// The hidden position the window was sent to.
@@ -442,7 +444,16 @@ public sealed partial class MainWindow
                 var tolerance = ScaledPixels(EdgeDockRules.Sliver);
                 if (Math.Abs(Position.X - target.X) > tolerance || Math.Abs(Position.Y - target.Y) > tolerance)
                 {
+                    // The window is in plain sight or stranded beyond the edge, so it goes back to where it is shown
+                    // before edge hiding is turned off, here and in the settings.
+                    var shown = _dock.ShownPosition(CurrentPixelBounds());
                     _dock.MarkUnsupported();
+                    if (DataContext is MainViewModel viewModel)
+                    {
+                        viewModel.Settings.AutoHideAvailable = false;
+                    }
+
+                    MoveDock(shown);
                     RaiseGeometryChanged();
                 }
             },
