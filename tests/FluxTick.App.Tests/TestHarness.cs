@@ -64,6 +64,17 @@ public sealed class FakeProvider(ProviderDescriptor descriptor)
     /// </param>
     public void Emit(Quote quote) => Publish(quote);
 
+    /// <summary>
+    /// Changes the connection status as if the data source connected, failed or reconnected.
+    /// </summary>
+    /// <param name="state">
+    /// The new connection state.
+    /// </param>
+    /// <param name="message">
+    /// An optional detail message.
+    /// </param>
+    public void ChangeStatus(ProviderConnectionState state, string? message = null) => SetStatus(state, message);
+
     /// <inheritdoc />
     public Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default) =>
         Task.FromResult(SearchResults);

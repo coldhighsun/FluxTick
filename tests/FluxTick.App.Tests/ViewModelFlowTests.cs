@@ -698,4 +698,39 @@ public class ViewModelFlowTests
 
         await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.Opacity == 0.6);
     }
+
+    /// <summary>
+    /// Verifies a failing data source turns its chip bad and its tooltip carries the reason.
+    /// </summary>
+    [Fact]
+    public async Task Chips_ProviderFails_MarkChipBadWithReason()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+
+        h.CryptoFactory.Fake.ChangeStatus(ProviderConnectionState.Failed, "boom");
+
+        var chip = h.Main.Chips.Single();
+        await Harness.EventuallyAsync(() => chip.IsBad);
+        chip.IsGood.Should().BeFalse();
+        chip.Tooltip.Should().Contain("boom");
+    }
+
+    /// <summary>
+    /// Verifies a connected data source turns its chip good and clears the problem flag.
+    /// </summary>
+    [Fact]
+    public async Task Chips_ProviderConnects_MarkChipGood()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+        h.CryptoFactory.Fake.ChangeStatus(ProviderConnectionState.Failed, "boom");
+        var chip = h.Main.Chips.Single();
+        await Harness.EventuallyAsync(() => chip.IsBad);
+
+        h.CryptoFactory.Fake.ChangeStatus(ProviderConnectionState.Connected);
+
+        await Harness.EventuallyAsync(() => chip.IsGood);
+        chip.IsBad.Should().BeFalse();
+    }
 }
