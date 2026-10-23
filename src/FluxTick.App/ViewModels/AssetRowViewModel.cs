@@ -139,6 +139,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial bool ShowSparkline { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether a price change advances <see cref="FlashVersion" />.
+    /// </summary>
+    public bool FlashEnabled { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether the change is positive.
     /// </summary>
     public bool IsUp => Direction == PriceDirection.Up;
@@ -182,7 +187,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
             };
             Tooltip = BuildTooltip(snapshot, quote);
 
-            if (_lastPrice is { } previous && previous != quote.Price)
+            if (FlashEnabled && _lastPrice is { } previous && previous != quote.Price)
             {
                 FlashUp = quote.Price > previous;
                 FlashVersion++;

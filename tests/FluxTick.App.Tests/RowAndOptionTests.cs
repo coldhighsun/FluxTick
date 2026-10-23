@@ -56,7 +56,7 @@ public class RowAndOptionTests
     [Fact]
     public void Update_FlashVersion_AdvancesOnlyOnPriceChange()
     {
-        var row = new AssetRowViewModel(Btc, "p");
+        var row = new AssetRowViewModel(Btc, "p") { FlashEnabled = true };
 
         row.Update(Snapshot(100m, 100m));
         row.FlashVersion.Should().Be(0, "the first quote has nothing to compare with");
@@ -72,6 +72,30 @@ public class RowAndOptionTests
         row.FlashVersion.Should().Be(2);
         row.FlashUp.Should().BeFalse();
         row.IsDown.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a disabled flash keeps the counter still while the price still updates, and resumes once re-enabled.
+    /// </summary>
+    [Fact]
+    public void Update_FlashDisabled_DoesNotAdvanceFlashVersion()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+        row.FlashEnabled.Should().BeFalse("the flash is off unless the setting turns it on");
+
+        row.Update(Snapshot(100m, 100m));
+        row.Update(Snapshot(101m, 100m));
+
+        row.FlashVersion.Should().Be(0);
+        row.PriceText.Should().Be("101.00");
+
+        row.FlashEnabled = true;
+        row.Update(Snapshot(101m, 100m));
+        row.FlashVersion.Should().Be(0, "the price did not change since the last quote");
+
+        row.Update(Snapshot(102m, 100m));
+        row.FlashVersion.Should().Be(1);
+        row.FlashUp.Should().BeTrue();
     }
 
     /// <summary>
