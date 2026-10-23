@@ -133,6 +133,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Providers["a"] = new ProviderSettings { Enabled = false, Options = { ["PollInterval"] = "00:00:09" } };
         settings.Routing[AssetClass.Equity] = ["a", "b"];
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
+        settings.Appearance.ThemeMode = ThemeMode.Dark;
         settings.Appearance.FlashOnUpdate = true;
         settings.Appearance.AutoHideAtEdge = false;
         settings.Appearance.Layout = WatchlistLayout.Cards;
@@ -150,6 +151,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Providers["a"].Options["PollInterval"].Should().Be("00:00:09");
         loaded.Routing[AssetClass.Equity].Should().Equal("a", "b");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
+        loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
         loaded.Appearance.FlashOnUpdate.Should().BeTrue();
         loaded.Appearance.AutoHideAtEdge.Should().BeFalse();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
@@ -212,6 +214,23 @@ public sealed class RoutingAndSettingsTests : IDisposable
 
         new AppSettings().Appearance.AutoHideAtEdge.Should().BeTrue();
         loaded!.Appearance.AutoHideAtEdge.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a settings file written before the theme option existed reads as automatic.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithoutThemeModeKey_DefaultsToAuto()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "appearance": { "opacity": 0.8 } }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Appearance.Opacity.Should().Be(0.8);
+        loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Auto);
     }
 
     /// <summary>

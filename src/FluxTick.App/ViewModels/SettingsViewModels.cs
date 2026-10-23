@@ -687,6 +687,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<ColorConvention> ColorConventions { get; } = Enum.GetValues<ColorConvention>();
 
     /// <summary>
+    /// Gets the selectable color schemes.
+    /// </summary>
+    public IReadOnlyList<ThemeMode> ThemeModes { get; } = Enum.GetValues<ThemeMode>();
+
+    /// <summary>
     /// Gets the editor of the user-defined groups.
     /// </summary>
     public GroupsSettingsViewModel Groups { get; }
@@ -761,6 +766,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial ColorConvention SelectedColorConvention { get; set; }
 
     /// <summary>
+    /// Gets or sets the color scheme.
+    /// </summary>
+    [ObservableProperty]
+    public partial ThemeMode SelectedThemeMode { get; set; }
+
+    /// <summary>
     /// Gets or sets how the watchlist is laid out.
     /// </summary>
     [ObservableProperty]
@@ -794,6 +805,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             FlashOnUpdate = current.Appearance.FlashOnUpdate;
             AutoHideAtEdge = current.Appearance.AutoHideAtEdge;
             SelectedColorConvention = current.Appearance.ColorConvention;
+            SelectedThemeMode = current.Appearance.ThemeMode;
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
             foreach (var provider in Providers)
@@ -872,6 +884,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// The new value.
     /// </param>
     partial void OnSelectedColorConventionChanged(ColorConvention value) => SaveAppearance(s => s.Appearance.ColorConvention = value);
+
+    /// <summary>
+    /// Saves the color scheme.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnSelectedThemeModeChanged(ThemeMode value) => SaveAppearance(s => s.Appearance.ThemeMode = value);
 
     /// <summary>
     /// Saves the watchlist layout.
