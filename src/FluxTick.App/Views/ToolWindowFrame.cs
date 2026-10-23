@@ -21,6 +21,11 @@ public sealed class ToolWindowFrame : ContentControl
         AvaloniaProperty.Register<ToolWindowFrame, string?>(nameof(Title));
 
     /// <summary>
+    /// The resize grip of the template.
+    /// </summary>
+    private Border? _grip;
+
+    /// <summary>
     /// Initializes static members of the <see cref="ToolWindowFrame"/> class.
     /// </summary>
     static ToolWindowFrame()
@@ -54,9 +59,30 @@ public sealed class ToolWindowFrame : ContentControl
             close.Click += OnCloseClicked;
         }
 
-        if (e.NameScope.Find<Border>("PART_Grip") is { } grip)
+        _grip = e.NameScope.Find<Border>("PART_Grip");
+        if (_grip is not null)
         {
-            grip.PointerPressed += OnGripPressed;
+            _grip.PointerPressed += OnGripPressed;
+        }
+
+        ApplyGripVisibility();
+    }
+
+    /// <inheritdoc />
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ApplyGripVisibility();
+    }
+
+    /// <summary>
+    /// Shows the resize grip only when the window can be resized.
+    /// </summary>
+    private void ApplyGripVisibility()
+    {
+        if (_grip is not null && TopLevel.GetTopLevel(this) is Window window)
+        {
+            _grip.IsVisible = window.CanResize;
         }
     }
 

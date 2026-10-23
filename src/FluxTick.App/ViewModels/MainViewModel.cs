@@ -29,6 +29,11 @@ public enum ToolWindowKind
     /// The add instrument / change source window.
     /// </summary>
     AddAsset,
+
+    /// <summary>
+    /// The about window.
+    /// </summary>
+    About,
 }
 
 /// <summary>
@@ -268,6 +273,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public event EventHandler? AddAssetRequested;
 
     /// <summary>
+    /// Raised when the about window should be shown.
+    /// </summary>
+    public event EventHandler? AboutRequested;
+
+    /// <summary>
     /// Gets a value indicating whether the watchlist is empty and a hint should be shown.
     /// </summary>
     public bool IsEmpty => Rows.Count == 0;
@@ -394,6 +404,20 @@ public sealed partial class MainViewModel : LocalizedViewModel
 
         Settings.Reload();
         SettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Requests the about window, which is shown by the view.
+    /// </summary>
+    [RelayCommand]
+    public void ShowAbout()
+    {
+        if (IsToolWindowOpen)
+        {
+            return;
+        }
+
+        AboutRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

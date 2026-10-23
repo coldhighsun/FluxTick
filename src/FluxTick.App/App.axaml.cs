@@ -63,6 +63,11 @@ public sealed partial class App : Application
     private NativeMenuItem? _trayExit;
 
     /// <summary>
+    /// The tray menu entry that opens the about window.
+    /// </summary>
+    private NativeMenuItem? _trayAbout;
+
+    /// <summary>
     /// The tray menu entry that announces a newer release. It is part of the menu only while there is one.
     /// </summary>
     private NativeMenuItem? _trayUpdate;
@@ -135,7 +140,7 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Starts the view model and honors the developer option <c>--page=add|settings</c>, which opens that page on startup.
+    /// Starts the view model and honors the developer option <c>--page=add|settings|about</c>, which opens that page on startup.
     /// </summary>
     /// <param name="viewModel">
     /// The main view model.
@@ -159,6 +164,9 @@ public sealed partial class App : Application
                     break;
                 case "settings":
                     viewModel.ShowSettings();
+                    break;
+                case "about":
+                    viewModel.ShowAbout();
                     break;
             }
         });
@@ -202,16 +210,19 @@ public sealed partial class App : Application
         if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
         {
             tray.ToolTipText = $"FluxTick — {Loc.Get("Tagline")}";
-            if (_trayToggle is null || _trayExit is null)
+            if (_trayToggle is null || _trayAbout is null || _trayExit is null)
             {
                 _trayToggle = new NativeMenuItem();
+                _trayAbout = new NativeMenuItem();
                 _trayExit = new NativeMenuItem();
                 _trayToggle.Click += OnToggleWindow;
+                _trayAbout.Click += OnTrayAboutClicked;
                 _trayExit.Click += OnExit;
-                tray.Menu = [_trayToggle, new NativeMenuItemSeparator(), _trayExit];
+                tray.Menu = [_trayToggle, _trayAbout, new NativeMenuItemSeparator(), _trayExit];
             }
 
             _trayToggle.Header = Loc.Get("Tray_ShowHide");
+            _trayAbout.Header = Loc.Get("Tray_About");
             _trayExit.Header = Loc.Get("Tray_Exit");
             ApplyUpdateTray();
         }
@@ -272,7 +283,26 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayUpdateClicked(object? sender, EventArgs e)
+    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings());
+
+    /// <summary>
+    /// Opens the about window.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowAbout());
+
+    /// <summary>
+    /// Shows the main window when it is hidden, and then opens a tool window on it.
+    /// </summary>
+    /// <param name="open">
+    /// Opens the tool window.
+    /// </param>
+    private void ShowFromTray(Action<MainViewModel> open)
     {
         if (_window is null || _services is null)
         {
@@ -284,7 +314,7 @@ public sealed partial class App : Application
             _window.ToggleVisibility();
         }
 
-        _services.GetRequiredService<MainViewModel>().ShowSettings();
+        open(_services.GetRequiredService<MainViewModel>());
     }
 
     /// <summary>

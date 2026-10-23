@@ -206,6 +206,7 @@ public sealed partial class MainWindow : Window
         {
             _observed.SettingsRequested -= OnSettingsRequested;
             _observed.AddAssetRequested -= OnAddAssetRequested;
+            _observed.AboutRequested -= OnAboutRequested;
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged -= OnLayoutPropertyChanged;
         }
@@ -215,6 +216,7 @@ public sealed partial class MainWindow : Window
         {
             _observed.SettingsRequested += OnSettingsRequested;
             _observed.AddAssetRequested += OnAddAssetRequested;
+            _observed.AboutRequested += OnAboutRequested;
             _observed.PropertyChanged += OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged += OnLayoutPropertyChanged;
         }
@@ -398,6 +400,25 @@ public sealed partial class MainWindow : Window
         }
 
         await ShowToolWindowAsync(viewModel, ToolWindowKind.Settings, new SettingsWindow { DataContext = viewModel.Settings });
+    }
+
+    /// <summary>
+    /// Opens the about window modally.
+    /// </summary>
+    /// <param name="sender">
+    /// The view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private async void OnAboutRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        await ShowToolWindowAsync(viewModel, ToolWindowKind.About, new AboutWindow { DataContext = new AboutViewModel(viewModel.Settings.Updates) });
     }
 
     /// <summary>

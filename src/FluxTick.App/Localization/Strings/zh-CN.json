@@ -1,4 +1,8 @@
 {
+  "About_Author": "作者",
+  "About_Homepage": "项目主页",
+  "About_License": "许可证",
+  "About_WindowTitle": "关于 FluxTick",
   "Add_AlreadyOnList": "{0} 已在你的列表中。",
   "Add_AssetClass": "资产类别",
   "Add_Button": "添加",
@@ -144,6 +148,7 @@
   "ThemeMode_Auto": "自动",
   "ThemeMode_Dark": "深色",
   "ThemeMode_Light": "浅色",
+  "Tray_About": "关于",
   "Tray_Exit": "退出",
   "Tray_ShowHide": "显示 / 隐藏",
   "Tray_UpdateAvailable": "发现新版本 {0}",
