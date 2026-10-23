@@ -52,4 +52,15 @@ public class FormattingTests
     {
         ColorConventionResolver.IsRedUp(convention, new CultureInfo(culture)).Should().Be(expected);
     }
+
+    /// <summary>
+    /// Verifies each theme mode maps to its variant, with automatic following the system.
+    /// </summary>
+    [Fact]
+    public void ThemeMode_MapsToVariant()
+    {
+        ThemeModeResolver.ToVariant(ThemeMode.Auto).Should().Be(Avalonia.Styling.ThemeVariant.Default);
+        ThemeModeResolver.ToVariant(ThemeMode.Light).Should().Be(Avalonia.Styling.ThemeVariant.Light);
+        ThemeModeResolver.ToVariant(ThemeMode.Dark).Should().Be(Avalonia.Styling.ThemeVariant.Dark);
+    }
 }

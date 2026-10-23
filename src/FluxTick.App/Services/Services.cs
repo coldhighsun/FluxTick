@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia.Styling;
 using FluxTick.Abstractions;
 using FluxTick.Core.Application;
 
@@ -77,6 +78,29 @@ public static class ColorConventionResolver
         ColorConvention.RedUp => true,
         ColorConvention.GreenUp => false,
         _ => culture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase),
+    };
+}
+
+/// <summary>
+/// Maps the configured color scheme to the UI framework's theme variant.
+/// </summary>
+public static class ThemeModeResolver
+{
+    /// <summary>
+    /// Converts a theme mode to the variant to request. <see cref="ThemeMode.Auto"/> yields the default variant,
+    /// which follows the system.
+    /// </summary>
+    /// <param name="mode">
+    /// The configured mode.
+    /// </param>
+    /// <returns>
+    /// The theme variant to request.
+    /// </returns>
+    public static ThemeVariant ToVariant(ThemeMode mode) => mode switch
+    {
+        ThemeMode.Light => ThemeVariant.Light,
+        ThemeMode.Dark => ThemeVariant.Dark,
+        _ => ThemeVariant.Default,
     };
 }
 

@@ -78,6 +78,13 @@
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Theme" />
+                    <TextBlock Text="Auto: follow the system light / dark setting" Classes="muted" FontSize="11" />
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" Width="140" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Up / down colors" />
                     <TextBlock Text="Auto: red-up for Chinese UI" Classes="muted" FontSize="11" />
                   </StackPanel>

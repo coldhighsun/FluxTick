@@ -26,6 +26,27 @@ public enum ColorConvention
 }
 
 /// <summary>
+/// Which color scheme the app uses.
+/// </summary>
+public enum ThemeMode
+{
+    /// <summary>
+    /// Follow the system's light or dark setting.
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Always light.
+    /// </summary>
+    Light,
+
+    /// <summary>
+    /// Always dark.
+    /// </summary>
+    Dark,
+}
+
+/// <summary>
 /// How the watchlist is laid out in the main window.
 /// </summary>
 public enum WatchlistLayout
@@ -220,6 +241,11 @@ public sealed class AppearanceSettings
     /// Gets or sets the up/down color convention.
     /// </summary>
     public ColorConvention ColorConvention { get; set; } = ColorConvention.Auto;
+
+    /// <summary>
+    /// Gets or sets the color scheme: light, dark, or following the system.
+    /// </summary>
+    public ThemeMode ThemeMode { get; set; } = ThemeMode.Auto;
 
     /// <summary>
     /// Gets or sets how the watchlist is laid out.

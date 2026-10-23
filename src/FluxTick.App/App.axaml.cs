@@ -41,6 +41,16 @@ public sealed partial class App : Application
     private Debouncer? _geometrySave;
 
     /// <summary>
+    /// The theme variant the up and down brushes were last built for, so an unchanged palette is not rebuilt.
+    /// </summary>
+    private ThemeVariant? _paletteVariant;
+
+    /// <summary>
+    /// Whether the up and down brushes were last built with red for gains.
+    /// </summary>
+    private bool _paletteRedUp;
+
+    /// <summary>
     /// Gets a value indicating whether the application is shutting down, so closing the window really closes it.
     /// </summary>
     public bool IsExiting { get; private set; }
@@ -61,6 +71,10 @@ public sealed partial class App : Application
             Task.Run(() => _settings.LoadAsync(DefaultSettings.Create(demo))).GetAwaiter().GetResult();
             CleanUpOptionsAtDefault(_services.GetRequiredService<ProviderRegistry>().Descriptors);
 
+            // The theme must be requested before the window exists, and before the ActualThemeVariantChanged
+            // subscription below: the first ApplyPalette() then builds the brushes for the final variant once.
+            ApplyTheme();
+
             var viewModel = _services.GetRequiredService<MainViewModel>();
             _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
             _window.RestoreGeometry(_settings.Current.Window);
@@ -68,7 +82,11 @@ public sealed partial class App : Application
             desktop.MainWindow = _window;
 
             ActualThemeVariantChanged += (_, _) => ApplyPalette();
-            _settings.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyPalette);
+            _settings.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                ApplyTheme();
+                ApplyPalette();
+            });
             ApplyPalette();
 
             desktop.Exit += (_, _) =>
@@ -131,6 +149,23 @@ public sealed partial class App : Application
     }
 
     /// <summary>
+    /// Requests the theme variant of the configured color scheme. Auto follows the system.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        var variant = ThemeModeResolver.ToVariant(_settings.Current.Appearance.ThemeMode);
+        if (RequestedThemeVariant != variant)
+        {
+            RequestedThemeVariant = variant;
+        }
+    }
+
+    /// <summary>
     /// Replaces the up and down brushes according to the color convention and the active theme.
     /// </summary>
     private void ApplyPalette()
@@ -142,11 +177,18 @@ public sealed partial class App : Application
 
         var redUp = ColorConventionResolver.IsRedUp(_settings.Current.Appearance.ColorConvention, CultureInfo.CurrentUICulture);
         var variant = ActualThemeVariant ?? ThemeVariant.Dark;
+        if (variant == _paletteVariant && redUp == _paletteRedUp)
+        {
+            return;
+        }
+
         if (TryGetResource("GainColor", variant, out var gain) && gain is Color gainColor
             && TryGetResource("LossColor", variant, out var loss) && loss is Color lossColor)
         {
             Resources["UpBrush"] = new SolidColorBrush(redUp ? lossColor : gainColor);
             Resources["DownBrush"] = new SolidColorBrush(redUp ? gainColor : lossColor);
+            _paletteVariant = variant;
+            _paletteRedUp = redUp;
         }
     }
 
