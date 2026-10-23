@@ -214,7 +214,7 @@ public sealed class AppearanceSettings
     /// Gets or sets a value indicating whether the window hides at the screen edge it is dragged to and slides out when
     /// the pointer comes near.
     /// </summary>
-    public bool AutoHideAtEdge { get; set; }
+    public bool AutoHideAtEdge { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the up/down color convention.
