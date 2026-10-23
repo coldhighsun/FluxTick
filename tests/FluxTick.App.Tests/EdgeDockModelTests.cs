@@ -272,17 +272,67 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
-    /// A platform that is known not to place windows keeps edge hiding off from the start.
+    /// A platform that ignores where a window is placed refuses every edge at once, and says so once.
     /// </summary>
     [Fact]
-    public void Enabled_PlatformNotSupported_IsFalseEvenWhenWanted()
+    public void RefuseAll_RaisesTheEventOnceAndTurnsEdgeHidingOff()
     {
-        var model = new EdgeDockModel(supported: false);
-
+        var model = new EdgeDockModel();
         model.SetEnabled(true);
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.SetHidden(true);
+        var raised = 0;
+        model.AvailabilityChanged += (_, _) => raised++;
 
+        model.RefuseAll();
+
+        model.Available.Should().BeFalse();
         model.Enabled.Should().BeFalse();
-        model.CanSettle.Should().BeFalse();
+        model.IsDocked.Should().BeFalse();
+        raised.Should().Be(1);
+    }
+
+    /// <summary>
+    /// A slide that was held back is carried out when the user asked for it, or when the pointer still is where it was.
+    /// </summary>
+    /// <param name="hide">
+    /// Whether the slide goes to the edge.
+    /// </param>
+    /// <param name="explicitRequest">
+    /// Whether the user asked for it directly.
+    /// </param>
+    /// <param name="pointerOver">
+    /// Whether the pointer is on the window.
+    /// </param>
+    /// <param name="canHide">
+    /// Whether nothing keeps the window out.
+    /// </param>
+    /// <param name="expected">
+    /// The expected answer.
+    /// </param>
+    [Theory]
+    [InlineData(true, true, true, false, true)]
+    [InlineData(false, true, false, true, true)]
+    [InlineData(true, false, false, true, true)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, false, false, false, false)]
+    [InlineData(false, false, true, true, true)]
+    [InlineData(false, false, false, true, false)]
+    public void StillWanted_HeldBackSlide_DependsOnWhatCausedIt(bool hide, bool explicitRequest, bool pointerOver, bool canHide, bool expected)
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+
+        model.StillWanted(hide, explicitRequest, pointerOver, canHide).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// A window that is not docked any more has nothing to slide.
+    /// </summary>
+    [Fact]
+    public void StillWanted_NotDocked_IsFalse()
+    {
+        new EdgeDockModel().StillWanted(hide: true, explicitRequest: true, pointerOver: false, canHide: true).Should().BeFalse();
     }
 
     /// <summary>

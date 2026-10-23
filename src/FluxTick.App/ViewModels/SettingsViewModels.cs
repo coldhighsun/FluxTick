@@ -742,11 +742,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool FlashOnUpdate { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether edge hiding can work here: the platform lets a window be placed beyond
-    /// the screen edge, and it did not turn out otherwise while the application ran.
+    /// Gets or sets a value indicating whether edge hiding can work here. It does until the platform turns out not to
+    /// keep a window beyond the screen edge.
     /// </summary>
     [ObservableProperty]
-    public partial bool AutoHideAvailable { get; set; } = PlatformCapabilities.CanPlaceWindowsOffScreen;
+    public partial bool AutoHideAvailable { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether the window hides at a screen edge and slides out on hover.

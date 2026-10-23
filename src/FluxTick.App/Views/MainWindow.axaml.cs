@@ -163,7 +163,7 @@ public sealed partial class MainWindow : Window
                 Hide();
                 break;
             case TrayToggle.SlideOut:
-                SlideDock(hide: false);
+                SlideDock(hide: false, explicitRequest: true);
                 Activate();
                 break;
             case TrayToggle.SlideIn:
@@ -171,7 +171,7 @@ public sealed partial class MainWindow : Window
                 // open beside a window that is gone, and neither is a menu or pop-up.
                 _toolWindow?.Close();
                 CloseDockPopups();
-                SlideDock(hide: true);
+                SlideDock(hide: true, explicitRequest: true);
                 break;
         }
     }
