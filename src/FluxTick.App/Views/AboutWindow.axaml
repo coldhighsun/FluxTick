@@ -18,21 +18,21 @@
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="{loc:T Update_CurrentVersion}" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="{Binding VersionText}" Classes="muted mono" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding VersionText}" Classes="muted mono" FontSize="11" VerticalAlignment="Center" />
           </Grid>
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="{loc:T About_Author}" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="{Binding Author}" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding Author}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
           </Grid>
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="{loc:T About_License}" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="{Binding License}" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding License}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
           </Grid>
-          <StackPanel Spacing="2">
-            <TextBlock Text="{loc:T About_Homepage}" />
-            <Button Classes="link" Content="{Binding HomepageUrl}" Click="OnHomepageClick"
-                    HorizontalAlignment="Left" />
-          </StackPanel>
+          <Grid ColumnDefinitions="Auto,*">
+            <TextBlock Text="{loc:T About_Homepage}" VerticalAlignment="Center" Margin="0,0,12,0" />
+            <Button Grid.Column="1" Classes="link" Content="{Binding HomepageUrl}" Click="OnHomepageClick" FontSize="11"
+                    HorizontalAlignment="Right" VerticalAlignment="Center" />
+          </Grid>
         </StackPanel>
       </Border>
       <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="10"
