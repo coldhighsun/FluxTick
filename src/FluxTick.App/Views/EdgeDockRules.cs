@@ -45,6 +45,14 @@ internal static class EdgeDockRules
     public const double Sliver = 4;
 
     /// <summary>
+    /// Gets a value indicating whether the platform lets a window be placed beyond the screen. A Wayland compositor
+    /// decides where a window goes, so edge hiding does not apply there.
+    /// </summary>
+    public static bool IsPlatformSupported { get; } =
+        !(OperatingSystem.IsLinux()
+            && string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// How long the window takes to slide in or out.
     /// </summary>
     public static readonly TimeSpan SlideDuration = TimeSpan.FromMilliseconds(150);

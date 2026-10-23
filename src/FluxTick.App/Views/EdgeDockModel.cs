@@ -24,6 +24,32 @@ internal enum DockLeave
 }
 
 /// <summary>
+/// What a click on the tray icon does.
+/// </summary>
+internal enum TrayToggle
+{
+    /// <summary>
+    /// Show the window that was hidden to the tray.
+    /// </summary>
+    Show,
+
+    /// <summary>
+    /// Hide the window to the tray.
+    /// </summary>
+    Hide,
+
+    /// <summary>
+    /// Slide the docked window out of its edge.
+    /// </summary>
+    SlideOut,
+
+    /// <summary>
+    /// Slide the docked window back to its edge.
+    /// </summary>
+    SlideIn,
+}
+
+/// <summary>
 /// The dock state of the main window: which edge it rests at and whether it is hidden there. It holds no timers and
 /// touches no window, so the transitions can be tested on their own.
 /// </summary>
@@ -52,10 +78,15 @@ internal sealed class EdgeDockModel
     public bool Enabled { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the platform kept the window where it was sent. It is not the case on systems
-    /// that do not let a window leave the screen, and then edge hiding stays off for good.
+    /// Gets a value indicating whether the platform keeps a window where it is sent. It stops being the case after the
+    /// window was not kept beyond the screen twice in a row, and then edge hiding stays off.
     /// </summary>
     public bool Supported { get; private set; } = true;
+
+    /// <summary>
+    /// The number of times in a row the platform did not keep the window beyond the screen.
+    /// </summary>
+    private int _placementFailures;
 
     /// <summary>
     /// Gets a value indicating whether the window moves by itself, so that the changes of position it causes are not
@@ -140,14 +171,66 @@ internal sealed class EdgeDockModel
     public bool IsUserMove(PixelPoint position) => Enabled && !Sliding && position != Expected;
 
     /// <summary>
-    /// Turns edge hiding off for good, because the platform did not keep the window where it was sent.
+    /// Records whether the platform kept the window beyond the screen where it was sent. A window that was not kept
+    /// there is in plain sight, so the dock ends; a window that was not kept twice in a row turns edge hiding off,
+    /// because one miss can be a slow window manager.
     /// </summary>
-    public void MarkUnsupported()
+    /// <param name="honored">
+    /// <see langword="true"/> when the window was where it was sent.
+    /// </param>
+    public void RecordPlacement(bool honored)
     {
-        Supported = false;
-        Enabled = false;
+        if (honored)
+        {
+            _placementFailures = 0;
+            return;
+        }
+
         Reset();
+        if (++_placementFailures >= 2)
+        {
+            Supported = false;
+            Enabled = false;
+        }
     }
+
+    /// <summary>
+    /// Decides what a click on the tray icon does.
+    /// </summary>
+    /// <param name="visible">
+    /// Whether the window is shown, as opposed to hidden to the tray.
+    /// </param>
+    /// <returns>
+    /// A window that is docked slides out of and back to its edge; any other window is shown and hidden.
+    /// </returns>
+    public TrayToggle ToggleFromTray(bool visible)
+    {
+        if (!visible)
+        {
+            return TrayToggle.Show;
+        }
+
+        if (!IsDocked)
+        {
+            return TrayToggle.Hide;
+        }
+
+        return Hidden ? TrayToggle.SlideOut : TrayToggle.SlideIn;
+    }
+
+    /// <summary>
+    /// Decides whether the wait to hide the window starts again after something that kept it open went away.
+    /// </summary>
+    /// <param name="visible">
+    /// Whether the window is shown.
+    /// </param>
+    /// <param name="pointerOver">
+    /// Whether the pointer is on the window.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> for a shown, docked window that the pointer is not on.
+    /// </returns>
+    public bool ShouldResumeLeave(bool visible, bool pointerOver) => ShouldWaitToHide && visible && !pointerOver;
 
     /// <summary>
     /// Keeps the remembered work area in step with the screens that exist now.

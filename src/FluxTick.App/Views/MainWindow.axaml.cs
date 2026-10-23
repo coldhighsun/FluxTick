@@ -152,21 +152,27 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public void ToggleVisibility()
     {
-        if (IsVisible)
+        switch (_dock.ToggleFromTray(IsVisible))
         {
-            if (_dock.IsDocked)
-            {
-                SlideDock(hide: !_dock.Hidden);
-                return;
-            }
-
-            Hide();
-            return;
+            case TrayToggle.Show:
+                Show();
+                Activate();
+                RevealDocked();
+                break;
+            case TrayToggle.Hide:
+                Hide();
+                break;
+            case TrayToggle.SlideOut:
+                SlideDock(hide: false);
+                Activate();
+                break;
+            case TrayToggle.SlideIn:
+                // Hiding the window to the tray closes the tool window; sliding it away does the same, so one is not
+                // left open beside a window that is gone.
+                _toolWindow?.Close();
+                SlideDock(hide: true);
+                break;
         }
-
-        Show();
-        Activate();
-        RevealDocked();
     }
 
     /// <summary>
@@ -281,8 +287,9 @@ public sealed partial class MainWindow : Window
         var target = WindowWidthRules.TargetWidth(layout, compact, _cardsWidth);
         _widthAnimation.Stop();
 
-        // The width rules keep the window on the screen, which would pull a hidden window half way out.
-        EndDockHiding();
+        // The width rules keep the window on the screen, which would pull a hidden window half way out, and a slide that
+        // is still running would fight the width animation for the position.
+        EndDockMotion();
         var current = IsVisible ? ClientSize.Width : Width;
 
         // Lift the limits first, so that neither the old nor the new ones get in the way of the change.

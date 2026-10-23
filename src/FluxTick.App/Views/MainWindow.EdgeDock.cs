@@ -27,7 +27,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// How long after a window was sent beyond its edge the system gets to put it there.
     /// </summary>
-    private static readonly TimeSpan DockVerifyDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan DockVerifyDelay = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
     /// The context menus that were opened and may still be, so the window does not hide under them.
@@ -43,6 +43,12 @@ public sealed partial class MainWindow
     /// Slides the window to and from its edge.
     /// </summary>
     private readonly StepAnimation _dockSlide = new();
+
+    /// <summary>
+    /// Whether the window has been opened before, so that what is done once at the start is not repeated when it is
+    /// shown again after it was hidden to the tray.
+    /// </summary>
+    private bool _dockStarted;
 
     /// <summary>
     /// The wait for the position to stop changing, or <see langword="null"/> when none is pending.
@@ -95,7 +101,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Starts the window after it opened: docks it when it was left at an edge.
+    /// Starts watching the window the first time it opens: docks it when it was left at an edge.
     /// </summary>
     /// <param name="e">
     /// The event data.
@@ -103,6 +109,12 @@ public sealed partial class MainWindow
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        if (_dockStarted)
+        {
+            return;
+        }
+
+        _dockStarted = true;
         Screens.Changed += OnScreensChanged;
         ApplyAutoHide();
     }
@@ -112,7 +124,8 @@ public sealed partial class MainWindow
     /// </summary>
     private void ApplyAutoHide()
     {
-        _dock.SetEnabled((DataContext as MainViewModel)?.Settings is { AutoHideAtEdge: true, AlwaysOnTop: true });
+        _dock.SetEnabled(
+            EdgeDockRules.IsPlatformSupported && (DataContext as MainViewModel)?.Settings is { AutoHideAtEdge: true, AlwaysOnTop: true });
         if (_dock.Enabled)
         {
             ScheduleDockSettle();
@@ -130,17 +143,18 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Brings a hidden window out at once, before something moves or resizes it that would otherwise pull it half way
-    /// back onto the screen.
+    /// Stops a slide that is running and brings a hidden window out at once, before something moves or resizes the
+    /// window that would otherwise fight the slide or pull it half way back onto the screen.
     /// </summary>
-    private void EndDockHiding()
+    private void EndDockMotion()
     {
+        _dockSlide.Stop();
+        _dock.EndSlide();
         if (!_dock.Hidden || !EnsureDockArea())
         {
             return;
         }
 
-        _dockSlide.Stop();
         _dock.SetHidden(false);
         MoveDock(_dock.ShownPosition(CurrentPixelBounds()));
     }
@@ -195,7 +209,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void ResumeDockLeave()
     {
-        if (_dock.ShouldWaitToHide && IsVisible && !IsPointerOver)
+        if (_dock.ShouldResumeLeave(IsVisible, IsPointerOver))
         {
             ScheduleDockLeave();
         }
@@ -374,9 +388,9 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Checks a little after the window was sent beyond its edge that the system left it there. Some systems do not
-    /// let a window leave the screen, or ignore where a window is placed; edge hiding then stays off, so the window is
-    /// not taken for hidden while it is in plain sight.
+    /// Checks a little after the window was sent beyond its edge that the system left it there. A window the system
+    /// kept in sight is not taken for hidden, and when that happens twice in a row edge hiding stays off. Platforms that
+    /// are known not to place windows (see <see cref="EdgeDockRules.IsPlatformSupported"/>) never get this far.
     /// </summary>
     /// <param name="target">
     /// The hidden position the window was sent to.
@@ -385,11 +399,16 @@ public sealed partial class MainWindow
         DispatcherTimer.RunOnce(
             () =>
             {
-                var tolerance = ScaledPixels(EdgeDockRules.Sliver);
-                if (_dock.Hidden && !_dock.Sliding
-                    && (Math.Abs(Position.X - target.X) > tolerance || Math.Abs(Position.Y - target.Y) > tolerance))
+                if (!_dock.Hidden || _dock.Sliding)
                 {
-                    _dock.MarkUnsupported();
+                    return;
+                }
+
+                var tolerance = ScaledPixels(EdgeDockRules.Sliver);
+                var honored = Math.Abs(Position.X - target.X) <= tolerance && Math.Abs(Position.Y - target.Y) <= tolerance;
+                _dock.RecordPlacement(honored);
+                if (!honored)
+                {
                     RaiseGeometryChanged();
                 }
             },
