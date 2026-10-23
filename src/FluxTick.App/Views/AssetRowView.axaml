@@ -22,6 +22,7 @@
       </StackPanel>
 
       <controls:SparklineControl Grid.Column="1" Width="64" Height="26" Margin="8,0"
+                                 ToolTip.Tip="Price trend over the last 60 minutes"
                                  IsVisible="{Binding ShowSparkline}"
                                  Points="{Binding Sparkline}"
                                  Classes.up="{Binding IsUp}"

@@ -23,6 +23,7 @@
       <TextBlock Grid.Row="1" Text="{Binding Name}" Classes="muted" FontSize="10" TextTrimming="CharacterEllipsis" />
 
       <controls:SparklineControl Grid.Row="2" Margin="0,4" MinHeight="16"
+                                 ToolTip.Tip="Price trend over the last 60 minutes"
                                  IsVisible="{Binding ShowSparkline}"
                                  Points="{Binding Sparkline}"
                                  Classes.up="{Binding IsUp}"
