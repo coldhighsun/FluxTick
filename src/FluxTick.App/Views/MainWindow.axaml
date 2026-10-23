@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:FluxTick.App.Localization"
         xmlns:vm="using:FluxTick.App.ViewModels"
         xmlns:views="using:FluxTick.App.Views"
         xmlns:controls="using:FluxTick.App.Controls"
@@ -37,24 +38,24 @@
           <!-- The header holds up to seven buttons. Their width is set on each button (24 px instead of the 26 px of the
                icon style) because a value on the element always wins, so it fits the narrowest window widths for sure. -->
           <StackPanel Grid.Column="1" Orientation="Horizontal">
-            <Button Classes="icon" Width="24" ToolTip.Tip="Add instrument" Command="{Binding ShowAddCommand}">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Add_Title}" Command="{Binding ShowAddCommand}">
               <Path Data="M7 2v10M2 7h10" />
             </Button>
             <Button Classes="icon" Width="24" ToolTip.Tip="{Binding LayoutToggleTip}" Command="{Binding ToggleLayoutCommand}" Classes.active="{Binding IsCardLayout}"
-                    AutomationProperties.Name="Toggle list and cards layout">
+                    AutomationProperties.Name="{loc:T Main_ToggleLayoutAuto}">
               <Path Data="M2 2h4v4H2zM8 2h4v4H8zM2 8h4v4H2zM8 8h4v4H8z" />
             </Button>
-            <Button Name="GroupButton" Classes="icon" Width="24" ToolTip.Tip="Group cards" IsVisible="{Binding IsCardLayout}" AutomationProperties.Name="Group cards">
+            <Button Name="GroupButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_GroupCards}" IsVisible="{Binding IsCardLayout}" AutomationProperties.Name="{loc:T Main_GroupCards}">
               <Path Data="M2 2.5h4v3H2zM2 8.5h4v3H2zM8 4h4M8 10h4" />
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedRight">
                   <!-- The grouping entries are added in code just before the flyout opens (see GroupingMenu). -->
                   <Separator />
-                  <MenuItem Header="New group…" Click="OnNewGroupClicked" />
+                  <MenuItem Header="{loc:T Main_NewGroup}" Click="OnNewGroupClicked" />
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
-            <Button Classes="icon" Width="24" ToolTip.Tip="Settings" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_Settings}" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}">
               <Canvas Width="14" Height="14">
                 <Path Data="M1 4h5M10 4h3M1 10h3M8 10h5" />
                 <Ellipse Canvas.Left="6" Canvas.Top="2" Width="4" Height="4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" />
@@ -62,18 +63,18 @@
               </Canvas>
             </Button>
             <!-- An arrow up to a bar at the top reads as "stay on top"; the padlock next to it is "lock position". -->
-            <Button Classes="icon" Width="24" ToolTip.Tip="Always on top" Command="{Binding TogglePinCommand}" Classes.active="{Binding Settings.AlwaysOnTop}"
-                    AutomationProperties.Name="Always on top">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_AlwaysOnTop}" Command="{Binding TogglePinCommand}" Classes.active="{Binding Settings.AlwaysOnTop}"
+                    AutomationProperties.Name="{loc:T Main_AlwaysOnTop}">
               <Path Data="M3 2.5h8M7 12V5.5M4.5 8L7 5.5L9.5 8" />
             </Button>
-            <Button Classes="icon" Width="24" ToolTip.Tip="Lock position" Command="{Binding ToggleLockCommand}" Classes.active="{Binding Settings.Locked}"
-                    AutomationProperties.Name="Lock position">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Settings_LockPosition}" Command="{Binding ToggleLockCommand}" Classes.active="{Binding Settings.Locked}"
+                    AutomationProperties.Name="{loc:T Settings_LockPosition}">
               <Canvas Width="14" Height="14">
                 <Path Data="M3.5 6.5h7v5.5h-7z" />
                 <Path Data="M5 6.5V5a2 2 0 0 1 4 0v1.5" />
               </Canvas>
             </Button>
-            <Button Classes="icon" Width="24" ToolTip.Tip="Hide to tray" Click="OnHideClicked">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_HideToTray}" Click="OnHideClicked">
               <Path Data="M3 3l8 8M11 3l-8 8" />
             </Button>
           </StackPanel>
@@ -86,7 +87,7 @@
       <!-- Footer: data source status and resize grip -->
       <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="14,2,4,6">
         <!-- Chips that do not fit are replaced by a "+N" badge; clicking the status opens the full list. -->
-        <Button Name="StatusButton" Classes="status" AutomationProperties.Name="Data source status">
+        <Button Name="StatusButton" Classes="status" AutomationProperties.Name="{loc:T Main_SourceStatus}">
           <Button.Flyout>
             <Flyout Placement="TopEdgeAlignedLeft" FlyoutPresenterClasses="status">
               <Border Classes="card" Margin="0,0,0,4" MaxWidth="300">

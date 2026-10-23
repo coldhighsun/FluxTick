@@ -1,11 +1,13 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.App.Views;
@@ -51,6 +53,21 @@ public sealed partial class App : Application
     private bool _paletteRedUp;
 
     /// <summary>
+    /// The tray menu entry that shows or hides the window.
+    /// </summary>
+    private NativeMenuItem? _trayToggle;
+
+    /// <summary>
+    /// The tray menu entry that exits the application.
+    /// </summary>
+    private NativeMenuItem? _trayExit;
+
+    /// <summary>
+    /// The language setting that was applied last, so that settings changes that leave it alone cost nothing.
+    /// </summary>
+    private LanguageMode? _appliedLanguage;
+
+    /// <summary>
     /// Gets a value indicating whether the application is shutting down, so closing the window really closes it.
     /// </summary>
     public bool IsExiting { get; private set; }
@@ -73,6 +90,7 @@ public sealed partial class App : Application
 
             // The theme must be requested before the window exists, and before the ActualThemeVariantChanged
             // subscription below: the first ApplyPalette() then builds the brushes for the final variant once.
+            ApplyLanguage();
             ApplyTheme();
 
             var viewModel = _services.GetRequiredService<MainViewModel>();
@@ -84,6 +102,7 @@ public sealed partial class App : Application
             ActualThemeVariantChanged += (_, _) => ApplyPalette();
             _settings.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
             {
+                ApplyLanguage();
                 ApplyTheme();
                 ApplyPalette();
             });
@@ -146,6 +165,41 @@ public sealed partial class App : Application
         }
 
         Task.Run(() => _settings.UpdateAsync(s => ProviderOptionCleanup.DropOptionsAtDefault(s, descriptors))).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Switches the interface to the configured language, and renames the tray entries to match.
+    /// </summary>
+    private void ApplyLanguage()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        var language = _settings.Current.Appearance.Language;
+        if (language == _appliedLanguage)
+        {
+            return;
+        }
+
+        _appliedLanguage = language;
+        Loc.Instance.Apply(language);
+        if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
+        {
+            tray.ToolTipText = $"FluxTick — {Loc.Get("Tagline")}";
+            if (_trayToggle is null || _trayExit is null)
+            {
+                _trayToggle = new NativeMenuItem();
+                _trayExit = new NativeMenuItem();
+                _trayToggle.Click += OnToggleWindow;
+                _trayExit.Click += OnExit;
+                tray.Menu = [_trayToggle, new NativeMenuItemSeparator(), _trayExit];
+            }
+
+            _trayToggle.Header = Loc.Get("Tray_ShowHide");
+            _trayExit.Header = Loc.Get("Tray_Exit");
+        }
     }
 
     /// <summary>

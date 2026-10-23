@@ -212,7 +212,7 @@ public sealed class Harness : IAsyncDisposable
         Settings.LoadAsync(new AppSettings()).GetAwaiter().GetResult();
         Market = new MarketDataService(registry, NullLoggerFactory.Instance, Time);
         var ui = new InlineDispatcher();
-        AddAsset = new AddAssetViewModel(Settings, Market, Router, Time, NullLogger<AddAssetViewModel>.Instance);
+        AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
         SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time);
         Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, NullLogger<MainViewModel>.Instance);
     }
@@ -312,5 +312,11 @@ public sealed class Harness : IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => Market.DisposeAsync();
+    public ValueTask DisposeAsync()
+    {
+        Main.Dispose();
+        SettingsPage.Dispose();
+        AddAsset.Dispose();
+        return Market.DisposeAsync();
+    }
 }

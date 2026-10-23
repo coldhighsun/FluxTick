@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 using Microsoft.Extensions.Logging;
@@ -563,7 +564,7 @@ public sealed partial class MainWindow : Window
     {
         if (DataContext is MainViewModel viewModel)
         {
-            GroupNamePrompt.Show(GroupButton, "New group", PlacementMode.BottomEdgeAlignedRight, name => viewModel.CreateGroupAsync(name));
+            GroupNamePrompt.Show(GroupButton, Loc.Get("Group_NewTitle"), PlacementMode.BottomEdgeAlignedRight, name => viewModel.CreateGroupAsync(name));
         }
     }
 

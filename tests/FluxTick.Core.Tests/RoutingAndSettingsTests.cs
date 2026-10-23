@@ -134,6 +134,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Routing[AssetClass.Equity] = ["a", "b"];
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.ThemeMode = ThemeMode.Dark;
+        settings.Appearance.Language = LanguageMode.ZhCN;
         settings.Appearance.FlashOnUpdate = true;
         settings.Appearance.AutoHideAtEdge = false;
         settings.Appearance.Layout = WatchlistLayout.Cards;
@@ -152,6 +153,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Routing[AssetClass.Equity].Should().Equal("a", "b");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
+        loaded.Appearance.Language.Should().Be(LanguageMode.ZhCN);
         loaded.Appearance.FlashOnUpdate.Should().BeTrue();
         loaded.Appearance.AutoHideAtEdge.Should().BeFalse();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);

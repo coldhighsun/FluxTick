@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
 using Avalonia.VisualTree;
+using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -346,7 +347,7 @@ internal sealed class CardDragController
         // a name was typed.
         if (overNewGroup && row is not null && _viewModel() is { } main)
         {
-            GroupNamePrompt.Show(_newGroupSlot, "New group", PlacementMode.TopEdgeAlignedLeft, name => main.CreateGroupAsync(name, row));
+            GroupNamePrompt.Show(_newGroupSlot, Loc.Get("Group_NewTitle"), PlacementMode.TopEdgeAlignedLeft, name => main.CreateGroupAsync(name, row));
             return;
         }
 

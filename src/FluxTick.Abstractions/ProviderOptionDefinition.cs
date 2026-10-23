@@ -39,6 +39,57 @@ public enum ProviderOptionType
 }
 
 /// <summary>
+/// Why a value is not valid for a provider option, so that the UI can word the message in its own language.
+/// </summary>
+public enum OptionValidationError
+{
+    /// <summary>
+    /// The value is not a whole number.
+    /// </summary>
+    NotWholeNumber,
+
+    /// <summary>
+    /// The value is not true or false.
+    /// </summary>
+    NotBool,
+
+    /// <summary>
+    /// The value is not a duration.
+    /// </summary>
+    NotDuration,
+
+    /// <summary>
+    /// The value is not one of the listed choices.
+    /// </summary>
+    NotInChoices,
+
+    /// <summary>
+    /// The value is below the lower bound given in <see cref="OptionValidation.Limit"/>.
+    /// </summary>
+    BelowMinimum,
+
+    /// <summary>
+    /// The value is above the upper bound given in <see cref="OptionValidation.Limit"/>.
+    /// </summary>
+    AboveMaximum,
+}
+
+/// <summary>
+/// The reason a value is not valid for a provider option.
+/// </summary>
+/// <param name="Error">
+/// What is wrong with the value.
+/// </param>
+/// <param name="Message">
+/// An English message that describes it.
+/// </param>
+/// <param name="Limit">
+/// The bound that was crossed, for <see cref="OptionValidationError.BelowMinimum"/> and
+/// <see cref="OptionValidationError.AboveMaximum"/>.
+/// </param>
+public readonly record struct OptionValidation(OptionValidationError Error, string Message, double? Limit = null);
+
+/// <summary>
 /// Declares one user-configurable option of a provider. The settings UI renders its editor from this declaration,
 /// so a new provider never needs UI changes.
 /// </summary>
@@ -86,7 +137,18 @@ public sealed record ProviderOptionDefinition(
     /// <returns>
     /// An error message, or <see langword="null"/> when the value is valid.
     /// </returns>
-    public string? Validate(string? value)
+    public string? Validate(string? value) => Check(value)?.Message;
+
+    /// <summary>
+    /// Validates a stored text value against this definition and says what is wrong with it.
+    /// </summary>
+    /// <param name="value">
+    /// The value to validate.
+    /// </param>
+    /// <returns>
+    /// The reason the value is not valid, or <see langword="null"/> when it is valid.
+    /// </returns>
+    public OptionValidation? Check(string? value)
     {
         value ??= string.Empty;
         switch (Type)
@@ -94,21 +156,23 @@ public sealed record ProviderOptionDefinition(
             case ProviderOptionType.Int:
                 if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
                 {
-                    return "Must be a whole number.";
+                    return new(OptionValidationError.NotWholeNumber, "Must be a whole number.");
                 }
 
                 return CheckRange(number);
             case ProviderOptionType.Bool:
-                return bool.TryParse(value, out _) ? null : "Must be true or false.";
+                return bool.TryParse(value, out _) ? null : new(OptionValidationError.NotBool, "Must be true or false.");
             case ProviderOptionType.Duration:
                 if (!TryParseDuration(value, out var span))
                 {
-                    return "Must be a duration.";
+                    return new(OptionValidationError.NotDuration, "Must be a duration.");
                 }
 
                 return CheckRange(span.TotalSeconds);
             case ProviderOptionType.Choice:
-                return Choices is not null && Choices.Contains(value) ? null : "Must be one of the listed choices.";
+                return Choices is not null && Choices.Contains(value)
+                    ? null
+                    : new(OptionValidationError.NotInChoices, "Must be one of the listed choices.");
             default:
                 return null;
         }
@@ -175,18 +239,18 @@ public sealed record ProviderOptionDefinition(
     /// The value to check.
     /// </param>
     /// <returns>
-    /// An error message, or <see langword="null"/> when the value is within range.
+    /// The reason the value is out of range, or <see langword="null"/> when it is within range.
     /// </returns>
-    private string? CheckRange(double number)
+    private OptionValidation? CheckRange(double number)
     {
         if (Min is { } min && number < min)
         {
-            return $"Must be at least {min.ToString(CultureInfo.InvariantCulture)}.";
+            return new(OptionValidationError.BelowMinimum, $"Must be at least {min.ToString(CultureInfo.InvariantCulture)}.", min);
         }
 
         if (Max is { } max && number > max)
         {
-            return $"Must be at most {max.ToString(CultureInfo.InvariantCulture)}.";
+            return new(OptionValidationError.AboveMaximum, $"Must be at most {max.ToString(CultureInfo.InvariantCulture)}.", max);
         }
 
         return null;

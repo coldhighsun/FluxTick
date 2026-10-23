@@ -3,6 +3,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
 using Microsoft.Extensions.Logging;
@@ -87,7 +88,7 @@ public sealed record GroupChoice(string GroupId, string Title, bool IsCurrent);
 /// <summary>
 /// The root view model: owns the watchlist rows, navigation and the connection between settings and market data.
 /// </summary>
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : LocalizedViewModel
 {
     /// <summary>
     /// The settings store.
@@ -103,11 +104,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// The available providers.
     /// </summary>
     private readonly ProviderRegistry _registry;
-
-    /// <summary>
-    /// The UI thread dispatcher.
-    /// </summary>
-    private readonly IUiDispatcher _ui;
 
     /// <summary>
     /// Hands the prices to the UI thread, keeping only the latest one of each instrument while it is busy.
@@ -161,11 +157,11 @@ public sealed partial class MainViewModel : ObservableObject
         AddAssetViewModel addAsset,
         SettingsViewModel settingsPage,
         ILogger<MainViewModel> logger)
+        : base(ui)
     {
         _settings = settings;
         _market = market;
         _registry = registry;
-        _ui = ui;
         _snapshots = new SnapshotCoalescer(ui, OnSnapshot, ex => logger.LogError(ex, "Could not hand a price update to the UI"));
         _logger = logger;
         AddAsset = addAsset;
@@ -175,21 +171,7 @@ public sealed partial class MainViewModel : ObservableObject
         IsCardLayout = settings.Current.Appearance.Layout == WatchlistLayout.Cards;
         Grouping = settings.Current.Appearance.Grouping;
 
-        Settings.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(SettingsViewModel.Compact))
-            {
-                ApplyCompact();
-            }
-            else if (e.PropertyName == nameof(SettingsViewModel.FlashOnUpdate))
-            {
-                ApplyFlash();
-            }
-            else if (e.PropertyName is nameof(SettingsViewModel.SelectedLayout) or nameof(SettingsViewModel.SelectedGrouping))
-            {
-                RebuildSections();
-            }
-        };
+        Settings.PropertyChanged += OnSettingsPagePropertyChanged;
     }
 
     /// <summary>
@@ -227,7 +209,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>
     /// Gets the tooltip of the layout button, which says what the next click switches to.
     /// </summary>
-    public string LayoutToggleTip => IsCardLayout ? "Switch to list" : "Switch to cards";
+    public string LayoutToggleTip => Loc.Get(IsCardLayout ? "Main_SwitchToList" : "Main_SwitchToCards");
 
     /// <summary>
     /// Gets how the cards are grouped.
@@ -298,12 +280,79 @@ public sealed partial class MainViewModel : ObservableObject
     /// </returns>
     public async Task InitializeAsync()
     {
-        _market.SnapshotChanged += (_, snapshot) => _snapshots.Submit(snapshot);
-        _market.ProviderStatusChanged += (_, _) => _ui.Post(RefreshChips);
-        _settings.Changed += (_, _) => _ = ApplySettingsAsync();
+        _market.SnapshotChanged += OnMarketSnapshotChanged;
+        _market.ProviderStatusChanged += OnProviderStatusChanged;
+        _settings.Changed += OnSettingsChanged;
         _logger.LogInformation("FluxTick started with {Count} instruments", _settings.Current.Watchlist.Count);
         await ApplySettingsAsync();
     }
+
+    /// <inheritdoc />
+    protected override void Detach()
+    {
+        Settings.PropertyChanged -= OnSettingsPagePropertyChanged;
+        _market.SnapshotChanged -= OnMarketSnapshotChanged;
+        _market.ProviderStatusChanged -= OnProviderStatusChanged;
+        _settings.Changed -= OnSettingsChanged;
+    }
+
+    /// <summary>
+    /// Applies the settings that change what the watchlist shows when the settings page changes them.
+    /// </summary>
+    /// <param name="sender">
+    /// The settings page.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnSettingsPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SettingsViewModel.Compact))
+        {
+            ApplyCompact();
+        }
+        else if (e.PropertyName == nameof(SettingsViewModel.FlashOnUpdate))
+        {
+            ApplyFlash();
+        }
+        else if (e.PropertyName is nameof(SettingsViewModel.SelectedLayout) or nameof(SettingsViewModel.SelectedGrouping))
+        {
+            RebuildSections();
+        }
+    }
+
+    /// <summary>
+    /// Hands a new snapshot to the coalescer, which applies it on the UI thread.
+    /// </summary>
+    /// <param name="sender">
+    /// The market data service.
+    /// </param>
+    /// <param name="snapshot">
+    /// The new snapshot.
+    /// </param>
+    private void OnMarketSnapshotChanged(object? sender, AssetSnapshot snapshot) => _snapshots.Submit(snapshot);
+
+    /// <summary>
+    /// Refreshes the footer chips when a data source changes its state.
+    /// </summary>
+    /// <param name="sender">
+    /// The market data service.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnProviderStatusChanged(object? sender, ProviderStatusChangedEventArgs e) => Ui.Post(RefreshChips);
+
+    /// <summary>
+    /// Applies the settings again after they changed.
+    /// </summary>
+    /// <param name="sender">
+    /// The settings store.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnSettingsChanged(object? sender, EventArgs e) => _ = ApplySettingsAsync();
 
     /// <summary>
     /// Notifies bindings of the derived flags when the open tool window changes.
@@ -815,7 +864,7 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             await _market.ApplyAsync(_settings.Current);
-            _ui.Post(() =>
+            Ui.Post(() =>
             {
                 SyncRows();
                 RefreshChips();
@@ -910,7 +959,7 @@ public sealed partial class MainViewModel : ObservableObject
                         var items = Rows.Where(r => r.Asset.AssetClass == type).ToList();
                         if (items.Count > 0)
                         {
-                            desired.Add(PrepareSection(WatchSectionKind.Type, type, null, type.ToString(), appearance.CollapsedTypes.Contains(type), items));
+                            desired.Add(PrepareSection(WatchSectionKind.Type, type, null, EnumLabel.Of(type), appearance.CollapsedTypes.Contains(type), items));
                         }
                     }
 
@@ -996,8 +1045,8 @@ public sealed partial class MainViewModel : ObservableObject
         section.Count = items.Count;
         if (kind == WatchSectionKind.Group)
         {
-            section.DeleteBlockedReason = items.Count > 0 ? "move its instruments first"
-                : _settings.Current.Groups.Count <= 1 ? "keep at least one group"
+            section.DeleteBlockedReason = items.Count > 0 ? Loc.Get("Section_MoveInstrumentsFirst")
+                : _settings.Current.Groups.Count <= 1 ? Loc.Get("Section_KeepOneGroup")
                 : string.Empty;
         }
 
@@ -1128,6 +1177,20 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <inheritdoc />
+    protected override void OnLanguageChanged()
+    {
+        OnPropertyChanged(nameof(LayoutToggleTip));
+        foreach (var row in Rows)
+        {
+            row.RefreshLanguage(ProviderName(row.Asset.ProviderId));
+        }
+
+        Chips.Clear();
+        RefreshChips();
+        RebuildSections();
+    }
+
     /// <summary>
     /// Rebuilds the footer chips from the providers that serve at least one watchlist instrument.
     /// </summary>
@@ -1156,9 +1219,9 @@ public sealed partial class MainViewModel : ObservableObject
             chip.IsBad = status is null || status.State == ProviderConnectionState.Failed;
             chip.Tooltip = status switch
             {
-                null => $"{chip.Name}: off",
-                { Message: { Length: > 0 } message } => $"{chip.Name}: {status.State} — {message}",
-                _ => $"{chip.Name}: {status.State}",
+                null => Loc.Get("Chip_Off", chip.Name),
+                { Message: { Length: > 0 } message } => Loc.Get("Chip_StateMessage", chip.Name, Loc.Get($"Provider_{status.State}"), message),
+                _ => Loc.Get("Common_LabelValue", chip.Name, Loc.Get($"Provider_{status.State}")),
             };
         }
     }
@@ -1172,5 +1235,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// <returns>
     /// The display name, or the id when the provider is unknown.
     /// </returns>
-    private string ProviderName(string providerId) => _registry.GetDescriptor(providerId)?.DisplayName ?? providerId;
+    private string ProviderName(string providerId) =>
+        _registry.GetDescriptor(providerId) is { } descriptor ? ProviderText.Name(descriptor) : providerId;
 }

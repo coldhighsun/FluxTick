@@ -35,6 +35,7 @@ commodities side by side, from the data sources *you* choose.
 - **You pick the data source**: enable or disable sources, tune their options and choose the default source per
   asset class in **Settings**. Move any instrument to another source with **Change data source…**.
 - **Honest about data quality**: rows show `Stale`, `Reconnecting`, `Source off` instead of silently showing old prices.
+- **Language**: Simplified Chinese or English, switchable at runtime; Auto follows the system language.
 - **Up/down colors**: green-up or red-up, automatic by UI language (red-up for Chinese).
 - **Cross-platform**: Windows, Linux and macOS (built on [Avalonia](https://avaloniaui.net/) and .NET 10).
 - **Extensible**: adding a data source is one small class library and one line of registration.

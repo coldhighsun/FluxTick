@@ -47,6 +47,27 @@ public enum ThemeMode
 }
 
 /// <summary>
+/// Which language the interface is shown in.
+/// </summary>
+public enum LanguageMode
+{
+    /// <summary>
+    /// Follow the system language: Chinese systems get Simplified Chinese, everything else English.
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Always Simplified Chinese.
+    /// </summary>
+    ZhCN,
+
+    /// <summary>
+    /// Always English.
+    /// </summary>
+    En,
+}
+
+/// <summary>
 /// How the watchlist is laid out in the main window.
 /// </summary>
 public enum WatchlistLayout
@@ -246,6 +267,11 @@ public sealed class AppearanceSettings
     /// Gets or sets the color scheme: light, dark, or following the system.
     /// </summary>
     public ThemeMode ThemeMode { get; set; } = ThemeMode.Auto;
+
+    /// <summary>
+    /// Gets or sets the interface language: Simplified Chinese, English, or following the system.
+    /// </summary>
+    public LanguageMode Language { get; set; } = LanguageMode.Auto;
 
     /// <summary>
     /// Gets or sets how the watchlist is laid out.

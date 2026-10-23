@@ -3,6 +3,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Threading;
+using FluxTick.App.Localization;
 
 namespace FluxTick.App.Views;
 
@@ -58,7 +59,7 @@ internal static class GroupNamePrompt
     /// </param>
     public static void Show(Control anchor, string label, PlacementMode placement, Func<string, Task> commit)
     {
-        var box = new TextBox { Width = 200, MaxLength = 40, PlaceholderText = "Group name" };
+        var box = new TextBox { Width = 200, MaxLength = 40, PlaceholderText = Loc.Get("Group_NamePlaceholder") };
         var flyout = new Flyout
         {
             Placement = placement,

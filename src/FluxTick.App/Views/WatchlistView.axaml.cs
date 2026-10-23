@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -139,20 +140,20 @@ public sealed partial class WatchlistView : UserControl
             return;
         }
 
-        var newGroup = new MenuItem { Header = "New group…", Tag = GroupMenuTag };
-        newGroup.Click += (_, _) => GroupNamePrompt.Show(anchor, "New group", PlacementMode.Pointer, name => vm.CreateGroupAsync(name, row));
+        var newGroup = new MenuItem { Header = Loc.Get("Main_NewGroup"), Tag = GroupMenuTag };
+        newGroup.Click += (_, _) => GroupNamePrompt.Show(anchor, Loc.Get("Group_NewTitle"), PlacementMode.Pointer, name => vm.CreateGroupAsync(name, row));
 
         // Only the custom grouping shows the groups, so only there can the card be moved into an existing one.
         // In the other groupings creating a group switches to the custom grouping.
         if (vm.Grouping != CardGrouping.Custom)
         {
-            newGroup.Header = "Move to new group…";
+            newGroup.Header = Loc.Get("Watch_MoveToNewGroup");
             menu.Items.Insert(0, newGroup);
             menu.Items.Insert(1, new Separator { Tag = GroupMenuTag });
             return;
         }
 
-        var moveTo = new MenuItem { Header = "Move to group", Tag = GroupMenuTag };
+        var moveTo = new MenuItem { Header = Loc.Get("Watch_MoveToGroup"), Tag = GroupMenuTag };
         foreach (var choice in vm.GetGroupChoices(row))
         {
             var target = choice.GroupId;
@@ -167,7 +168,7 @@ public sealed partial class WatchlistView : UserControl
         }
 
         moveTo.Items.Add(new Separator());
-        newGroup.Header = "New group…";
+        newGroup.Header = Loc.Get("Main_NewGroup");
         moveTo.Items.Add(newGroup);
         menu.Items.Insert(0, moveTo);
         menu.Items.Insert(1, new Separator { Tag = GroupMenuTag });
@@ -322,7 +323,7 @@ public sealed partial class WatchlistView : UserControl
     {
         if (DataContext is MainViewModel vm)
         {
-            GroupNamePrompt.Show(NewGroupSlot, "New group", PlacementMode.TopEdgeAlignedLeft, name => vm.CreateGroupAsync(name));
+            GroupNamePrompt.Show(NewGroupSlot, Loc.Get("Group_NewTitle"), PlacementMode.TopEdgeAlignedLeft, name => vm.CreateGroupAsync(name));
         }
     }
 
@@ -339,7 +340,7 @@ public sealed partial class WatchlistView : UserControl
     {
         if (DataContext is MainViewModel vm)
         {
-            GroupNamePrompt.Show(this, "New group", PlacementMode.Pointer, name => vm.CreateGroupAsync(name));
+            GroupNamePrompt.Show(this, Loc.Get("Group_NewTitle"), PlacementMode.Pointer, name => vm.CreateGroupAsync(name));
         }
     }
 
