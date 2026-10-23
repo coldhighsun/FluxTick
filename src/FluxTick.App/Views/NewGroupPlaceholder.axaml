@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="FluxTick.App.Views.NewGroupPlaceholder">
+
+  <!-- The dashed "+ New group" placeholder of the card layout and of the settings page. The colours live in styles,
+       not on the rectangle, so that the "dropping" class (set while a card is dragged over it) can change them. -->
+  <UserControl.Styles>
+    <Style Selector="Rectangle.outline">
+      <Setter Property="Stroke" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="StrokeThickness" Value="1" />
+    </Style>
+    <Style Selector=".dropping Rectangle.outline">
+      <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="StrokeThickness" Value="2" />
+    </Style>
+  </UserControl.Styles>
+
+  <Button Name="Inner" HorizontalAlignment="Stretch" Padding="0" Background="Transparent" AutomationProperties.Name="New group">
+    <Grid Height="34">
+      <Rectangle Classes="outline" RadiusX="8" RadiusY="8" StrokeDashArray="4,3" />
+      <TextBlock Text="＋ New group" Classes="muted" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+  </Button>
+</UserControl>

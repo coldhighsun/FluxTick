@@ -134,6 +134,11 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Routing[AssetClass.Equity] = ["a", "b"];
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.FlashOnUpdate = true;
+        settings.Appearance.Layout = WatchlistLayout.Cards;
+        settings.Appearance.Grouping = CardGrouping.Custom;
+        settings.Appearance.CollapsedTypes.Add(AssetClass.Forex);
+        settings.Groups.Add(new WatchGroup { Id = "g1", Name = "Core", Collapsed = true });
+        settings.Watchlist[0].GroupId = "g1";
 
         await store.SaveAsync(settings);
         var loaded = await store.LoadAsync();
@@ -145,6 +150,31 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Routing[AssetClass.Equity].Should().Equal("a", "b");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.FlashOnUpdate.Should().BeTrue();
+        loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
+        loaded.Appearance.Grouping.Should().Be(CardGrouping.Custom);
+        loaded.Appearance.CollapsedTypes.Should().Equal(AssetClass.Forex);
+        loaded.Groups.Should().ContainSingle().Which.Should().BeEquivalentTo(new WatchGroup { Id = "g1", Name = "Core", Collapsed = true });
+        loaded.Watchlist[0].GroupId.Should().Be("g1");
+    }
+
+    /// <summary>
+    /// Verifies the list layout without grouping is used, including for a settings file written before cards existed.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithoutLayoutKeys_DefaultsToListWithoutGroups()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "watchlist": [ { "providerId": "a", "symbol": "BTC" } ] }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Appearance.Layout.Should().Be(WatchlistLayout.List);
+        loaded.Appearance.Grouping.Should().Be(CardGrouping.None);
+        loaded.Appearance.CollapsedTypes.Should().BeEmpty();
+        loaded.Groups.Should().BeEmpty();
+        loaded.Watchlist.Should().ContainSingle().Which.GroupId.Should().BeNull();
     }
 
     /// <summary>
@@ -215,5 +245,137 @@ public sealed class RoutingAndSettingsTests : IDisposable
         manager.Current.Appearance.Opacity.Should().Be(0.5);
         raised.Should().Be(1);
         (await store.LoadAsync())!.Appearance.Opacity.Should().Be(0.5);
+    }
+
+    /// <summary>
+    /// Verifies settings without any group get a default group that holds every instrument.
+    /// </summary>
+    [Fact]
+    public void Normalize_WithoutGroups_CreatesDefaultGroupForAllInstruments()
+    {
+        var settings = new AppSettings();
+        settings.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC" });
+        settings.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "ETH" });
+
+        var changed = settings.Normalize();
+
+        changed.Should().BeTrue();
+        var group = settings.Groups.Should().ContainSingle().Subject;
+        group.Name.Should().Be(AppSettings.DefaultGroupName);
+        settings.Watchlist.Should().OnlyContain(e => e.GroupId == group.Id);
+    }
+
+    /// <summary>
+    /// Verifies instruments without a group, or with a group that is gone, join the first group and others stay.
+    /// </summary>
+    [Fact]
+    public void Normalize_LooseInstruments_JoinFirstGroup()
+    {
+        var settings = new AppSettings();
+        settings.Groups.AddRange([new WatchGroup { Id = "a", Name = "A" }, new WatchGroup { Id = "b", Name = "B" }]);
+        settings.Watchlist.AddRange(
+        [
+            new WatchlistEntry { Symbol = "X", GroupId = null },
+            new WatchlistEntry { Symbol = "Y", GroupId = "gone" },
+            new WatchlistEntry { Symbol = "Z", GroupId = "b" },
+        ]);
+
+        var changed = settings.Normalize();
+
+        changed.Should().BeTrue();
+        settings.Watchlist.Select(e => e.GroupId).Should().Equal("a", "a", "b");
+        settings.Groups.Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Verifies settings that are already consistent are left alone.
+    /// </summary>
+    [Fact]
+    public void Normalize_ConsistentSettings_ReportsNoChange()
+    {
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "a", Name = "A" });
+        settings.Watchlist.Add(new WatchlistEntry { Symbol = "X", GroupId = "a" });
+
+        settings.Normalize().Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies loading settings from an older file fixes the groups and saves the result.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_OldFileWithoutGroups_CreatesDefaultGroupAndSaves()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var old = new AppSettings();
+        old.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC" });
+        await store.SaveAsync(old);
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+
+        var group = manager.Current.Groups.Should().ContainSingle().Subject;
+        manager.Current.Watchlist.Single().GroupId.Should().Be(group.Id);
+        var saved = await store.LoadAsync();
+        saved!.Groups.Should().ContainSingle().Which.Id.Should().Be(group.Id);
+    }
+
+    /// <summary>
+    /// Verifies an instrument added without a group joins the first group when the update is published.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_AddedInstrumentWithoutGroup_JoinsFirstGroup()
+    {
+        var store = new JsonSettingsStore(Path.Combine(_directory, "settings.json"), NullLogger<JsonSettingsStore>.Instance);
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+        await manager.LoadAsync(new AppSettings());
+        var first = manager.Current.Groups[0].Id;
+
+        await manager.UpdateAsync(s => s.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC" }));
+
+        manager.Current.Watchlist.Single().GroupId.Should().Be(first);
+    }
+
+    /// <summary>
+    /// Verifies the collapsed state of a data source or asset class that no instrument uses any more is dropped, and
+    /// that the state of the ones still in use is kept.
+    /// </summary>
+    [Fact]
+    public void Normalize_CollapsedStateOfUnusedProviderAndType_IsDropped()
+    {
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "G" });
+        settings.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC", AssetClass = AssetClass.Crypto, GroupId = "g" });
+        settings.Appearance.CollapsedProviders.AddRange(["a", "gone"]);
+        settings.Appearance.CollapsedTypes.AddRange([AssetClass.Crypto, AssetClass.Equity]);
+
+        var changed = settings.Normalize();
+
+        changed.Should().BeTrue();
+        settings.Appearance.CollapsedProviders.Should().Equal("a");
+        settings.Appearance.CollapsedTypes.Should().Equal(AssetClass.Crypto);
+        settings.Normalize().Should().BeFalse("nothing is left to clean up");
+    }
+
+    /// <summary>
+    /// Verifies removing the last instrument of a data source forgets that its section was collapsed.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_RemovingLastInstrumentOfProvider_ForgetsCollapsedProvider()
+    {
+        var store = new JsonSettingsStore(Path.Combine(_directory, "settings.json"), NullLogger<JsonSettingsStore>.Instance);
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+        await manager.LoadAsync(new AppSettings());
+        await manager.UpdateAsync(s =>
+        {
+            s.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC" });
+            s.Appearance.CollapsedProviders.Add("a");
+        });
+        manager.Current.Appearance.CollapsedProviders.Should().Equal("a");
+
+        await manager.UpdateAsync(s => s.Watchlist.Clear());
+
+        manager.Current.Appearance.CollapsedProviders.Should().BeEmpty();
     }
 }

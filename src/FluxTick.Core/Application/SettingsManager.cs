@@ -79,8 +79,10 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
     public async Task LoadAsync(AppSettings fallback, CancellationToken cancellationToken = default)
     {
         var loaded = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
-        Volatile.Write(ref _current, loaded ?? fallback);
-        if (loaded is null)
+        var adopted = loaded ?? fallback;
+        var normalized = adopted.Normalize();
+        Volatile.Write(ref _current, adopted);
+        if (loaded is null || normalized)
         {
             await store.SaveAsync(Current, cancellationToken).ConfigureAwait(false);
         }
@@ -105,6 +107,7 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
         {
             var next = Current.Clone();
             mutate(next);
+            next.Normalize();
             Volatile.Write(ref _current, next);
             Changed?.Invoke(this, EventArgs.Empty);
             try

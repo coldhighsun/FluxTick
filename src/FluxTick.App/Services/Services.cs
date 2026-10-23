@@ -16,6 +16,15 @@ public interface IUiDispatcher
     /// The action to run.
     /// </param>
     void Post(Action action);
+
+    /// <summary>
+    /// Queues an action to run on the UI thread after the input that is waiting there has been handled. It never
+    /// runs inline. For frequent, replaceable updates such as prices, so that clicks stay responsive under load.
+    /// </summary>
+    /// <param name="action">
+    /// The action to run.
+    /// </param>
+    void PostBackground(Action action);
 }
 
 /// <summary>

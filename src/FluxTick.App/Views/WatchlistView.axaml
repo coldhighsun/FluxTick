@@ -2,16 +2,51 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:FluxTick.App.ViewModels"
              xmlns:views="using:FluxTick.App.Views"
+             xmlns:core="using:FluxTick.Core.Application"
              x:Class="FluxTick.App.Views.WatchlistView"
              x:DataType="vm:MainViewModel">
 
-  <Grid>
-    <ScrollViewer Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0">
-      <ItemsControl Name="RowsHost" ItemsSource="{Binding Rows}"
-                    PointerPressed="OnRowsPointerPressed"
-                    PointerMoved="OnRowsPointerMoved"
-                    PointerReleased="OnRowsPointerReleased"
-                    PointerCaptureLost="OnRowsPointerCaptureLost">
+  <!-- The transparent background makes the empty area hit-testable, so a right click there opens the view menu. -->
+  <Grid Name="Root" Background="Transparent">
+    <Grid.ContextMenu>
+      <ContextMenu>
+        <MenuItem Header="Add instrument…" Command="{Binding ShowAddCommand}" />
+        <Separator />
+        <MenuItem Header="Layout">
+          <MenuItem Header="List" ToggleType="Radio"
+                    IsChecked="{Binding !IsCardLayout, Mode=OneWay}"
+                    Command="{Binding SetLayoutCommand}" CommandParameter="{x:Static core:WatchlistLayout.List}" />
+          <MenuItem Header="Cards" ToggleType="Radio"
+                    IsChecked="{Binding IsCardLayout, Mode=OneWay}"
+                    Command="{Binding SetLayoutCommand}" CommandParameter="{x:Static core:WatchlistLayout.Cards}" />
+        </MenuItem>
+        <!-- The entries are added in code just before the menu opens (see GroupingMenu), so they exist only once. -->
+        <MenuItem Name="GroupCardsMenu" Header="Group cards" IsVisible="{Binding IsCardLayout}" />
+        <MenuItem Header="New group…" IsVisible="{Binding IsCardLayout}" Click="OnNewGroupFromBlankClicked" />
+        <Separator />
+        <!-- The check mark is drawn inside an icon of fixed size instead of using ToggleType: the built-in check only
+             takes room while it is checked, which moved the entries of the whole menu sideways. -->
+        <MenuItem Header="Compact" Command="{Binding ToggleCompactCommand}">
+          <MenuItem.Icon>
+            <Border Width="16" Height="16">
+              <Path Data="M3 8.5l3.2 3.2L13 5" Stroke="{Binding $parent[MenuItem].Foreground}" StrokeThickness="1.6"
+                    StrokeLineCap="Round" StrokeJoin="Round" IsVisible="{Binding Settings.Compact}" />
+            </Border>
+          </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Flash on price change" Command="{Binding ToggleFlashCommand}">
+          <MenuItem.Icon>
+            <Border Width="16" Height="16">
+              <Path Data="M3 8.5l3.2 3.2L13 5" Stroke="{Binding $parent[MenuItem].Foreground}" StrokeThickness="1.6"
+                    StrokeLineCap="Round" StrokeJoin="Round" IsVisible="{Binding Settings.FlashOnUpdate}" />
+            </Border>
+          </MenuItem.Icon>
+        </MenuItem>
+      </ContextMenu>
+    </Grid.ContextMenu>
+    <ScrollViewer Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0"
+                  IsVisible="{Binding !IsCardLayout}">
+      <ItemsControl Name="RowsHost" ItemsSource="{Binding ListItems}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:AssetRowViewModel">
             <views:AssetRowView>
@@ -31,6 +66,100 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+
+    <!-- The card layout: one section per group, each a wrapping flow of fixed-size cards. -->
+    <ScrollViewer Name="CardsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="3,0,3,0"
+                  IsVisible="{Binding IsCardLayout}">
+      <!-- The canvas lies over the sections, scrolls with them and carries the drop indicator of a card drag. -->
+      <Grid RowDefinitions="Auto,Auto">
+      <ItemsControl Name="SectionsHost" ClipToBounds="False" ItemsSource="{Binding Sections}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:WatchSectionViewModel">
+            <StackPanel ClipToBounds="False">
+              <Grid>
+                <ToggleButton Name="SectionHeader" Classes="disclosure" IsVisible="{Binding ShowHeader}"
+                              IsChecked="{Binding IsCollapsed, Mode=TwoWay}" Margin="6,8,6,2"
+                              AutomationProperties.Name="{Binding Title}">
+                  <ToggleButton.ContextMenu>
+                    <!-- Only user-defined groups have this menu; OnSectionsContextRequested suppresses it for the others. -->
+                    <ContextMenu>
+                      <MenuItem Header="Rename…" Click="OnRenameMenuClicked" />
+                      <MenuItem Header="{Binding DeleteMenuHeader}" IsEnabled="{Binding CanDelete}"
+                                Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).DeleteGroupCommand}"
+                                CommandParameter="{Binding}" />
+                    </ContextMenu>
+                  </ToggleButton.ContextMenu>
+                  <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Path Classes="chevron" Classes.expanded="{Binding !IsCollapsed}" Data="M5 3l4 4-4 4" Width="14" Height="14" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Count}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                  </StackPanel>
+                </ToggleButton>
+                <!-- Double-clicking the header of a group swaps its title for this box; it lies beside the header
+                     button, not inside it, so typing a space does not collapse the section. -->
+                <TextBox Name="RenameBox" IsVisible="{Binding IsEditing}" Text="{Binding EditName, Mode=TwoWay}"
+                         Margin="26,6,6,0" MinHeight="24" Padding="4,2" FontSize="12" FontWeight="SemiBold" MaxLength="40"
+                         VerticalAlignment="Top" KeyDown="OnRenameKeyDown" LostFocus="OnRenameLostFocus" />
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="26,2,6,6" IsVisible="{Binding ShowEmptyHint}">
+                <TextBlock Text="No instruments in this group" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                <!-- An empty group can be removed right here, unless it is the last group. -->
+                <Button Classes="status" Content="Delete group" FontSize="11" Padding="4,0" IsVisible="{Binding CanDelete}"
+                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).DeleteGroupCommand}"
+                        CommandParameter="{Binding}" />
+              </StackPanel>
+              <!-- While a card is dragged, an empty group opens up a card-sized slot so the card has room to land. -->
+              <Rectangle IsVisible="{Binding ShowDropSlot}" HorizontalAlignment="Left" Margin="3"
+                         Width="{Binding DropSlotWidth}" Height="{Binding DropSlotHeight}"
+                         RadiusX="8" RadiusY="8" StrokeThickness="1" StrokeDashArray="4,3"
+                         Stroke="{DynamicResource BorderBrush}" />
+              <ItemsControl Name="CardsHost" ClipToBounds="False" ItemsSource="{Binding ShownItems}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AssetRowViewModel">
+                    <views:AssetCardView>
+                      <views:AssetCardView.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="Change data source…"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
+                                    CommandParameter="{Binding}" />
+                          <Separator />
+                          <MenuItem Header="Remove"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveCommand}"
+                                    CommandParameter="{Binding}" />
+                        </ContextMenu>
+                      </views:AssetCardView.ContextMenu>
+                    </views:AssetCardView>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <!-- With custom groups, a card dropped here starts a new group; clicking it asks for a name the same way. -->
+      <views:NewGroupPlaceholder Name="NewGroupSlot" Grid.Row="1" IsVisible="{Binding ShowNewGroupSlot}"
+                                 Margin="9,6,9,10" Click="OnNewGroupSlotClicked" />
+      <Canvas Grid.RowSpan="2" IsHitTestVisible="False">
+        <Border Name="DropIndicator" IsVisible="False" IsHitTestVisible="False" CornerRadius="8" Opacity="0.45"
+                BorderThickness="1.5" BorderBrush="{DynamicResource AccentBrush}" />
+      </Canvas>
+      </Grid>
+    </ScrollViewer>
+
+    <!-- Shown for a few seconds after creating a group switched the grouping to custom groups. -->
+    <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,4,0,0" Padding="10,4" CornerRadius="8"
+            Background="{DynamicResource WindowBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+            IsVisible="{Binding GroupingSwitchedFrom, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="Switched to custom groups" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+        <Button Content="Undo" Classes="status" FontSize="11" Padding="4,0" Command="{Binding UndoGroupingSwitchCommand}" />
+      </StackPanel>
+    </Border>
 
     <StackPanel IsVisible="{Binding IsEmpty}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
       <TextBlock Text="Nothing to watch yet" FontWeight="SemiBold" HorizontalAlignment="Center" />

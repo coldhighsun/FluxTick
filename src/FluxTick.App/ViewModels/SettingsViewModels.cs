@@ -667,6 +667,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _router = router;
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
+        Groups = new GroupsSettingsViewModel(settings);
         Providers = new ObservableCollection<ProviderSettingsViewModel>(
             registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p))));
         Routing = new ObservableCollection<RoutingRowViewModel>(
@@ -684,6 +685,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// Gets the selectable color conventions.
     /// </summary>
     public IReadOnlyList<ColorConvention> ColorConventions { get; } = Enum.GetValues<ColorConvention>();
+
+    /// <summary>
+    /// Gets the editor of the user-defined groups.
+    /// </summary>
+    public GroupsSettingsViewModel Groups { get; }
+
+    /// <summary>
+    /// Gets the selectable watchlist layouts.
+    /// </summary>
+    public IReadOnlyList<WatchlistLayout> Layouts { get; } = Enum.GetValues<WatchlistLayout>();
+
+    /// <summary>
+    /// Gets the selectable card groupings.
+    /// </summary>
+    public IReadOnlyList<CardGrouping> Groupings { get; } = Enum.GetValues<CardGrouping>();
 
     /// <summary>
     /// Gets the data source entries.
@@ -732,6 +748,24 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial ColorConvention SelectedColorConvention { get; set; }
 
     /// <summary>
+    /// Gets or sets how the watchlist is laid out.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCardLayoutSelected))]
+    public partial WatchlistLayout SelectedLayout { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the card layout is selected. The card grouping can only be set then.
+    /// </summary>
+    public bool IsCardLayoutSelected => SelectedLayout == WatchlistLayout.Cards;
+
+    /// <summary>
+    /// Gets or sets how the cards are grouped.
+    /// </summary>
+    [ObservableProperty]
+    public partial CardGrouping SelectedGrouping { get; set; }
+
+    /// <summary>
     /// Reloads every control from the persisted settings. Call when the page is opened.
     /// </summary>
     public void Reload()
@@ -746,6 +780,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             Locked = current.Appearance.Locked;
             FlashOnUpdate = current.Appearance.FlashOnUpdate;
             SelectedColorConvention = current.Appearance.ColorConvention;
+            SelectedLayout = current.Appearance.Layout;
+            SelectedGrouping = current.Appearance.Grouping;
             foreach (var provider in Providers)
             {
                 provider.Load(current);
@@ -756,6 +792,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             _loading = false;
         }
 
+        Groups.Reload();
         RefreshRouting();
         RefreshStatuses();
     }
@@ -813,6 +850,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// The new value.
     /// </param>
     partial void OnSelectedColorConventionChanged(ColorConvention value) => SaveAppearance(s => s.Appearance.ColorConvention = value);
+
+    /// <summary>
+    /// Saves the watchlist layout.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnSelectedLayoutChanged(WatchlistLayout value) => SaveAppearance(s => s.Appearance.Layout = value);
+
+    /// <summary>
+    /// Saves the card grouping.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnSelectedGroupingChanged(CardGrouping value) => SaveAppearance(s => s.Appearance.Grouping = value);
 
     /// <summary>
     /// Persists an appearance change unless values are being loaded.

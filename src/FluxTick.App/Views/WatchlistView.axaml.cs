@@ -1,11 +1,14 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using FluxTick.App.ViewModels;
+using FluxTick.Core.Application;
 
 namespace FluxTick.App.Views;
 
@@ -15,69 +18,29 @@ namespace FluxTick.App.Views;
 public sealed partial class WatchlistView : UserControl
 {
     /// <summary>
-    /// The vertical distance the pointer must travel before a press turns into a drag.
+    /// Marks the menu entries that are added dynamically to a card's context menu.
     /// </summary>
-    private const double DragThreshold = 4;
+    private const string GroupMenuTag = "group-menu";
 
     /// <summary>
-    /// The height of the zone at the top and bottom of the list that scrolls it while dragging.
+    /// How long the hint about the automatic switch to the custom grouping stays.
     /// </summary>
-    private const double EdgeScrollZone = 28;
+    private static readonly TimeSpan HintDuration = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// The number of device-independent pixels scrolled per pointer move inside the edge zone.
+    /// Handles dragging of the cards in the card layout.
     /// </summary>
-    private const double EdgeScrollStep = 14;
+    private readonly CardDragController _cardDrag;
 
     /// <summary>
-    /// The panel that hosts the row containers while a press or drag is in progress.
+    /// Handles dragging of the group headers in the card layout.
     /// </summary>
-    private Panel? _panel;
+    private readonly GroupDragController _groupDrag;
 
     /// <summary>
-    /// The pointer that started the current press or drag.
+    /// The view model whose changes are observed to time the automatic switch hint.
     /// </summary>
-    private IPointer? _pointer;
-
-    /// <summary>
-    /// The top level the Escape handler was attached to, kept so the same instance is used to detach it.
-    /// </summary>
-    private TopLevel? _keyHost;
-
-    /// <summary>
-    /// One reusable translate transform per row, applied for the duration of a drag.
-    /// </summary>
-    private List<TranslateTransform> _transforms = [];
-
-    /// <summary>
-    /// The original top and height of every row, captured when the drag starts.
-    /// </summary>
-    private List<(double Top, double Height)> _slots = [];
-
-    /// <summary>
-    /// The row being dragged, captured when the drag starts so a changed collection cannot redirect the drop.
-    /// </summary>
-    private AssetRowViewModel? _draggedRow;
-
-    /// <summary>
-    /// The index of the pressed row, or -1 when no press is in progress.
-    /// </summary>
-    private int _pressedIndex = -1;
-
-    /// <summary>
-    /// The index the dragged row would currently drop into.
-    /// </summary>
-    private int _targetIndex;
-
-    /// <summary>
-    /// The pointer's vertical position within the panel when it was pressed.
-    /// </summary>
-    private double _startY;
-
-    /// <summary>
-    /// Whether the press has travelled far enough to count as a drag.
-    /// </summary>
-    private bool _dragging;
+    private MainViewModel? _observed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WatchlistView"/> class.
@@ -85,355 +48,365 @@ public sealed partial class WatchlistView : UserControl
     public WatchlistView()
     {
         InitializeComponent();
-        DetachedFromVisualTree += (_, _) => ResetDrag();
+        DataContextChanged += (_, _) =>
+        {
+            _observed?.PropertyChanged -= OnMainPropertyChanged;
+            _observed = DataContext as MainViewModel;
+            _observed?.PropertyChanged += OnMainPropertyChanged;
+        };
+        SectionsHost.AddHandler(PointerPressedEvent, OnSectionsPointerPressedTunnel, RoutingStrategies.Tunnel);
+        _cardDrag = new CardDragController(SectionsHost, CardsScroller, DropIndicator, this, NewGroupSlot, () => DataContext as MainViewModel);
+        _groupDrag = new GroupDragController(SectionsHost, CardsScroller, this, () => DataContext as MainViewModel);
+        SectionsHost.AddHandler(ContextRequestedEvent, OnSectionsContextRequested, RoutingStrategies.Tunnel);
+        Root.AddHandler(ContextRequestedEvent, OnRootContextRequested, RoutingStrategies.Tunnel);
+        _ = new ListDragController(RowsHost, Scroller, MoveRowAsync, LiftRow);
     }
 
     /// <summary>
-    /// Remembers which row was pressed so a later pointer move can turn it into a drag.
+    /// Fills the grouping sub menu of the context menu of the empty area just before it opens, so that it shows the
+    /// current grouping.
     /// </summary>
     /// <param name="sender">
-    /// The rows host.
+    /// The root of the view.
     /// </param>
     /// <param name="e">
-    /// The pointer event data.
+    /// The context request data.
     /// </param>
-    private void OnRowsPointerPressed(object? sender, PointerPressedEventArgs e)
+    private void OnRootContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        if (RowsHost.ItemsPanelRoot is not Panel panel || panel.Children.Count < 2)
+        if (DataContext is MainViewModel vm)
         {
-            return;
+            GroupingMenu.Fill(GroupCardsMenu.Items, vm);
         }
-
-        if (!e.GetCurrentPoint(RowsHost).Properties.IsLeftButtonPressed)
-        {
-            return;
-        }
-
-        var index = IndexOfRow(panel, e.Source as Visual);
-        if (index < 0)
-        {
-            return;
-        }
-
-        _panel = panel;
-        _pointer = e.Pointer;
-        _pressedIndex = index;
-        _targetIndex = index;
-        _startY = e.GetPosition(panel).Y;
-        _dragging = false;
     }
 
     /// <summary>
-    /// Starts the drag once the pointer has moved far enough and then moves the dragged row with it.
+    /// Prepares the menus that depend on what was right-clicked, before the click opens them. This runs while the
+    /// event tunnels down, because a menu that was never opened has no data context yet, so its own Opening event
+    /// cannot tell which card or header it belongs to the first time.
     /// </summary>
     /// <param name="sender">
-    /// The rows host.
+    /// The sections host.
     /// </param>
     /// <param name="e">
-    /// The pointer event data.
+    /// The context request data.
     /// </param>
-    private void OnRowsPointerMoved(object? sender, PointerEventArgs e)
+    private void OnSectionsContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        if (_pressedIndex < 0 || _panel is null)
+        if (e.Source is not Visual source)
         {
             return;
         }
 
-        if (!e.GetCurrentPoint(RowsHost).Properties.IsLeftButtonPressed)
+        if (source.FindAncestorOfType<AssetCardView>(includeSelf: true) is { DataContext: AssetRowViewModel row, ContextMenu: { } cardMenu } card)
         {
-            ResetDrag();
+            PrepareCardMenu(cardMenu, row, card);
             return;
         }
 
-        var y = e.GetPosition(_panel).Y;
-        if (!_dragging)
+        // Only user-defined groups have a header menu; type and data source sections have none.
+        if (source.FindAncestorOfType<ToggleButton>(includeSelf: true) is { Name: "SectionHeader", DataContext: WatchSectionViewModel { Kind: not WatchSectionKind.Group } })
         {
-            if (Math.Abs(y - _startY) < DragThreshold)
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Adds the "Move to group" entries to the menu of a card. The entries depend on the groups that exist at that
+    /// moment, so they are rebuilt every time.
+    /// </summary>
+    /// <param name="menu">
+    /// The card's context menu.
+    /// </param>
+    /// <param name="row">
+    /// The row of the card.
+    /// </param>
+    /// <param name="anchor">
+    /// The card, which pop-ups started from the menu open next to.
+    /// </param>
+    private void PrepareCardMenu(ContextMenu menu, AssetRowViewModel row, Control anchor)
+    {
+        for (var i = menu.Items.Count - 1; i >= 0; i--)
+        {
+            if (menu.Items[i] is Control { Tag: GroupMenuTag })
             {
-                return;
+                menu.Items.RemoveAt(i);
             }
-
-            // Measure the drag from where the threshold was crossed so the row does not jump under the cursor.
-            _startY = y;
-            BeginDrag(e.Pointer);
         }
 
-        ScrollNearEdge(e);
-        UpdateDrag(y);
-        e.Handled = true;
+        if (DataContext is not MainViewModel vm)
+        {
+            return;
+        }
+
+        var newGroup = new MenuItem { Header = "New group…", Tag = GroupMenuTag };
+        newGroup.Click += (_, _) => GroupNamePrompt.Show(anchor, "New group", PlacementMode.Pointer, name => vm.CreateGroupAsync(name, row));
+
+        // Only the custom grouping shows the groups, so only there can the card be moved into an existing one.
+        // In the other groupings creating a group switches to the custom grouping.
+        if (vm.Grouping != CardGrouping.Custom)
+        {
+            newGroup.Header = "Move to new group…";
+            menu.Items.Insert(0, newGroup);
+            menu.Items.Insert(1, new Separator { Tag = GroupMenuTag });
+            return;
+        }
+
+        var moveTo = new MenuItem { Header = "Move to group", Tag = GroupMenuTag };
+        foreach (var choice in vm.GetGroupChoices(row))
+        {
+            var target = choice.GroupId;
+            var item = new MenuItem
+            {
+                Header = choice.Title,
+                ToggleType = MenuItemToggleType.Radio,
+                IsChecked = choice.IsCurrent,
+            };
+            item.Click += (_, _) => _ = vm.MoveToGroupAsync(row, target);
+            moveTo.Items.Add(item);
+        }
+
+        moveTo.Items.Add(new Separator());
+        newGroup.Header = "New group…";
+        moveTo.Items.Add(newGroup);
+        menu.Items.Insert(0, moveTo);
+        menu.Items.Insert(1, new Separator { Tag = GroupMenuTag });
     }
 
     /// <summary>
-    /// Finishes the drag and persists the new order.
+    /// Starts renaming a group in place when its header is double-clicked. The first click of the double click has
+    /// already collapsed or expanded the section, so that is undone, and the second click is swallowed.
     /// </summary>
     /// <param name="sender">
-    /// The rows host.
+    /// The sections host.
     /// </param>
     /// <param name="e">
     /// The pointer event data.
     /// </param>
-    private async void OnRowsPointerReleased(object? sender, PointerReleasedEventArgs e)
+    private void OnSectionsPointerPressedTunnel(object? sender, PointerPressedEventArgs e)
     {
-        if (_pressedIndex < 0 || _panel is null)
+        if (e.ClickCount != 2 || !e.GetCurrentPoint(SectionsHost).Properties.IsLeftButtonPressed)
         {
             return;
         }
 
-        if (!_dragging)
+        var header = (e.Source as Visual)?.FindAncestorOfType<ToggleButton>(includeSelf: true);
+        if (header is not { Name: "SectionHeader", DataContext: WatchSectionViewModel { Kind: WatchSectionKind.Group } section })
         {
-            ResetDrag();
             return;
         }
 
-        var pressed = _pressedIndex;
-        var target = _targetIndex;
-        var row = _draggedRow;
-        var layoutIntact = IsLayoutIntact();
         e.Handled = true;
+        section.IsCollapsed = !section.IsCollapsed;
+        StartRename(header, section);
+    }
 
-        // Clear the transforms before the rows are reordered so the list never shows a stale offset.
-        ResetDrag();
+    /// <summary>
+    /// Swaps the title of a group for the rename box and puts the caret in it with the old name selected.
+    /// </summary>
+    /// <param name="header">
+    /// The header button of the group; the rename box is its sibling.
+    /// </param>
+    /// <param name="section">
+    /// The section of the group.
+    /// </param>
+    private static void StartRename(ToggleButton header, WatchSectionViewModel section)
+    {
+        section.BeginRename();
+        var box = header.GetVisualParent()?.GetVisualChildren().OfType<TextBox>().FirstOrDefault();
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                box?.Focus();
+                box?.SelectAll();
+            },
+            DispatcherPriority.Background);
+    }
 
-        // If the rows changed during the drag the captured indices no longer mean anything, so drop nothing.
-        if (layoutIntact && target != pressed && DataContext is MainViewModel vm)
+    /// <summary>
+    /// Starts renaming a group when the entry of its header menu was chosen.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnRenameMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Parent: ContextMenu { PlacementTarget: ToggleButton header, DataContext: WatchSectionViewModel section } })
         {
-            await vm.MoveToAsync(row, target);
+            StartRename(header, section);
         }
     }
 
     /// <summary>
-    /// Abandons the drag when the pointer capture is lost.
+    /// Commits the new title on Enter and cancels the edit on Esc.
     /// </summary>
     /// <param name="sender">
-    /// The rows host.
-    /// </param>
-    /// <param name="e">
-    /// The capture event data.
-    /// </param>
-    private void OnRowsPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e) => ResetDrag();
-
-    /// <summary>
-    /// Cancels the drag when Escape is pressed.
-    /// </summary>
-    /// <param name="sender">
-    /// The top level the handler is attached to.
+    /// The rename box.
     /// </param>
     /// <param name="e">
     /// The key event data.
     /// </param>
-    private void OnTopLevelKeyDown(object? sender, KeyEventArgs e)
+    private void OnRenameKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && _dragging)
+        if (sender is not TextBox { DataContext: WatchSectionViewModel section })
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter)
         {
             e.Handled = true;
-            ResetDrag();
+            EndRename(section, commit: true);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            EndRename(section, commit: false);
         }
     }
 
     /// <summary>
-    /// Captures the pointer and snapshots the row layout so the drop target can be computed against the original slots.
+    /// Commits the new title when the rename box loses focus.
     /// </summary>
-    /// <param name="pointer">
-    /// The pointer that is dragging.
+    /// <param name="sender">
+    /// The rename box.
     /// </param>
-    private void BeginDrag(IPointer pointer)
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnRenameLostFocus(object? sender, RoutedEventArgs e)
     {
-        if (_panel is null)
+        if (sender is TextBox { DataContext: WatchSectionViewModel section })
+        {
+            EndRename(section, commit: true);
+        }
+    }
+
+    /// <summary>
+    /// Leaves the in-place title edit and, when asked, saves the typed name. A blank name keeps the old one.
+    /// </summary>
+    /// <param name="section">
+    /// The section being renamed.
+    /// </param>
+    /// <param name="commit">
+    /// Whether to save the typed name.
+    /// </param>
+    private void EndRename(WatchSectionViewModel section, bool commit)
+    {
+        // Enter hides the box, which makes it lose focus; the second call must not commit again.
+        if (!section.IsEditing)
         {
             return;
         }
 
-        _dragging = true;
-        _slots = [.. _panel.Children.Select(c => (c.Bounds.Top, c.Bounds.Height))];
-        _transforms = [.. _panel.Children.Select(_ => new TranslateTransform())];
-        for (var i = 0; i < _panel.Children.Count; i++)
+        section.IsEditing = false;
+        if (commit && DataContext is MainViewModel vm && section.GroupId is { } id)
         {
-            _panel.Children[i].RenderTransform = _transforms[i];
+            _ = vm.RenameGroupAsync(id, section.EditName);
+        }
+    }
+
+    /// <summary>
+    /// Asks for the name of a new group when the placeholder below the groups is clicked.
+    /// </summary>
+    /// <param name="sender">
+    /// The placeholder.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnNewGroupSlotClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            GroupNamePrompt.Show(NewGroupSlot, "New group", PlacementMode.TopEdgeAlignedLeft, name => vm.CreateGroupAsync(name));
+        }
+    }
+
+    /// <summary>
+    /// Asks for the name of a new group when the entry of the menu on the empty area was chosen.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnNewGroupFromBlankClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            GroupNamePrompt.Show(this, "New group", PlacementMode.Pointer, name => vm.CreateGroupAsync(name));
+        }
+    }
+
+    /// <summary>
+    /// Hides the hint about the automatic switch to the custom grouping a few seconds after it appeared.
+    /// </summary>
+    /// <param name="sender">
+    /// The main view model.
+    /// </param>
+    /// <param name="e">
+    /// The property change data.
+    /// </param>
+    private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.GroupingSwitchedFrom) || sender is not MainViewModel { GroupingSwitchedFrom: not null } vm)
+        {
+            return;
         }
 
-        pointer.Capture(RowsHost);
+        var shown = vm.GroupingSwitchedFrom;
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                // Dismiss only the hint this timer was started for, not a later one.
+                if (vm.GroupingSwitchedFrom == shown)
+                {
+                    vm.DismissGroupingHint();
+                }
+            },
+            HintDuration);
+    }
 
-        var container = _panel.Children[_pressedIndex];
-        _draggedRow = container.DataContext as AssetRowViewModel;
-        container.ZIndex = 1;
+    /// <summary>
+    /// Moves the row that was dragged from one position of the list to another.
+    /// </summary>
+    /// <param name="from">
+    /// The original position.
+    /// </param>
+    /// <param name="to">
+    /// The new position.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the new order is saved.
+    /// </returns>
+    private Task MoveRowAsync(int from, int to) =>
+        DataContext is MainViewModel vm && from >= 0 && from < vm.Rows.Count
+            ? vm.MoveToAsync(vm.Rows[from], to)
+            : Task.CompletedTask;
 
+    /// <summary>
+    /// Shows a row as lifted while it is dragged, and as resting again afterwards.
+    /// </summary>
+    /// <param name="container">
+    /// The container of the row.
+    /// </param>
+    /// <param name="lifted">
+    /// Whether the row is lifted.
+    /// </param>
+    private static void LiftRow(Control container, bool lifted)
+    {
         if ((container as ContentPresenter)?.Child is UserControl { Content: Control rowBorder } rowView)
         {
-            rowView.Classes.Set("dragging", true);
-            ToolTip.SetIsOpen(rowBorder, false);
-        }
-
-        _keyHost = TopLevel.GetTopLevel(this);
-        _keyHost?.AddHandler(KeyDownEvent, OnTopLevelKeyDown, RoutingStrategies.Tunnel);
-    }
-
-    /// <summary>
-    /// Moves the dragged row to the pointer and shifts the rows in between to make room for it.
-    /// </summary>
-    /// <param name="y">
-    /// The pointer's vertical position within the panel.
-    /// </param>
-    private void UpdateDrag(double y)
-    {
-        if (_panel is null)
-        {
-            return;
-        }
-
-        if (!IsLayoutIntact())
-        {
-            ResetDrag();
-            return;
-        }
-
-        var slot = _slots[_pressedIndex];
-        var first = _slots[0];
-        var last = _slots[^1];
-        var offset = Math.Clamp(y - _startY, first.Top - slot.Top, last.Top + last.Height - (slot.Top + slot.Height));
-
-        _targetIndex = RowReorderMath.ComputeTargetIndex(_slots, _pressedIndex, slot.Top + offset + (slot.Height / 2));
-
-        for (var i = 0; i < _transforms.Count; i++)
-        {
-            _transforms[i].Y = ShiftFor(i, offset, slot.Height);
-        }
-    }
-
-    /// <summary>
-    /// Gets how far a row is displaced from its original slot while another row is being dragged.
-    /// </summary>
-    /// <param name="index">
-    /// The original index of the row.
-    /// </param>
-    /// <param name="draggedOffset">
-    /// The vertical offset of the dragged row.
-    /// </param>
-    /// <param name="draggedHeight">
-    /// The height of the dragged row, which is how far displaced neighbours move.
-    /// </param>
-    /// <returns>
-    /// The vertical displacement of the row.
-    /// </returns>
-    private double ShiftFor(int index, double draggedOffset, double draggedHeight)
-    {
-        if (index == _pressedIndex)
-        {
-            return draggedOffset;
-        }
-
-        // Dragging down pulls the rows it passes up; dragging up pushes the rows it passes down.
-        if (_targetIndex > _pressedIndex && index > _pressedIndex && index <= _targetIndex)
-        {
-            return -draggedHeight;
-        }
-
-        if (_targetIndex < _pressedIndex && index >= _targetIndex && index < _pressedIndex)
-        {
-            return draggedHeight;
-        }
-
-        return 0;
-    }
-
-    /// <summary>
-    /// Scrolls the list while the pointer is near its top or bottom edge.
-    /// </summary>
-    /// <param name="e">
-    /// The pointer event data.
-    /// </param>
-    private void ScrollNearEdge(PointerEventArgs e)
-    {
-        var y = e.GetPosition(Scroller).Y;
-        var offset = Scroller.Offset;
-        if (y < EdgeScrollZone)
-        {
-            Scroller.Offset = new Vector(offset.X, Math.Max(0, offset.Y - EdgeScrollStep));
-        }
-        else if (y > Scroller.Bounds.Height - EdgeScrollZone)
-        {
-            Scroller.Offset = new Vector(offset.X, offset.Y + EdgeScrollStep);
-        }
-    }
-
-    /// <summary>
-    /// Clears all drag visuals, releases the pointer capture and forgets the current press.
-    /// </summary>
-    private void ResetDrag()
-    {
-        var panel = _panel;
-        var pointer = _pointer;
-        var wasDragging = _dragging;
-
-        _panel = null;
-        _pointer = null;
-        _pressedIndex = -1;
-        _dragging = false;
-        _draggedRow = null;
-        _slots = [];
-        _transforms = [];
-
-        if (!wasDragging)
-        {
-            return;
-        }
-
-        _keyHost?.RemoveHandler(KeyDownEvent, OnTopLevelKeyDown);
-        _keyHost = null;
-
-        if (panel is not null)
-        {
-            foreach (var child in panel.Children)
+            rowView.Classes.Set("dragging", lifted);
+            if (lifted)
             {
-                child.RenderTransform = null;
-                child.ZIndex = 0;
-                (child as ContentPresenter)?.Child?.Classes.Set("dragging", false);
+                ToolTip.SetIsOpen(rowBorder, false);
             }
         }
-
-        if (pointer?.Captured == RowsHost)
-        {
-            pointer.Capture(null);
-        }
-    }
-
-    /// <summary>
-    /// Checks that the rows still match the layout snapshot taken when the drag started.
-    /// </summary>
-    /// <returns>
-    /// <see langword="true"/> when the row count is unchanged and the dragged row is still at its original index.
-    /// </returns>
-    private bool IsLayoutIntact() =>
-        _panel is not null
-        && _draggedRow is not null
-        && _slots.Count == _panel.Children.Count
-        && _pressedIndex >= 0
-        && _pressedIndex < _panel.Children.Count
-        && ReferenceEquals(_panel.Children[_pressedIndex].DataContext, _draggedRow);
-
-    /// <summary>
-    /// Finds the index of the row container that contains a visual.
-    /// </summary>
-    /// <param name="panel">
-    /// The panel hosting the row containers.
-    /// </param>
-    /// <param name="visual">
-    /// The visual to locate, usually the pointer event source.
-    /// </param>
-    /// <returns>
-    /// The row index, or -1 when the visual is not inside a row.
-    /// </returns>
-    private static int IndexOfRow(Panel panel, Visual? visual)
-    {
-        while (visual is not null)
-        {
-            if (ReferenceEquals(visual.GetVisualParent(), panel))
-            {
-                return panel.Children.IndexOf((Control)visual);
-            }
-
-            visual = visual.GetVisualParent();
-        }
-
-        return -1;
     }
 }

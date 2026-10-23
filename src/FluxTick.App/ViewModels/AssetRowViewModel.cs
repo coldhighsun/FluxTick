@@ -79,6 +79,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public string ProviderName { get; }
 
     /// <summary>
+    /// Gets or sets the id of the user-defined group the instrument belongs to, or <see langword="null"/> for none.
+    /// </summary>
+    public string? GroupId { get; set; }
+
+    /// <summary>
     /// Gets or sets the formatted price.
     /// </summary>
     [ObservableProperty]
@@ -139,9 +144,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial bool ShowSparkline { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether a price change advances <see cref="FlashVersion" />.
+    /// Gets or sets a value indicating whether a price change advances <see cref="FlashVersion" />. The view stops a
+    /// flash that is playing when this turns off.
     /// </summary>
-    public bool FlashEnabled { get; set; }
+    [ObservableProperty]
+    public partial bool FlashEnabled { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the change is positive.
