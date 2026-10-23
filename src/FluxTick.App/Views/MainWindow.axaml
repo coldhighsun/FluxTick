@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FluxTick.App.ViewModels"
         xmlns:views="using:FluxTick.App.Views"
+        xmlns:controls="using:FluxTick.App.Controls"
         x:Class="FluxTick.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="FluxTick"
@@ -58,21 +59,47 @@
 
       <!-- Footer: data source status and resize grip -->
       <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="14,2,4,6">
-        <ItemsControl ItemsSource="{Binding Chips}" VerticalAlignment="Center">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" Spacing="12" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:ProviderChipViewModel">
-              <StackPanel Orientation="Horizontal" Spacing="5" ToolTip.Tip="{Binding Tooltip}">
-                <Ellipse Classes="dot" Classes.good="{Binding IsGood}" Classes.bad="{Binding IsBad}" />
-                <TextBlock Text="{Binding Name}" Classes="muted" FontSize="11" />
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <!-- Chips that do not fit are replaced by a "+N" badge; clicking the status opens the full list. -->
+        <Button Classes="status" AutomationProperties.Name="Data source status">
+          <Button.Flyout>
+            <Flyout Placement="TopEdgeAlignedLeft" FlyoutPresenterClasses="status">
+              <Border Classes="card" Margin="0,0,0,4" MaxWidth="300">
+                <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                  <ItemsControl ItemsSource="{Binding Chips}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ProviderChipViewModel">
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                          <Ellipse Classes="dot" Classes.good="{Binding IsGood}" Classes.bad="{Binding IsBad}"
+                                   VerticalAlignment="Top" Margin="0,4,0,0" />
+                          <TextBlock Text="{Binding Tooltip}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Border>
+            </Flyout>
+          </Button.Flyout>
+          <Grid>
+            <controls:OverflowItemsControl Name="ChipsHost" ItemsSource="{Binding Chips}" VerticalAlignment="Center"
+                                           Spacing="12" ReservedWidth="32">
+              <controls:OverflowItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProviderChipViewModel">
+                  <StackPanel Orientation="Horizontal" Spacing="5" ToolTip.Tip="{Binding Tooltip}"
+                              controls:OverflowPanel.HasProblem="{Binding IsBad}">
+                    <Ellipse Classes="dot" Classes.good="{Binding IsGood}" Classes.bad="{Binding IsBad}" />
+                    <TextBlock Text="{Binding Name}" Classes="muted" FontSize="11" />
+                  </StackPanel>
+                </DataTemplate>
+              </controls:OverflowItemsControl.ItemTemplate>
+            </controls:OverflowItemsControl>
+            <Border Classes="chip" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Width="{Binding #ChipsHost.ReservedWidth}" IsVisible="{Binding #ChipsHost.HasHiddenItems}">
+              <TextBlock HorizontalAlignment="Center" Text="{Binding #ChipsHost.HiddenCount, StringFormat='+{0}'}" Classes="muted"
+                         Classes.warn="{Binding #ChipsHost.HiddenHasProblem}" FontSize="11" />
+            </Border>
+          </Grid>
+        </Button>
         <Border Grid.Column="1" Width="16" Height="16" Background="Transparent" Cursor="BottomRightCorner"
                 PointerPressed="OnResizeGripPressed">
           <Path Data="M12 4L4 12M12 8l-4 4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.2" StrokeLineCap="Round" />
