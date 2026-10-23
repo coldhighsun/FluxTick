@@ -41,7 +41,15 @@ commodities side by side, from the data sources *you* choose.
 | --- | --- | --- | --- |
 | **Binance** | Crypto spot pairs | WebSocket stream (~1 s) | No API key. If `binance.com` is blocked on your network, set the endpoints to `wss://data-stream.binance.vision/ws` and `https://data-api.binance.vision` in Settings. |
 | **Yahoo Finance** | Stocks, ETFs, indices, forex, futures | Polling (default 5 s) | Unofficial API; may be rate limited, delayed or change without notice. No API key. |
+| **Tencent Finance** | A-shares, Hong Kong and US stocks, ETFs, indices | Polling (default 5 s) | Unofficial API; may be delayed or change without notice. No API key. Search by name, code or pinyin. Minute history (the sparkline backfill) covers A-shares and Hong Kong only; US stocks fill their sparkline from live ticks. Off by default. |
+| **OKX** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
+| **Coinbase** | Crypto spot pairs | WebSocket stream | Coinbase Exchange. No API key. Off by default. |
+| **Kraken** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
+| **Bybit** | Crypto spot pairs | WebSocket stream | No API key. Not served in some regions. Off by default. |
 | **Simulated** | Anything | Local random walk | For demos, screenshots and offline development. Off by default. |
+
+Sources that are off by default are enabled in **Settings → Data sources**. To show an instrument from one of them,
+pick it in the *Add instrument* window or make it the default for an asset class on the *Routing* tab.
 
 > Market data may be delayed or inaccurate and is **not investment advice**. FluxTick is not affiliated with any of
 > the data providers. Respect each provider's terms of use.
@@ -94,8 +102,14 @@ Options that are at their built-in default are not written to `settings.json`. D
 ```
 src/FluxTick.Abstractions        Stable provider contracts (the only thing a data source references)
 src/FluxTick.Core                Provider registry, routing, quote aggregation, sparkline series, settings
+src/FluxTick.Providers.Common    Helpers shared by data sources (WebSocket loop, symbol search)
 src/FluxTick.Providers.Binance   Binance WebSocket source
+src/FluxTick.Providers.Okx       OKX WebSocket source
+src/FluxTick.Providers.Coinbase  Coinbase WebSocket source
+src/FluxTick.Providers.Kraken    Kraken WebSocket source
+src/FluxTick.Providers.Bybit     Bybit WebSocket source
 src/FluxTick.Providers.Yahoo     Yahoo Finance polling source
+src/FluxTick.Providers.Tencent   Tencent Finance polling source
 src/FluxTick.Providers.Simulated Deterministic demo source
 src/FluxTick.App                 Avalonia desktop app (FluxTick.exe), composition root
 tests/                           xUnit v3 + AwesomeAssertions

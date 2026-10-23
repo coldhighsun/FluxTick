@@ -77,6 +77,25 @@ Rules of thumb:
 - Observe `ShutdownToken` in every background loop.
 - Prefer `TimeProvider` over `DateTime.UtcNow` / `Task.Delay` so the provider is testable with `FakeTimeProvider`.
 
+### Shared helpers
+
+Sources that need more than the base class can reference `FluxTick.Providers.Common` (it only depends on the
+abstractions):
+
+| Type | Use it for |
+| --- | --- |
+| `CryptoExchangeProvider` | A crypto exchange with a ticker WebSocket and REST for history and the pair list. It adds history, symbol search and disposal on top of `WebSocketProviderBase`; you describe the wire formats (Binance, OKX, Coinbase, Kraken and Bybit are short examples). `ExchangeEndpoints` declares and reads the two endpoint options for it. |
+| `WebSocketProviderBase` | Any streaming source. It owns connecting, subscribing each instrument exactly once, an optional keep-alive message and reconnecting with exponential backoff. A message that fails to parse is dropped without costing the connection. You implement the subscribe/unsubscribe messages and `HandleMessage`. Override `SendTimeout` (default 10 s; a send that takes longer drops the connection and reconnects), `MaxMessageBytes` (default 4 MB; a larger single message drops the connection) or `HealthyUptime` (default 10 s; only a connection that stayed up this long restarts the backoff at `InitialBackoff`) when an exchange needs other limits. |
+| `PollingProviderBase` | Any polling source (Yahoo and Tencent). It owns the loop, an immediate poll for newly added instruments, the delay that doubles while the service pushes back, and the Connected/Reconnecting/Failed status. You implement one method that fetches and publishes, and return a `PollOutcome`; an exception you let escape counts as a failed cycle. |
+| `SymbolIndex` / `SymbolSearch` | Searching a downloaded pair listing for crypto exchanges. Build a `SymbolIndex` once per download (`CryptoExchangeProvider` keeps it in an `ExpiringCache`) and call `SymbolSearch.Search` with it for every query; the index holds the normalized names so a search does not rebuild them. |
+| `ExpiringCache<T>` | Keeping a downloaded symbol list for a few minutes; concurrent callers share one download. |
+| `EndpointOptions.GetWebSocketUri` / `GetHttpUri` / `Combine` | Reading a URL option and falling back to its default when the stored text is not an address with the right scheme (`ws`/`wss` or `http`/`https`); use these instead of `Uri.TryCreate`, which also accepts text such as `host:8443/path`. `Combine` appends a request path to an endpoint and keeps the endpoint's own path (a proxy prefix), which `new Uri(baseUri, "/path")` would replace. |
+| `JsonValues` | Reading decimals, Unix timestamps and ISO 8601 times that an API sends as either numbers or strings. |
+
+Watch out for symbols that are case-sensitive or carry a prefix. `MarketDataProviderBase.Publish` drops a quote whose
+`AssetId` is not exactly one of the subscribed ones, so a source that normalizes symbols before calling its API must
+publish under the symbol that was subscribed (see `TencentProvider`).
+
 ## 3. Optional capabilities
 
 Implement these interfaces on the provider class when your source supports them. Missing capabilities degrade
