@@ -14,6 +14,9 @@ public sealed class InlineDispatcher : IUiDispatcher
 {
     /// <inheritdoc />
     public void Post(Action action) => action();
+
+    /// <inheritdoc />
+    public void PostBackground(Action action) => action();
 }
 
 /// <summary>
@@ -30,11 +33,19 @@ public sealed class InMemorySettingsStore : ISettingsStore
     public Task<AppSettings?> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stored?.Clone());
 
     /// <inheritdoc />
-    public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
         Stored = settings.Clone();
-        return Task.CompletedTask;
+        if (SaveGate is { } gate)
+        {
+            await gate.ConfigureAwait(false);
+        }
     }
+
+    /// <summary>
+    /// Gets or sets a task every save waits for, which simulates a save that takes a while.
+    /// </summary>
+    public Task? SaveGate { get; set; }
 }
 
 /// <summary>

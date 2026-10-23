@@ -176,4 +176,20 @@ public class RowAndOptionTests
         flag.StoredValue.Should().Be("true");
         pick.StoredValue.Should().Be("b");
     }
+
+    /// <summary>
+    /// Verifies turning the flash off is announced, so a view can stop a flash that is playing.
+    /// </summary>
+    [Fact]
+    public void FlashEnabled_Changed_RaisesPropertyChanged()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+        List<string?> changes = [];
+        row.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+
+        row.FlashEnabled = true;
+        row.FlashEnabled = false;
+
+        changes.Should().Equal(nameof(AssetRowViewModel.FlashEnabled), nameof(AssetRowViewModel.FlashEnabled));
+    }
 }

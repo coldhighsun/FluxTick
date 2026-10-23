@@ -3,11 +3,12 @@
         xmlns:vm="using:FluxTick.App.ViewModels"
         xmlns:views="using:FluxTick.App.Views"
         xmlns:controls="using:FluxTick.App.Controls"
+        xmlns:core="using:FluxTick.Core.Application"
         x:Class="FluxTick.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="FluxTick"
         Icon="/Assets/fluxtick.png"
-        Width="340" Height="440" MinWidth="280" MinHeight="180"
+        Height="440" MinHeight="180"
         WindowDecorations="None"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
@@ -33,21 +34,46 @@
             <TextBlock Text="FluxTick" FontWeight="SemiBold" FontSize="13" />
           </StackPanel>
 
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-            <Button Classes="icon" ToolTip.Tip="Add instrument" Command="{Binding ShowAddCommand}">
+          <!-- The header holds up to seven buttons. Their width is set on each button (24 px instead of the 26 px of the
+               icon style) because a value on the element always wins, so it fits the narrowest window widths for sure. -->
+          <StackPanel Grid.Column="1" Orientation="Horizontal">
+            <Button Classes="icon" Width="24" ToolTip.Tip="Add instrument" Command="{Binding ShowAddCommand}">
               <Path Data="M7 2v10M2 7h10" />
             </Button>
-            <Button Classes="icon" ToolTip.Tip="Settings" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{Binding LayoutToggleTip}" Command="{Binding ToggleLayoutCommand}" Classes.active="{Binding IsCardLayout}"
+                    AutomationProperties.Name="Toggle list and cards layout">
+              <Path Data="M2 2h4v4H2zM8 2h4v4H8zM2 8h4v4H2zM8 8h4v4H8z" />
+            </Button>
+            <Button Name="GroupButton" Classes="icon" Width="24" ToolTip.Tip="Group cards" IsVisible="{Binding IsCardLayout}" AutomationProperties.Name="Group cards">
+              <Path Data="M2 2.5h4v3H2zM2 8.5h4v3H2zM8 4h4M8 10h4" />
+              <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                  <!-- The grouping entries are added in code just before the flyout opens (see GroupingMenu). -->
+                  <Separator />
+                  <MenuItem Header="New group…" Click="OnNewGroupClicked" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+            <Button Classes="icon" Width="24" ToolTip.Tip="Settings" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}">
               <Canvas Width="14" Height="14">
                 <Path Data="M1 4h5M10 4h3M1 10h3M8 10h5" />
                 <Ellipse Canvas.Left="6" Canvas.Top="2" Width="4" Height="4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" />
                 <Ellipse Canvas.Left="4" Canvas.Top="8" Width="4" Height="4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" />
               </Canvas>
             </Button>
-            <Button Classes="icon" ToolTip.Tip="Keep on top" Command="{Binding TogglePinCommand}" Classes.active="{Binding Settings.AlwaysOnTop}">
-              <Path Data="M5 2h4l-.4 3.2L10.5 7v1H7.6v4h-1.2V8H3.5V7l1.9-1.8z" />
+            <!-- An arrow up to a bar at the top reads as "stay on top"; the padlock next to it is "lock position". -->
+            <Button Classes="icon" Width="24" ToolTip.Tip="Always on top" Command="{Binding TogglePinCommand}" Classes.active="{Binding Settings.AlwaysOnTop}"
+                    AutomationProperties.Name="Always on top">
+              <Path Data="M3 2.5h8M7 12V5.5M4.5 8L7 5.5L9.5 8" />
             </Button>
-            <Button Classes="icon" ToolTip.Tip="Hide to tray" Click="OnHideClicked">
+            <Button Classes="icon" Width="24" ToolTip.Tip="Lock position" Command="{Binding ToggleLockCommand}" Classes.active="{Binding Settings.Locked}"
+                    AutomationProperties.Name="Lock position">
+              <Canvas Width="14" Height="14">
+                <Path Data="M3.5 6.5h7v5.5h-7z" />
+                <Path Data="M5 6.5V5a2 2 0 0 1 4 0v1.5" />
+              </Canvas>
+            </Button>
+            <Button Classes="icon" Width="24" ToolTip.Tip="Hide to tray" Click="OnHideClicked">
               <Path Data="M3 3l8 8M11 3l-8 8" />
             </Button>
           </StackPanel>
@@ -100,8 +126,18 @@
             </Border>
           </Grid>
         </Button>
-        <Border Grid.Column="1" Width="16" Height="16" Background="Transparent" Cursor="BottomRightCorner"
+        <!-- The list layout has a fixed width, so there the grip only resizes vertically. -->
+        <Border Classes="grip" Classes.listLayout="{Binding !IsCardLayout}" Grid.Column="1" Width="16" Height="16" Background="Transparent"
                 PointerPressed="OnResizeGripPressed">
+          <!-- The cursor comes from styles: a value set on the element itself would always win over them. -->
+          <Border.Styles>
+            <Style Selector="Border.grip">
+              <Setter Property="Cursor" Value="BottomRightCorner" />
+            </Style>
+            <Style Selector="Border.grip.listLayout">
+              <Setter Property="Cursor" Value="SizeNorthSouth" />
+            </Style>
+          </Border.Styles>
           <Path Data="M12 4L4 12M12 8l-4 4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.2" StrokeLineCap="Round" />
         </Border>
       </Grid>

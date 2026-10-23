@@ -220,6 +220,8 @@ public sealed partial class AddAssetViewModel : ObservableObject
                 }
                 else
                 {
+                    // Changing the data source keeps the instrument where the user put it, group included.
+                    entry.GroupId = s.Watchlist[index].GroupId;
                     s.Watchlist[index] = entry;
                 }
             });

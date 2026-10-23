@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
@@ -70,6 +71,20 @@ public sealed partial class ProviderChipViewModel(string id, string name) : Obse
 }
 
 /// <summary>
+/// A target of the "Move to group" menu.
+/// </summary>
+/// <param name="GroupId">
+/// The group id.
+/// </param>
+/// <param name="Title">
+/// The text shown in the menu.
+/// </param>
+/// <param name="IsCurrent">
+/// Whether the instrument is in this group already.
+/// </param>
+public sealed record GroupChoice(string GroupId, string Title, bool IsCurrent);
+
+/// <summary>
 /// The root view model: owns the watchlist rows, navigation and the connection between settings and market data.
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject
@@ -95,6 +110,11 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IUiDispatcher _ui;
 
     /// <summary>
+    /// Hands the prices to the UI thread, keeping only the latest one of each instrument while it is busy.
+    /// </summary>
+    private readonly SnapshotCoalescer _snapshots;
+
+    /// <summary>
     /// The logger.
     /// </summary>
     private readonly ILogger<MainViewModel> _logger;
@@ -103,6 +123,11 @@ public sealed partial class MainViewModel : ObservableObject
     /// Serializes applying settings to the market data service.
     /// </summary>
     private readonly SemaphoreSlim _applyLock = new(1, 1);
+
+    /// <summary>
+    /// Whether the sections are being rebuilt, so that collapse changes made by the rebuild itself are not saved again.
+    /// </summary>
+    private bool _rebuildingSections;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
@@ -141,9 +166,14 @@ public sealed partial class MainViewModel : ObservableObject
         _market = market;
         _registry = registry;
         _ui = ui;
+        _snapshots = new SnapshotCoalescer(ui, OnSnapshot, ex => logger.LogError(ex, "Could not hand a price update to the UI"));
         _logger = logger;
         AddAsset = addAsset;
         Settings = settingsPage;
+
+        // The window sizes itself after the layout, so the layout must be right before the first rows exist.
+        IsCardLayout = settings.Current.Appearance.Layout == WatchlistLayout.Cards;
+        Grouping = settings.Current.Appearance.Grouping;
 
         Settings.PropertyChanged += (_, e) =>
         {
@@ -155,6 +185,10 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 ApplyFlash();
             }
+            else if (e.PropertyName is nameof(SettingsViewModel.SelectedLayout) or nameof(SettingsViewModel.SelectedGrouping))
+            {
+                RebuildSections();
+            }
         };
     }
 
@@ -162,6 +196,52 @@ public sealed partial class MainViewModel : ObservableObject
     /// Gets the watchlist rows in display order.
     /// </summary>
     public ObservableCollection<AssetRowViewModel> Rows { get; } = [];
+
+    /// <summary>
+    /// Gets the sections of the card layout. They hold the same row view models as <see cref="Rows"/>, grouped
+    /// according to the grouping setting.
+    /// </summary>
+    public ObservableCollection<WatchSectionViewModel> Sections { get; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether the watchlist is shown as cards instead of a list.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LayoutToggleTip))]
+    [NotifyPropertyChangedFor(nameof(ShowNewGroupSlot))]
+    [NotifyPropertyChangedFor(nameof(ListItems))]
+    public partial bool IsCardLayout { get; private set; }
+
+    /// <summary>
+    /// Gets the rows the list shows: all of them in the list layout, none in the card layout. A list without items
+    /// builds no views, so the list that is hidden behind the cards does not take part in every price update.
+    /// </summary>
+    public IReadOnlyList<AssetRowViewModel> ListItems => IsCardLayout ? [] : Rows;
+
+    /// <summary>
+    /// Gets a value indicating whether the card layout shows the placeholder that creates a new group: only with
+    /// the custom grouping, where the groups are visible.
+    /// </summary>
+    public bool ShowNewGroupSlot => IsCardLayout && Grouping == CardGrouping.Custom;
+
+    /// <summary>
+    /// Gets the tooltip of the layout button, which says what the next click switches to.
+    /// </summary>
+    public string LayoutToggleTip => IsCardLayout ? "Switch to list" : "Switch to cards";
+
+    /// <summary>
+    /// Gets how the cards are grouped.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNewGroupSlot))]
+    public partial CardGrouping Grouping { get; private set; }
+
+    /// <summary>
+    /// Gets the grouping that was active before creating a group switched to the custom grouping automatically, or
+    /// <see langword="null"/> when no such switch is pending. The view offers to undo the switch while it is set.
+    /// </summary>
+    [ObservableProperty]
+    public partial CardGrouping? GroupingSwitchedFrom { get; private set; }
 
     /// <summary>
     /// Gets the footer chips of the data sources in use.
@@ -218,7 +298,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </returns>
     public async Task InitializeAsync()
     {
-        _market.SnapshotChanged += (_, snapshot) => _ui.Post(() => OnSnapshot(snapshot));
+        _market.SnapshotChanged += (_, snapshot) => _snapshots.Submit(snapshot);
         _market.ProviderStatusChanged += (_, _) => _ui.Post(RefreshChips);
         _settings.Changed += (_, _) => _ = ApplySettingsAsync();
         _logger.LogInformation("FluxTick started with {Count} instruments", _settings.Current.Watchlist.Count);
@@ -272,6 +352,24 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     [RelayCommand]
     public void TogglePin() => Settings.AlwaysOnTop = !Settings.AlwaysOnTop;
+
+    /// <summary>
+    /// Toggles whether the window position is locked against dragging.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleLock() => Settings.Locked = !Settings.Locked;
+
+    /// <summary>
+    /// Toggles compact mode, which hides the sparklines and makes the cards smaller.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleCompact() => Settings.Compact = !Settings.Compact;
+
+    /// <summary>
+    /// Toggles the flash of a row when its price changes.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleFlash() => Settings.FlashOnUpdate = !Settings.FlashOnUpdate;
 
     /// <summary>
     /// Requests the window that moves an instrument to another data source.
@@ -368,6 +466,344 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Moves a card to a position of a section, for example after a drag and drop in the card layout. Dropping into
+    /// a group section assigns the instrument to that group.
+    /// </summary>
+    /// <param name="row">
+    /// The row to move.
+    /// </param>
+    /// <param name="target">
+    /// The section to drop into.
+    /// </param>
+    /// <param name="indexInSection">
+    /// The zero-based position among the other cards of the target section; values past the end append the card.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the watchlist is saved.
+    /// </returns>
+    public Task MoveCardAsync(AssetRowViewModel? row, WatchSectionViewModel? target, int indexInSection) =>
+        row is null || target is null
+            ? Task.CompletedTask
+            : MoveAsync(row, target.Kind, target.AssetClass, target.GroupId, target.ProviderId, indexInSection);
+
+    /// <summary>
+    /// Moves a section to a position among the sections of its kind, for example after its header was dragged.
+    /// Only user-defined groups and asset class sections can be moved.
+    /// </summary>
+    /// <param name="section">
+    /// The section to move.
+    /// </param>
+    /// <param name="newIndex">
+    /// The zero-based target position among the sections of the same kind; values outside the list are clamped to
+    /// its ends.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the new order is saved.
+    /// </returns>
+    public Task MoveSectionAsync(WatchSectionViewModel? section, int newIndex)
+    {
+        Task task;
+        switch (section)
+        {
+            case { Kind: WatchSectionKind.Group, GroupId: { } id }:
+                task = _settings.UpdateAsync(s => WatchlistReorder.MoveGroup(s.Groups, id, newIndex));
+                break;
+            case { Kind: WatchSectionKind.Type, AssetClass: { } type }:
+                var visible = Sections.Where(s => s.Kind == WatchSectionKind.Type).Select(s => s.AssetClass!.Value).ToList();
+                task = _settings.UpdateAsync(s =>
+                {
+                    var order = s.Appearance.EffectiveTypeOrder();
+                    if (WatchlistReorder.MoveType(order, type, visible, newIndex))
+                    {
+                        s.Appearance.TypeOrder = order;
+                    }
+                });
+                break;
+            default:
+                return Task.CompletedTask;
+        }
+
+        // Show the new order right away; see MoveAsync.
+        SyncRows();
+        return task;
+    }
+
+    /// <summary>
+    /// Lists the groups an instrument can be moved to, for the "Move to group" menu.
+    /// </summary>
+    /// <param name="row">
+    /// The row that is about to be moved.
+    /// </param>
+    /// <returns>
+    /// One choice per user-defined group.
+    /// </returns>
+    public IReadOnlyList<GroupChoice> GetGroupChoices(AssetRowViewModel row) =>
+        [.. _settings.Current.Groups.Select(g => new GroupChoice(g.Id, g.Name, g.Id == row.GroupId))];
+
+    /// <summary>
+    /// Assigns an instrument to a group, placing it after the instruments already in that group.
+    /// </summary>
+    /// <param name="row">
+    /// The row to assign.
+    /// </param>
+    /// <param name="groupId">
+    /// The id of the group.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the watchlist is saved.
+    /// </returns>
+    public Task MoveToGroupAsync(AssetRowViewModel? row, string groupId) =>
+        row is null
+            ? Task.CompletedTask
+            : MoveAsync(row, WatchSectionKind.Group, null, groupId, null, int.MaxValue);
+
+    /// <summary>
+    /// Switches between the list and the card layout.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task ToggleLayoutAsync()
+    {
+        // The next layout is decided on the saved settings, not on what is shown: a click that arrives while the
+        // previous change is still being saved must flip that change, not repeat it.
+        var task = _settings.UpdateAsync(s => s.Appearance.Layout = s.Appearance.Layout == WatchlistLayout.Cards ? WatchlistLayout.List : WatchlistLayout.Cards);
+        RebuildSections();
+        return task;
+    }
+
+    /// <summary>
+    /// Sets how the watchlist is laid out and shows the result right away.
+    /// </summary>
+    /// <param name="layout">
+    /// The new layout.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task SetLayoutAsync(WatchlistLayout layout)
+    {
+        var task = _settings.UpdateAsync(s => s.Appearance.Layout = layout);
+
+        // The update publishes the new settings before it first yields, so the view can switch immediately.
+        RebuildSections();
+        return task;
+    }
+
+    /// <summary>
+    /// Sets how the cards are grouped and shows the result right away.
+    /// </summary>
+    /// <param name="grouping">
+    /// The new grouping.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task SetGroupingAsync(CardGrouping grouping)
+    {
+        // A grouping the user picked is final, so an earlier "switched automatically" hint no longer applies.
+        GroupingSwitchedFrom = null;
+        var task = _settings.UpdateAsync(s => s.Appearance.Grouping = grouping);
+        RebuildSections();
+        return task;
+    }
+
+    /// <summary>
+    /// Creates a user-defined group, optionally moves an instrument into it, and shows the groups by switching to the
+    /// custom grouping when another one is active, because the new group would not be visible otherwise.
+    /// </summary>
+    /// <param name="name">
+    /// The typed name of the group.
+    /// </param>
+    /// <param name="rowToMove">
+    /// The instrument to put into the new group, or <see langword="null"/> to create an empty group.
+    /// </param>
+    /// <returns>
+    /// The id of the new group, or <see langword="null"/> when the name is blank and nothing was created.
+    /// </returns>
+    public async Task<string?> CreateGroupAsync(string? name, AssetRowViewModel? rowToMove = null)
+    {
+        if (!WatchGroup.TryNormalizeName(name, out var clean))
+        {
+            return null;
+        }
+
+        var group = new WatchGroup { Name = clean };
+        var previous = _settings.Current.Appearance.Grouping;
+        var switched = previous != CardGrouping.Custom;
+        var task = _settings.UpdateAsync(s =>
+        {
+            s.Groups.Add(group);
+            s.Appearance.Grouping = CardGrouping.Custom;
+            if (rowToMove is not null)
+            {
+                s.Watchlist.Find(e => e.ProviderId == rowToMove.Asset.ProviderId && e.Symbol == rowToMove.Asset.Symbol)?.GroupId = group.Id;
+            }
+        });
+
+        GroupingSwitchedFrom = switched ? previous : null;
+
+        // Rows pick up their new group and the sections follow, before the settings round-trip completes.
+        SyncRows();
+        await task;
+        return group.Id;
+    }
+
+    /// <summary>
+    /// Goes back to the grouping that was active before creating a group switched to the custom grouping. The new
+    /// group stays.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task UndoGroupingSwitchAsync() =>
+        GroupingSwitchedFrom is { } previous ? SetGroupingAsync(previous) : Task.CompletedTask;
+
+    /// <summary>
+    /// Hides the hint about the automatic switch to the custom grouping without changing anything.
+    /// </summary>
+    [RelayCommand]
+    public void DismissGroupingHint() => GroupingSwitchedFrom = null;
+
+    /// <summary>
+    /// Deletes a user-defined group. Only a group without instruments is deleted, and the last group stays; nothing
+    /// happens otherwise.
+    /// </summary>
+    /// <param name="section">
+    /// The section of the group.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the change is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task DeleteGroupAsync(WatchSectionViewModel? section)
+    {
+        if (section is not { Kind: WatchSectionKind.Group, GroupId: { } id })
+        {
+            return Task.CompletedTask;
+        }
+
+        // The check is repeated on the settings themselves, so a view that is out of date cannot delete a group that
+        // received an instrument in the meantime.
+        var task = _settings.UpdateAsync(s =>
+        {
+            if (s.Groups.Count > 1 && s.Watchlist.TrueForAll(e => e.GroupId != id))
+            {
+                s.Groups.RemoveAll(g => g.Id == id);
+            }
+        });
+        RebuildSections();
+        return task;
+    }
+
+    /// <summary>
+    /// Renames a user-defined group. A blank name is rejected and the group keeps its name.
+    /// </summary>
+    /// <param name="groupId">
+    /// The id of the group.
+    /// </param>
+    /// <param name="name">
+    /// The typed new name.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the change is saved.
+    /// </returns>
+    public Task RenameGroupAsync(string groupId, string? name)
+    {
+        if (!WatchGroup.TryNormalizeName(name, out var clean))
+        {
+            // Shows the old name again where the view displayed the rejected text.
+            RebuildSections();
+            return Task.CompletedTask;
+        }
+
+        var task = _settings.UpdateAsync(s => s.Groups.Find(g => g.Id == groupId)?.Name = clean);
+        RebuildSections();
+        return task;
+    }
+
+    /// <summary>
+    /// Moves an instrument into a section of the watchlist and shows the result right away.
+    /// </summary>
+    /// <param name="row">
+    /// The row to move.
+    /// </param>
+    /// <param name="kind">
+    /// The kind of the target section.
+    /// </param>
+    /// <param name="assetClass">
+    /// The asset class of a type section.
+    /// </param>
+    /// <param name="groupId">
+    /// The group id of a group section.
+    /// </param>
+    /// <param name="providerId">
+    /// The provider id of a provider section.
+    /// </param>
+    /// <param name="index">
+    /// The position among the other members of the section.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the watchlist is saved.
+    /// </returns>
+    private Task MoveAsync(AssetRowViewModel row, WatchSectionKind kind, AssetClass? assetClass, string? groupId, string? providerId, int index)
+    {
+        var task = _settings.UpdateAsync(s =>
+        {
+            var entry = s.Watchlist.Find(e => e.ProviderId == row.Asset.ProviderId && e.Symbol == row.Asset.Symbol);
+            if (entry is null)
+            {
+                return;
+            }
+
+            Func<WatchlistEntry, bool> inSection;
+            switch (kind)
+            {
+                case WatchSectionKind.Type:
+                    if (entry.AssetClass != assetClass)
+                    {
+                        return;
+                    }
+
+                    inSection = e => e.AssetClass == assetClass;
+                    break;
+                case WatchSectionKind.Provider:
+                    // A data source is not a choice made here, so a card can only be reordered inside its own section.
+                    if (entry.ProviderId != providerId)
+                    {
+                        return;
+                    }
+
+                    inSection = e => e.ProviderId == providerId;
+                    break;
+                case WatchSectionKind.Group:
+                    if (s.Groups.TrueForAll(g => g.Id != groupId))
+                    {
+                        return;
+                    }
+
+                    entry.GroupId = groupId;
+                    inSection = e => e.GroupId == groupId;
+                    break;
+                default:
+                    inSection = _ => true;
+                    break;
+            }
+
+            WatchlistReorder.Move(s.Watchlist, entry, inSection, index);
+        });
+
+        // The update publishes the new settings before it first yields, so the cards can follow immediately
+        // instead of snapping back until the settings round-trip completes.
+        SyncRows();
+        return task;
+    }
+
+    /// <summary>
     /// Pushes the current settings into the market data service and then refreshes the rows.
     /// </summary>
     /// <returns>
@@ -402,7 +838,8 @@ public sealed partial class MainViewModel : ObservableObject
     private void SyncRows()
     {
         var snapshots = _market.GetSnapshots().ToDictionary(s => s.Asset.Id);
-        var wanted = _settings.Current.Watchlist.Select(e => e.ToAsset()).ToList();
+        var entries = _settings.Current.Watchlist;
+        var wanted = entries.Select(e => e.ToAsset()).ToList();
 
         for (var i = Rows.Count - 1; i >= 0; i--)
         {
@@ -434,13 +871,230 @@ public sealed partial class MainViewModel : ObservableObject
                 }
             }
 
+            row.GroupId = entries[i].GroupId;
+
             if (snapshots.TryGetValue(asset.Id, out var snapshot))
             {
                 row.Update(snapshot);
             }
         }
 
+        RebuildSections();
         OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    /// <summary>
+    /// Rebuilds the sections of the card layout from the rows and the layout settings. Sections and cards that
+    /// are unchanged are kept, so a rebuild caused by an unrelated setting does not recreate them.
+    /// </summary>
+    private void RebuildSections()
+    {
+        var settings = _settings.Current;
+        var appearance = settings.Appearance;
+        IsCardLayout = appearance.Layout == WatchlistLayout.Cards;
+        Grouping = appearance.Grouping;
+
+        _rebuildingSections = true;
+        try
+        {
+            var desired = new List<WatchSectionViewModel>();
+
+            // The list layout does not use sections, so no card views are created for them.
+            switch (IsCardLayout ? appearance.Grouping : (CardGrouping?)null)
+            {
+                case null:
+                    break;
+                case CardGrouping.ByType:
+                    foreach (var type in appearance.EffectiveTypeOrder())
+                    {
+                        var items = Rows.Where(r => r.Asset.AssetClass == type).ToList();
+                        if (items.Count > 0)
+                        {
+                            desired.Add(PrepareSection(WatchSectionKind.Type, type, null, type.ToString(), appearance.CollapsedTypes.Contains(type), items));
+                        }
+                    }
+
+                    break;
+                case CardGrouping.ByProvider:
+                    // Sections follow the order in which the data sources first appear on the watchlist.
+                    foreach (var providerId in Rows.Select(r => r.Asset.ProviderId).Distinct())
+                    {
+                        var items = Rows.Where(r => r.Asset.ProviderId == providerId).ToList();
+                        desired.Add(PrepareSection(WatchSectionKind.Provider, null, null, ProviderName(providerId), appearance.CollapsedProviders.Contains(providerId), items, providerId));
+                    }
+
+                    break;
+                case CardGrouping.Custom:
+                    // The settings keep every instrument in a group, so the groups cover all the rows.
+                    foreach (var group in settings.Groups)
+                    {
+                        var items = Rows.Where(r => r.GroupId == group.Id).ToList();
+                        desired.Add(PrepareSection(WatchSectionKind.Group, null, group.Id, group.Name, group.Collapsed, items));
+                    }
+
+                    break;
+                default:
+                    desired.Add(PrepareSection(WatchSectionKind.All, null, null, string.Empty, false, [.. Rows]));
+                    break;
+            }
+
+            SyncCollection(Sections, desired);
+        }
+        finally
+        {
+            _rebuildingSections = false;
+        }
+    }
+
+    /// <summary>
+    /// Finds or creates the section with the given identity and fills it.
+    /// </summary>
+    /// <param name="kind">
+    /// What the section collects.
+    /// </param>
+    /// <param name="assetClass">
+    /// The asset class of a type section.
+    /// </param>
+    /// <param name="groupId">
+    /// The group id of a group section.
+    /// </param>
+    /// <param name="title">
+    /// The header text.
+    /// </param>
+    /// <param name="collapsed">
+    /// Whether the section is collapsed.
+    /// </param>
+    /// <param name="items">
+    /// The cards of the section in display order.
+    /// </param>
+    /// <param name="providerId">
+    /// The provider id of a provider section.
+    /// </param>
+    /// <returns>
+    /// The section.
+    /// </returns>
+    private WatchSectionViewModel PrepareSection(
+        WatchSectionKind kind,
+        AssetClass? assetClass,
+        string? groupId,
+        string title,
+        bool collapsed,
+        List<AssetRowViewModel> items,
+        string? providerId = null)
+    {
+        var key = WatchSectionViewModel.KeyOf(kind, assetClass, groupId, providerId);
+        var section = Sections.FirstOrDefault(s => s.Key == key);
+        if (section is null)
+        {
+            section = new WatchSectionViewModel(kind, assetClass, groupId, providerId);
+            section.PropertyChanged += OnSectionPropertyChanged;
+        }
+
+        section.Title = title;
+        section.IsCollapsed = collapsed;
+        SyncCollection(section.Items, items);
+        section.Count = items.Count;
+        if (kind == WatchSectionKind.Group)
+        {
+            section.DeleteBlockedReason = items.Count > 0 ? "move its instruments first"
+                : _settings.Current.Groups.Count <= 1 ? "keep at least one group"
+                : string.Empty;
+        }
+
+        return section;
+    }
+
+    /// <summary>
+    /// Makes a collection hold the desired items in the desired order using as few changes as possible.
+    /// </summary>
+    /// <typeparam name="T">
+    /// The item type.
+    /// </typeparam>
+    /// <param name="target">
+    /// The collection to update.
+    /// </param>
+    /// <param name="desired">
+    /// The items it should hold.
+    /// </param>
+    private static void SyncCollection<T>(ObservableCollection<T> target, IReadOnlyList<T> desired)
+        where T : class
+    {
+        for (var i = target.Count - 1; i >= 0; i--)
+        {
+            if (!desired.Contains(target[i]))
+            {
+                target.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < desired.Count; i++)
+        {
+            var current = target.IndexOf(desired[i]);
+            if (current < 0)
+            {
+                target.Insert(i, desired[i]);
+            }
+            else if (current != i)
+            {
+                target.Move(current, i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Saves the collapsed state when the user collapses or expands a section.
+    /// </summary>
+    /// <param name="sender">
+    /// The section.
+    /// </param>
+    /// <param name="e">
+    /// The property change data.
+    /// </param>
+    private void OnSectionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_rebuildingSections && e.PropertyName == nameof(WatchSectionViewModel.IsCollapsed) && sender is WatchSectionViewModel section)
+        {
+            _ = SaveCollapsedAsync(section);
+        }
+    }
+
+    /// <summary>
+    /// Persists whether a section is collapsed.
+    /// </summary>
+    /// <param name="section">
+    /// The section whose state changed.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    private Task SaveCollapsedAsync(WatchSectionViewModel section)
+    {
+        var collapsed = section.IsCollapsed;
+        return _settings.UpdateAsync(s =>
+        {
+            switch (section.Kind)
+            {
+                case WatchSectionKind.Type when section.AssetClass is { } type:
+                    s.Appearance.CollapsedTypes.RemoveAll(t => t == type);
+                    if (collapsed)
+                    {
+                        s.Appearance.CollapsedTypes.Add(type);
+                    }
+
+                    break;
+                case WatchSectionKind.Provider when section.ProviderId is { } providerId:
+                    s.Appearance.CollapsedProviders.RemoveAll(p => p == providerId);
+                    if (collapsed)
+                    {
+                        s.Appearance.CollapsedProviders.Add(providerId);
+                    }
+
+                    break;
+                case WatchSectionKind.Group:
+                    s.Groups.Find(g => g.Id == section.GroupId)?.Collapsed = collapsed;
+                    break;
+            }
+        });
     }
 
     /// <summary>

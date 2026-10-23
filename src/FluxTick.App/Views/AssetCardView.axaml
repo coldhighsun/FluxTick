@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FluxTick.App.ViewModels"
+             xmlns:controls="using:FluxTick.App.Controls"
+             x:Class="FluxTick.App.Views.AssetCardView"
+             x:DataType="vm:AssetRowViewModel">
+
+  <!-- The size comes from the tile styles: one with the chart, a smaller one without it. -->
+  <Border Classes="tile" Classes.compact="{Binding !ShowSparkline}" Classes.dimmed="{Binding IsDimmed}" ToolTip.Tip="{Binding Tooltip}">
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+
+      <!-- Tick flash: briefly tints the card in the direction of the last move. -->
+      <Border Name="Flash" Grid.RowSpan="5" CornerRadius="6" Opacity="0" IsHitTestVisible="False" Margin="-10,-8" />
+
+      <!-- The symbol gives way (with an ellipsis) so the class chip always stays inside the card. -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center" Margin="6,0,0,0">
+          <TextBlock Text="{Binding ClassLabel}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
+        </Border>
+      </Grid>
+
+      <TextBlock Grid.Row="1" Text="{Binding Name}" Classes="muted" FontSize="10" TextTrimming="CharacterEllipsis" />
+
+      <controls:SparklineControl Grid.Row="2" Margin="0,4" MinHeight="16"
+                                 IsVisible="{Binding ShowSparkline}"
+                                 Points="{Binding Sparkline}"
+                                 Classes.up="{Binding IsUp}"
+                                 Classes.down="{Binding IsDown}" />
+
+      <!-- With the chart the change shares the price row; without it the change gets its own row below.
+           The tile styles show one of the two wrappers. -->
+      <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding PriceText}" Classes="mono" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <StackPanel Grid.Column="1" Classes="inline" VerticalAlignment="Bottom" Margin="6,0,0,1">
+          <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11" IsVisible="{Binding !HasStatus}"
+                     Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+          <TextBlock Text="{Binding StatusText}" Classes="warn" FontSize="11" IsVisible="{Binding HasStatus}" />
+        </StackPanel>
+      </Grid>
+      <StackPanel Grid.Row="4" Classes="stacked">
+        <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11" IsVisible="{Binding !HasStatus}"
+                   Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+        <TextBlock Text="{Binding StatusText}" Classes="warn" FontSize="11" IsVisible="{Binding HasStatus}" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

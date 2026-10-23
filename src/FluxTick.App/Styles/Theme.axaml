@@ -224,6 +224,38 @@
     <Setter Property="Opacity" Value="0.55" />
   </Style>
 
+  <!-- Cards of the card layout. The size is fixed: one with the chart, a smaller one without it (compact). -->
+  <Style Selector="Border.tile">
+    <Setter Property="Width" Value="176" />
+    <Setter Property="Height" Value="96" />
+    <Setter Property="Margin" Value="3" />
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  </Style>
+  <Style Selector="Border.tile.compact">
+    <Setter Property="Width" Value="140" />
+    <Setter Property="Height" Value="84" />
+  </Style>
+  <Style Selector="Border.tile:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+  <Style Selector="Border.tile.dimmed > Grid">
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
+  <Style Selector="Border.tile.compact StackPanel.inline">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Border.tile:not(.compact) StackPanel.stacked">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="UserControl.dragging Border.tile">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Opacity" Value="0.85" />
+  </Style>
+
   <Style Selector="ToggleSwitch">
     <Setter Property="OnContent" Value="" />
     <Setter Property="OffContent" Value="" />

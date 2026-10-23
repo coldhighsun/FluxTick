@@ -33,6 +33,9 @@ public sealed class AvaloniaUiDispatcher : IUiDispatcher
             Dispatcher.UIThread.Post(action);
         }
     }
+
+    /// <inheritdoc />
+    public void PostBackground(Action action) => Dispatcher.UIThread.Post(action, DispatcherPriority.Background);
 }
 
 /// <summary>
