@@ -204,6 +204,33 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies a window can be placed beyond the screen everywhere but on a Wayland session without an X11 display.
+    /// </summary>
+    /// <param name="isLinux">
+    /// Whether the system is Linux.
+    /// </param>
+    /// <param name="sessionType">
+    /// The session type.
+    /// </param>
+    /// <param name="display">
+    /// The X11 display, if any.
+    /// </param>
+    /// <param name="expected">
+    /// The expected answer.
+    /// </param>
+    [Theory]
+    [InlineData(true, "wayland", null, false)]
+    [InlineData(true, "Wayland", "", false)]
+    [InlineData(true, "wayland", ":0", true)]
+    [InlineData(true, "x11", null, true)]
+    [InlineData(true, null, null, true)]
+    [InlineData(false, "wayland", null, true)]
+    public void CanPlaceWindowsOffScreen_ByEnvironment_Decides(bool isLinux, string? sessionType, string? display, bool expected)
+    {
+        PlatformCapabilities.Evaluate(isLinux, sessionType, display).Should().Be(expected);
+    }
+
+    /// <summary>
     /// Verifies the edge auto-hide setting is persisted.
     /// </summary>
     [Fact]

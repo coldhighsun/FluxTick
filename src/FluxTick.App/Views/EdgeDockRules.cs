@@ -61,28 +61,33 @@ internal static class EdgeDockRules
     /// <param name="snap">
     /// The distance to the edge that still counts, in screen pixels.
     /// </param>
+    /// <param name="excluded">
+    /// Edges that are not used, because the platform did not keep a window beyond them.
+    /// </param>
     /// <returns>
     /// The edge; the top wins over the sides and the left over the right when the window touches several. A window that
     /// does not overlap the work area is not docked.
     /// </returns>
-    public static DockEdge DetectEdge(PixelRect window, PixelRect area, int snap)
+    public static DockEdge DetectEdge(PixelRect window, PixelRect area, int snap, IReadOnlyCollection<DockEdge>? excluded = null)
     {
         if (!window.Intersects(area))
         {
             return DockEdge.None;
         }
 
-        if (window.Y <= area.Y + snap)
+        bool Allowed(DockEdge edge) => excluded is null || !excluded.Contains(edge);
+
+        if (window.Y <= area.Y + snap && Allowed(DockEdge.Top))
         {
             return DockEdge.Top;
         }
 
-        if (window.X <= area.X + snap)
+        if (window.X <= area.X + snap && Allowed(DockEdge.Left))
         {
             return DockEdge.Left;
         }
 
-        return window.Right >= area.Right - snap ? DockEdge.Right : DockEdge.None;
+        return window.Right >= area.Right - snap && Allowed(DockEdge.Right) ? DockEdge.Right : DockEdge.None;
     }
 
     /// <summary>

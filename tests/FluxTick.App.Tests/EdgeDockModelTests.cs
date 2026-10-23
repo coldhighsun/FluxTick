@@ -228,24 +228,47 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
-    /// A window the platform did not keep beyond the screen ends the dock and turns edge hiding off, even when it is
-    /// switched on again.
+    /// An edge the platform did not keep the window beyond ends the dock and is not used again, while the others stay.
     /// </summary>
     [Fact]
-    public void MarkUnsupported_AfterDocking_EndsTheDockAndStaysOff()
+    public void Refuse_OneEdge_SkipsItAndKeepsTheOthers()
     {
         var model = new EdgeDockModel();
         model.SetEnabled(true);
-        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.Settle(new PixelRect(2, 42, 340, 420), Area, [], 8, 4);
+        model.Edge.Should().Be(DockEdge.Top);
         model.SetHidden(true);
 
-        model.MarkUnsupported();
-        model.SetEnabled(true);
+        model.Refuse(DockEdge.Top);
 
-        model.Enabled.Should().BeFalse();
-        model.Supported.Should().BeFalse();
         model.IsDocked.Should().BeFalse();
         model.Hidden.Should().BeFalse();
+        model.Available.Should().BeTrue();
+        model.Enabled.Should().BeTrue();
+        model.Settle(new PixelRect(2, 42, 340, 420), Area, [], 8, 4).Should().Be(new PixelPoint(0, 42));
+        model.Edge.Should().Be(DockEdge.Left);
+    }
+
+    /// <summary>
+    /// Once every edge was refused edge hiding is unavailable, and that is announced once.
+    /// </summary>
+    [Fact]
+    public void Refuse_EveryEdge_MakesEdgeHidingUnavailableAndRaisesTheEvent()
+    {
+        var model = new EdgeDockModel();
+        model.SetEnabled(true);
+        var raised = 0;
+        model.AvailabilityChanged += (_, _) => raised++;
+
+        model.Refuse(DockEdge.Top);
+        model.Refuse(DockEdge.Left);
+        raised.Should().Be(0);
+        model.Refuse(DockEdge.Right);
+        model.Refuse(DockEdge.Right);
+
+        model.Available.Should().BeFalse();
+        model.Enabled.Should().BeFalse();
+        raised.Should().Be(1);
     }
 
     /// <summary>

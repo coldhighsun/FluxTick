@@ -218,6 +218,7 @@ public sealed partial class MainWindow : Window
             _observed.Settings.PropertyChanged += OnLayoutPropertyChanged;
         }
 
+        FollowAvailability();
         ApplyAutoHide();
         base.OnDataContextChanged(e);
     }

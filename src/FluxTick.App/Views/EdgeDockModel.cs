@@ -66,6 +66,16 @@ internal sealed class EdgeDockModel(bool supported = true)
     public bool Hidden { get; private set; }
 
     /// <summary>
+    /// The number of edges a window can dock to.
+    /// </summary>
+    private const int AllEdges = 3;
+
+    /// <summary>
+    /// The edges beyond which the platform did not keep the window.
+    /// </summary>
+    private readonly HashSet<DockEdge> _refused = [];
+
+    /// <summary>
     /// Whether the settings ask for edge hiding.
     /// </summary>
     private bool _wanted;
@@ -80,13 +90,24 @@ internal sealed class EdgeDockModel(bool supported = true)
     /// Gets a value indicating whether edge hiding is on: the settings ask for it, the window stays above others, and
     /// the platform can place a window beyond the screen.
     /// </summary>
-    public bool Enabled => _wanted && Supported;
+    public bool Enabled => _wanted && Available;
 
     /// <summary>
-    /// Gets a value indicating whether the platform keeps a window beyond the screen where it is sent. It is known
-    /// from the platform up front, and it stops being the case once a window was not kept there.
+    /// Gets a value indicating whether the platform lets a window be placed beyond the screen, as far as it is known
+    /// up front.
     /// </summary>
-    public bool Supported { get; private set; } = supported;
+    public bool Supported { get; } = supported;
+
+    /// <summary>
+    /// Gets a value indicating whether edge hiding can work at all: the platform supports it and at least one edge was
+    /// not refused. This is the one place that knows, and <see cref="AvailabilityChanged"/> tells when it changes.
+    /// </summary>
+    public bool Available => Supported && _refused.Count < AllEdges;
+
+    /// <summary>
+    /// Raised when <see cref="Available"/> changes.
+    /// </summary>
+    public event EventHandler? AvailabilityChanged;
 
     /// <summary>
     /// Gets a value indicating whether the window moves by itself, so that the changes of position it causes are not
@@ -171,13 +192,22 @@ internal sealed class EdgeDockModel(bool supported = true)
     public bool IsUserMove(PixelPoint position) => Enabled && !Sliding && position != Expected;
 
     /// <summary>
-    /// Turns edge hiding off for good, because the platform did not keep the window beyond the screen where it was
-    /// sent. The window is in plain sight then, so the dock ends.
+    /// Stops using an edge, because the platform did not keep the window beyond it where it was sent; some systems
+    /// refuse one edge, such as the top one, and keep the others. The window is in plain sight then, so the dock ends.
+    /// Edge hiding is off once every edge was refused.
     /// </summary>
-    public void MarkUnsupported()
+    /// <param name="edge">
+    /// The edge the window was sent beyond.
+    /// </param>
+    public void Refuse(DockEdge edge)
     {
-        Supported = false;
+        var was = Available;
+        _refused.Add(edge);
         Reset();
+        if (was != Available)
+        {
+            AvailabilityChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>
@@ -286,7 +316,7 @@ internal sealed class EdgeDockModel(bool supported = true)
             return null;
         }
 
-        var edge = EdgeDockRules.DetectEdge(window, area, snap);
+        var edge = EdgeDockRules.DetectEdge(window, area, snap, _refused);
         if (edge != DockEdge.None)
         {
             var hidden = new PixelRect(EdgeDockRules.HiddenPosition(window, area, edge, sliver), window.Size);
