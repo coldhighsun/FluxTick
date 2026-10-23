@@ -52,9 +52,17 @@ public static class AutoStartCommand
     /// <returns>
     /// <see langword="true"/> when the path can be registered to start the app.
     /// </returns>
-    public static bool IsApplicationPath(string? processPath) =>
-        !string.IsNullOrEmpty(processPath)
-        && !string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet", StringComparison.OrdinalIgnoreCase);
+    public static bool IsApplicationPath(string? processPath)
+    {
+        if (string.IsNullOrEmpty(processPath))
+        {
+            return false;
+        }
+
+        // Both separators are cut, as Path would only know the ones of the platform the code runs on.
+        var file = processPath[(processPath.LastIndexOfAny(['\\', '/']) + 1)..];
+        return !string.Equals(Path.GetFileNameWithoutExtension(file), "dotnet", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Builds the registry value that starts the executable; the path is quoted because it may contain spaces.
