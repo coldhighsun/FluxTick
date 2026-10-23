@@ -31,7 +31,7 @@ commodities side by side, from the data sources *you* choose.
   cards can be dragged to reorder them or to move them between your groups. The layout and the grouping switch
   from the header, and new groups are created right where you are working.
 - **Live prices**: optional tick flash on every change (off by default, turn it on in Settings), 60-minute sparklines, change vs. previous close / 24h open.
-- **Floating widget**: borderless, translucent, always on top, draggable, resizable, lockable; hides to the tray.
+- **Floating widget**: borderless, translucent, always on top, draggable, resizable, lockable; can hide at a screen edge and hides to the tray.
 - **You pick the data source**: enable or disable sources, tune their options and choose the default source per
   asset class in **Settings**. Move any instrument to another source with **Change data source…**.
 - **Honest about data quality**: rows show `Stale`, `Reconnecting`, `Source off` instead of silently showing old prices.
@@ -102,6 +102,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Group cards | In card layout the header's grouping button (or the right-click menu of the empty area, or Settings → Appearance → *Card grouping*) picks *No grouping*, *By type*, *By data source* or *Custom groups*; click a group header to collapse or expand it, press and drag a type or custom group header to reorder the groups |
 | Custom groups | A *Default* group exists from the start and new instruments join the first group. Create a group from the grouping button → *New group…*, from the right-click menu of the empty area, from a card's right-click menu (*Move to new group…* puts that card into it), or from the dashed *New group* placeholder below the last group, which also accepts a dragged card. Double-click a group header to rename it, or right-click it for *Rename…* and *Delete group*; a group can be deleted there only while it has no instruments and is not the last group (an empty group also shows a *Delete group* link). Creating a group while another grouping is active switches to *Custom groups*; an *Undo* hint offers to switch back. Reorder groups by pressing and dragging them in Settings → Groups, where you can also delete them (there, deleting a group moves its instruments to the first remaining one); right-click a card → *Move to group*, or drag the card onto a group |
 | Price flash | Off by default; turn *Flash on price change* on in the right-click menu of the empty area, or in Settings → Appearance |
+| Edge auto-hide | Off by default; turn *Auto-hide at screen edge* on in Settings → Appearance. Drop the window at the left, right or top edge of the screen and it slides away, leaving a thin strip; point at the strip to bring it back, move away and it hides again |
 | Hide / show | **×** hides to the tray; click the tray icon to bring it back; *Exit* in the tray menu quits |
 
 Settings and logs live in `%APPDATA%\FluxTick` on Windows and `~/.config/FluxTick` on Linux and macOS.
