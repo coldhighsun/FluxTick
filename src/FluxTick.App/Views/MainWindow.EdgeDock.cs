@@ -68,6 +68,17 @@ public sealed partial class MainWindow
     private IDisposable? _dockScreens;
 
     /// <summary>
+    /// A slide that was asked for while the screens were still changing and waits for them: <see langword="true"/>
+    /// to hide, <see langword="false"/> to bring out.
+    /// </summary>
+    private bool? _dockSlideAfterScreens;
+
+    /// <summary>
+    /// The settings that follow <see cref="EdgeDockModel.Available"/>.
+    /// </summary>
+    private SettingsViewModel? _dockSettings;
+
+    /// <summary>
     /// The wait for the pointer to stay away, or <see langword="null"/> when none is pending.
     /// </summary>
     private IDisposable? _dockLeave;
@@ -129,6 +140,39 @@ public sealed partial class MainWindow
         _dockStarted = true;
         Screens.Changed += OnScreensChanged;
         ApplyAutoHide();
+    }
+
+    /// <summary>
+    /// Makes the settings follow whether edge hiding can work, now and when that changes.
+    /// </summary>
+    private void FollowAvailability()
+    {
+        _dock.AvailabilityChanged -= OnDockAvailabilityChanged;
+        _dockSettings = (DataContext as MainViewModel)?.Settings;
+        if (_dockSettings is null)
+        {
+            return;
+        }
+
+        _dockSettings.AutoHideAvailable = _dock.Available;
+        _dock.AvailabilityChanged += OnDockAvailabilityChanged;
+    }
+
+    /// <summary>
+    /// Tells the settings that edge hiding became unavailable.
+    /// </summary>
+    /// <param name="sender">
+    /// The dock model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnDockAvailabilityChanged(object? sender, EventArgs e)
+    {
+        if (_dockSettings is not null)
+        {
+            _dockSettings.AutoHideAvailable = _dock.Available;
+        }
     }
 
     /// <summary>
@@ -221,7 +265,12 @@ public sealed partial class MainWindow
             () =>
             {
                 _dockScreens = null;
-                EnsureDockArea();
+                var slide = _dockSlideAfterScreens;
+                _dockSlideAfterScreens = null;
+                if (EnsureDockArea() && slide is { } hide)
+                {
+                    SlideDock(hide);
+                }
             },
             DockScreensDelay);
     }
@@ -369,6 +418,13 @@ public sealed partial class MainWindow
     /// </param>
     private void SlideDock(bool hide)
     {
+        // A target computed from a list of screens that is still changing may lie on a screen that is gone.
+        if (_dockScreens is not null)
+        {
+            _dockSlideAfterScreens = hide;
+            return;
+        }
+
         if (!EnsureDockArea())
         {
             return;
@@ -445,14 +501,9 @@ public sealed partial class MainWindow
                 if (Math.Abs(Position.X - target.X) > tolerance || Math.Abs(Position.Y - target.Y) > tolerance)
                 {
                     // The window is in plain sight or stranded beyond the edge, so it goes back to where it is shown
-                    // before edge hiding is turned off, here and in the settings.
+                    // before the edge is given up.
                     var shown = _dock.ShownPosition(CurrentPixelBounds());
-                    _dock.MarkUnsupported();
-                    if (DataContext is MainViewModel viewModel)
-                    {
-                        viewModel.Settings.AutoHideAvailable = false;
-                    }
-
+                    _dock.Refuse(_dock.Edge);
                     MoveDock(shown);
                     RaiseGeometryChanged();
                 }
