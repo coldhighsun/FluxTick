@@ -1,5 +1,6 @@
 using System.Net;
 using FluxTick.Abstractions;
+using FluxTick.Providers.Common;
 using Microsoft.Extensions.Logging;
 
 namespace FluxTick.Providers.Yahoo;
@@ -53,10 +54,7 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)
     {
-        var configured = context.Options.GetString(BaseUrlKey);
-        var baseUri = Uri.TryCreate(configured, UriKind.Absolute, out var uri)
-            ? uri
-            : new Uri(Descriptor.OptionDefinitions.First(o => o.Key == BaseUrlKey).DefaultValue);
+        var baseUri = EndpointOptions.GetHttpUri(context.Options, Descriptor, BaseUrlKey);
 
         var handler = new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All };
         var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };

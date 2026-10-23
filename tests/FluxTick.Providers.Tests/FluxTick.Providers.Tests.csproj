@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FluxTick.Providers.Binance\FluxTick.Providers.Binance.csproj" />
     <ProjectReference Include="..\..\src\FluxTick.Providers.Yahoo\FluxTick.Providers.Yahoo.csproj" />
+    <ProjectReference Include="..\..\src\FluxTick.Providers.Common\FluxTick.Providers.Common.csproj" />
     <ProjectReference Include="..\..\src\FluxTick.Providers.Simulated\FluxTick.Providers.Simulated.csproj" />
   </ItemGroup>
 
