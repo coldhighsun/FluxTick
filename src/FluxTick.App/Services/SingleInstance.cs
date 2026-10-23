@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Pipes;
 
 namespace FluxTick.App.Services;
@@ -114,20 +115,39 @@ public sealed class SingleInstance : IDisposable
     /// </returns>
     public static bool NotifyRunning(string name)
     {
-        try
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed < NotifyTimeout)
         {
-            using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut);
-            client.Connect((int)NotifyTimeout.TotalMilliseconds);
+            var remaining = NotifyTimeout - clock.Elapsed;
+            try
+            {
+                using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut);
+                client.Connect((int)remaining.TotalMilliseconds);
 
-            // Wait for the running copy to say it took the request: a client that leaves right after connecting can
-            // make the server's accept fail, and the request would be lost.
-            using var timeout = new CancellationTokenSource(NotifyTimeout);
-            return client.ReadAsync(new byte[1], timeout.Token).AsTask().GetAwaiter().GetResult() == 1;
+                // Wait for the running copy to say it took the request: a client that leaves right after connecting can
+                // make the server's accept fail, and the request would be lost.
+                using var timeout = new CancellationTokenSource(NotifyTimeout - clock.Elapsed);
+                if (client.ReadAsync(new byte[1], timeout.Token).AsTask().GetAwaiter().GetResult() == 1)
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or UnauthorizedAccessException or ArgumentException)
+            {
+                // Nobody answers in time, or the pipe cannot be used at all: asking again would not help.
+                return false;
+            }
+            catch (IOException)
+            {
+                // The connection broke; see below.
+            }
+
+            // The connection ended without an answer, as happens when it was made to a copy of the listener that was
+            // just finishing the previous request. The next listener is ready in a moment, so ask again.
+            Thread.Sleep(50);
         }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or OperationCanceledException or ArgumentException)
-        {
-            return false;
-        }
+
+        return false;
     }
 
     /// <summary>
