@@ -187,6 +187,20 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies the edge auto-hide setting is persisted.
+    /// </summary>
+    [Fact]
+    public async Task AutoHideAtEdge_Toggled_Persists()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+
+        h.Main.Settings.AutoHideAtEdge = true;
+
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.AutoHideAtEdge);
+    }
+
+    /// <summary>
     /// Verifies the flash setting reaches existing rows and is persisted.
     /// </summary>
     [Fact]

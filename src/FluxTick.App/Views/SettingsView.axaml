@@ -68,6 +68,13 @@
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Auto-hide at screen edge" />
+                    <TextBlock Text="Drag the window to the left, right or top edge; point at the edge to bring it back" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Up / down colors" />
                     <TextBlock Text="Auto: red-up for Chinese UI" Classes="muted" FontSize="11" />
                   </StackPanel>

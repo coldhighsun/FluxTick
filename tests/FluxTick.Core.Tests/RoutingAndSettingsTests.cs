@@ -134,6 +134,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Routing[AssetClass.Equity] = ["a", "b"];
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.FlashOnUpdate = true;
+        settings.Appearance.AutoHideAtEdge = true;
         settings.Appearance.Layout = WatchlistLayout.Cards;
         settings.Appearance.Grouping = CardGrouping.Custom;
         settings.Appearance.CollapsedTypes.Add(AssetClass.Forex);
@@ -150,6 +151,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Routing[AssetClass.Equity].Should().Equal("a", "b");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.FlashOnUpdate.Should().BeTrue();
+        loaded.Appearance.AutoHideAtEdge.Should().BeTrue();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
         loaded.Appearance.Grouping.Should().Be(CardGrouping.Custom);
         loaded.Appearance.CollapsedTypes.Should().Equal(AssetClass.Forex);
@@ -193,6 +195,23 @@ public sealed class RoutingAndSettingsTests : IDisposable
         new AppSettings().Appearance.FlashOnUpdate.Should().BeFalse();
         loaded!.Appearance.Opacity.Should().Be(0.8);
         loaded.Appearance.FlashOnUpdate.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the edge auto-hide defaults to off, including for a settings file written before the option existed.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithoutAutoHideKey_DefaultsToAutoHideOff()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "appearance": { "opacity": 0.8 } }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var loaded = await store.LoadAsync();
+
+        new AppSettings().Appearance.AutoHideAtEdge.Should().BeFalse();
+        loaded!.Appearance.AutoHideAtEdge.Should().BeFalse();
     }
 
     /// <summary>
