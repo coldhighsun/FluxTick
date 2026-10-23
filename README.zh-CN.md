@@ -102,7 +102,7 @@ dotnet publish src/FluxTick.App -c Release -r win-x64 -o publish
 | 卡片分组 | 卡片布局下，点击标题栏的分组按钮（或在空白处右键，或设置 → 外观 → *Card grouping*）可选 *No grouping*（不分组）、*By type*（按类型）、*By data source*（按数据源）或 *Custom groups*（自定义分组）；点击分组标题可折叠 / 展开，按住类型分组或自定义分组的标题拖动可调整分组顺序 |
 | 自定义分组 | 一开始就有一个 *Default* 分组，新添加的品种进入第一个分组。新建分组的入口：分组按钮 → *New group…*、空白处右键菜单、卡片右键菜单（*Move to new group…* 会把这张卡放进新分组）、最后一个分组下方的虚线 *New group* 占位（也可以把卡片拖到它上面）。双击分组标题可就地改名；右键分组标题可选 *Rename…*（重命名）和 *Delete group*（删除分组），只有没有品种、且不是最后一个的分组才能在这里删除（空分组下方也有 *Delete group* 链接）。在其他分组方式下新建分组会自动切到 *Custom groups*，并出现 *Undo*（撤销）提示可切回去。在设置 → Groups 中可以按住分组拖动排序，也可以删除分组（在那里删除分组，其品种会移入剩余的第一个分组）；右键卡片选 *Move to group*，或直接把卡片拖到分组里 |
 | 价格闪烁 | 默认关闭；在空白处右键菜单，或设置 → 外观中开启 *Flash on price change* |
-| 贴边自动隐藏 | 默认开启；可在设置 → 外观中关闭 *Auto-hide at screen edge*。把窗口拖到屏幕左、右或上边缘后会滑出屏幕，只留一条细边；鼠标靠近细边时窗口滑出，移开后再次隐藏 |
+| 贴边自动隐藏 | 默认开启；可在设置 → 外观中关闭 *Auto-hide at screen edge*（需要保持窗口置顶）。把窗口拖到屏幕左、右或上边缘后会滑出屏幕，只留一条细边；鼠标靠近细边时窗口滑出，移开后再次隐藏 |
 | 隐藏 / 显示 | 点击 **×** 隐藏到托盘；点击托盘图标重新显示；托盘菜单中的*退出*用于关闭程序 |
 
 设置和日志保存在 Windows 的 `%APPDATA%\FluxTick`，以及 Linux 和 macOS 的 `~/.config/FluxTick`。

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -50,14 +49,9 @@ public sealed partial class MainWindow : Window
     private MainViewModel? _observed;
 
     /// <summary>
-    /// Steps the width animation; created on first use.
+    /// Steps the width animation.
     /// </summary>
-    private DispatcherTimer? _widthTimer;
-
-    /// <summary>
-    /// The handler of the current width animation, kept so it can be detached before the next one starts.
-    /// </summary>
-    private EventHandler _widthStep = (_, _) => { };
+    private readonly StepAnimation _widthAnimation = new();
 
     /// <summary>
     /// The width limits the window has now, so that a change that leaves them as they are does not move the window.
@@ -148,7 +142,12 @@ public sealed partial class MainWindow : Window
     {
         if (IsVisible)
         {
-            Hide();
+            // A window that rests at its edge is still visible, but what the user asks for is to see it.
+            if (!RevealDocked())
+            {
+                Hide();
+            }
+
             return;
         }
 
@@ -244,7 +243,7 @@ public sealed partial class MainWindow : Window
         {
             ApplyWidthRule();
         }
-        else if (e.PropertyName == nameof(SettingsViewModel.AutoHideAtEdge))
+        else if (e.PropertyName is nameof(SettingsViewModel.AutoHideAtEdge) or nameof(SettingsViewModel.AlwaysOnTop))
         {
             ApplyAutoHide();
         }
@@ -267,7 +266,10 @@ public sealed partial class MainWindow : Window
 
         _appliedRule = rule;
         var target = WindowWidthRules.TargetWidth(layout, compact, _cardsWidth);
-        _widthTimer?.Stop();
+        _widthAnimation.Stop();
+
+        // The width rules keep the window on the screen, which would pull a hidden window half way out.
+        EndDockHiding();
         var current = IsVisible ? ClientSize.Width : Width;
 
         // Lift the limits first, so that neither the old nor the new ones get in the way of the change.
@@ -313,22 +315,14 @@ public sealed partial class MainWindow : Window
         }
 
         var top = Position.Y;
-        var clock = Stopwatch.StartNew();
-        _widthTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(15) };
-        _widthTimer.Tick -= _widthStep;
-        _widthStep = (_, _) =>
-        {
-            var progress = clock.Elapsed / WindowWidthRules.AnimationDuration;
-            Width = WindowWidthRules.Animate(from, to, progress);
-            Position = new PixelPoint((int)Math.Round(WindowWidthRules.Animate(startLeft, endLeft, progress)), top);
-            if (progress >= 1)
+        _widthAnimation.Run(
+            WindowWidthRules.AnimationDuration,
+            progress =>
             {
-                _widthTimer.Stop();
-                FinishWidthChange(rule);
-            }
-        };
-        _widthTimer.Tick += _widthStep;
-        _widthTimer.Start();
+                Width = WindowWidthRules.Animate(from, to, progress);
+                Position = new PixelPoint((int)Math.Round(WindowWidthRules.Animate(startLeft, endLeft, progress)), top);
+            },
+            () => FinishWidthChange(rule));
     }
 
     /// <summary>
@@ -473,7 +467,18 @@ public sealed partial class MainWindow : Window
         var locked = (DataContext as MainViewModel)?.Settings.Locked == true;
         if (!locked && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            BeginMoveDrag(e);
+            // Where the system runs the drag inside this call it returns when the button is released; elsewhere it
+            // returns at once, and the wait for the position to settle has to do.
+            _moving = true;
+            try
+            {
+                BeginMoveDrag(e);
+            }
+            finally
+            {
+                _moving = false;
+                ScheduleDockSettle();
+            }
         }
     }
 
@@ -546,7 +551,7 @@ public sealed partial class MainWindow : Window
     {
         // A window that slides or rests beyond its edge would be saved off the screen; the position it is shown at
         // is the one that is remembered.
-        if (_dockSliding || _dockHidden)
+        if (_dockSliding || _dock.Hidden)
         {
             return;
         }
