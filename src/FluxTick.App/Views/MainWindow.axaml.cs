@@ -78,7 +78,14 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Width = WindowWidthRules.ListWidthWithChart;
         MinWidth = WindowWidthRules.CardsMinWidth;
-        PositionChanged += (_, _) => RaiseGeometryChanged();
+        PositionChanged += (_, _) =>
+        {
+            RaiseGeometryChanged();
+            if (!_dockSliding)
+            {
+                ScheduleDockSettle();
+            }
+        };
         Resized += OnResized;
         if (GroupButton.Flyout is MenuFlyout groupFlyout)
         {
@@ -147,6 +154,7 @@ public sealed partial class MainWindow : Window
 
         Show();
         Activate();
+        RevealDocked();
     }
 
     /// <summary>
@@ -191,6 +199,7 @@ public sealed partial class MainWindow : Window
             _observed.Settings.PropertyChanged += OnLayoutPropertyChanged;
         }
 
+        ApplyAutoHide();
         base.OnDataContextChanged(e);
     }
 
@@ -234,6 +243,10 @@ public sealed partial class MainWindow : Window
         if (e.PropertyName is nameof(MainViewModel.IsCardLayout) or nameof(SettingsViewModel.Compact))
         {
             ApplyWidthRule();
+        }
+        else if (e.PropertyName == nameof(SettingsViewModel.AutoHideAtEdge))
+        {
+            ApplyAutoHide();
         }
     }
 
@@ -529,8 +542,17 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Raises <see cref="GeometryChanged"/> with the current geometry.
     /// </summary>
-    private void RaiseGeometryChanged() =>
+    private void RaiseGeometryChanged()
+    {
+        // A window that slides or rests beyond its edge would be saved off the screen; the position it is shown at
+        // is the one that is remembered.
+        if (_dockSliding || _dockHidden)
+        {
+            return;
+        }
+
         GeometryChanged?.Invoke(this, new WindowGeometry(Position.X, Position.Y, _cardsWidth, Height));
+    }
 
     /// <summary>
     /// Determines whether a point lies on any connected screen.

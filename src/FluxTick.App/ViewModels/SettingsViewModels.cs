@@ -742,6 +742,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool FlashOnUpdate { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the window hides at a screen edge and slides out on hover.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool AutoHideAtEdge { get; set; }
+
+    /// <summary>
     /// Gets or sets the color convention.
     /// </summary>
     [ObservableProperty]
@@ -779,6 +785,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             Compact = current.Appearance.Compact;
             Locked = current.Appearance.Locked;
             FlashOnUpdate = current.Appearance.FlashOnUpdate;
+            AutoHideAtEdge = current.Appearance.AutoHideAtEdge;
             SelectedColorConvention = current.Appearance.ColorConvention;
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
@@ -834,6 +841,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// The new value.
     /// </param>
     partial void OnFlashOnUpdateChanged(bool value) => SaveAppearance(s => s.Appearance.FlashOnUpdate = value);
+
+    /// <summary>
+    /// Saves the edge auto-hide setting.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnAutoHideAtEdgeChanged(bool value) => SaveAppearance(s => s.Appearance.AutoHideAtEdge = value);
 
     /// <summary>
     /// Saves the locked flag.

@@ -86,7 +86,7 @@
       <!-- Footer: data source status and resize grip -->
       <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="14,2,4,6">
         <!-- Chips that do not fit are replaced by a "+N" badge; clicking the status opens the full list. -->
-        <Button Classes="status" AutomationProperties.Name="Data source status">
+        <Button Name="StatusButton" Classes="status" AutomationProperties.Name="Data source status">
           <Button.Flyout>
             <Flyout Placement="TopEdgeAlignedLeft" FlyoutPresenterClasses="status">
               <Border Classes="card" Margin="0,0,0,4" MaxWidth="300">
