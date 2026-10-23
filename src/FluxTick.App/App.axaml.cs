@@ -103,6 +103,8 @@ public sealed partial class App : Application
             Task.Run(() => _settings.LoadAsync(DefaultSettings.Create(demo))).GetAwaiter().GetResult();
             CleanUpOptionsAtDefault(_services.GetRequiredService<ProviderRegistry>().Descriptors);
 
+            RefreshAutoStartEntry();
+
             // The theme must be requested before the window exists, and before the ActualThemeVariantChanged
             // subscription below: the first ApplyPalette() then builds the brushes for the final variant once.
             ApplyLanguage();
@@ -112,7 +114,14 @@ public sealed partial class App : Application
             _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
             _window.RestoreGeometry(_settings.Current.Window);
             _window.GeometryChanged += OnGeometryChanged;
-            desktop.MainWindow = _window;
+            if (TrayPolicy.StartHidden(_settings.Current.General, desktop.Args ?? [], () => HasTrayIcon))
+            {
+                ShowFromTrayLater(desktop, _window);
+            }
+            else
+            {
+                desktop.MainWindow = _window;
+            }
 
             ActualThemeVariantChanged += (_, _) => ApplyPalette();
             _settings.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -126,8 +135,26 @@ public sealed partial class App : Application
             desktop.Exit += (_, _) =>
             {
                 IsExiting = true;
+
+                // A move or resize in the last moments is still waiting for its quiet period; save it now.
+                try
+                {
+                    _geometrySave?.FlushAsync().GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    // Nothing can be done about a failed save now, and the services below must still be shut down.
+                    _services.GetService<ILogger<App>>()?.LogWarning(ex, "Could not save the window position on exit");
+                }
+
                 _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
             };
+
+            if (Program.Instance is { } instance)
+            {
+                instance.Activated += (_, _) => Dispatcher.UIThread.Post(ActivateWindow);
+                instance.StartListening();
+            }
 
             _updates = _services.GetRequiredService<UpdateService>();
             _updates.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyUpdateTray);
@@ -137,6 +164,62 @@ public sealed partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether closing the main window hides it to the tray. It does unless the user turned that
+    /// off, and always when there is no tray icon to bring the window back from.
+    /// </summary>
+    public bool CloseToTray => _settings is null || TrayPolicy.CloseHidesWindow(_settings.Current.General, () => HasTrayIcon);
+
+    /// <summary>
+    /// Whether the desktop was found to show tray icons. Only a positive answer is kept: at sign-in the tray host may
+    /// start after this app, so a negative answer is asked again the next time it matters.
+    /// </summary>
+    private bool _trayShown;
+
+    /// <summary>
+    /// Gets a value indicating whether the tray icon exists and the desktop shows it.
+    /// </summary>
+    private bool HasTrayIcon => TrayIcon.GetIcons(this)?.Count > 0 && (_trayShown || (_trayShown = TrayAvailability.Detect()));
+
+    /// <summary>
+    /// Starts without showing the window: the app runs without a main window until the window is first shown from the
+    /// tray, and only then becomes the main window that ends the app when it closes.
+    /// </summary>
+    /// <param name="desktop">
+    /// The desktop lifetime.
+    /// </param>
+    /// <param name="window">
+    /// The main window.
+    /// </param>
+    private static void ShowFromTrayLater(IClassicDesktopStyleApplicationLifetime desktop, MainWindow window)
+    {
+        desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        void OnOpened(object? sender, EventArgs e)
+        {
+            window.Opened -= OnOpened;
+            desktop.MainWindow = window;
+            desktop.ShutdownMode = ShutdownMode.OnLastWindowClose;
+        }
+
+        window.Opened += OnOpened;
+    }
+
+    /// <summary>
+    /// Points the start at sign-in entry at this executable when the one it names is gone, which happens when the app was
+    /// moved. An entry that names another copy that still exists is left as the user set it.
+    /// </summary>
+    private void RefreshAutoStartEntry()
+    {
+        try
+        {
+            _services!.GetRequiredService<IAutoStartService>().RepairIfMoved();
+        }
+        catch (Exception)
+        {
+            // The service has logged the reason; starting the app does not depend on it.
+        }
     }
 
     /// <summary>
@@ -295,6 +378,15 @@ public sealed partial class App : Application
     /// The event data.
     /// </param>
     private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowAbout());
+
+    /// <summary>
+    /// Brings the main window forward when another copy of the app was started, showing it first when it is hidden.
+    /// </summary>
+    private void ActivateWindow()
+    {
+        ShowFromTray(_ => { });
+        _window?.Activate();
+    }
 
     /// <summary>
     /// Shows the main window when it is hidden, and then opens a tool window on it.

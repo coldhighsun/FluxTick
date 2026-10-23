@@ -178,14 +178,15 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Hides the window to the tray instead of closing it, unless the application is exiting.
+    /// Hides the window to the tray instead of closing it, unless the application is exiting or the user chose that
+    /// closing the window exits.
     /// </summary>
     /// <param name="e">
     /// The closing event data.
     /// </param>
     protected override void OnClosing(WindowClosingEventArgs e)
     {
-        if (Application.Current is App { IsExiting: false })
+        if (Application.Current is App { IsExiting: false, CloseToTray: true })
         {
             e.Cancel = true;
             Hide();

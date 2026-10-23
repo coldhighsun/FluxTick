@@ -17,6 +17,64 @@
   <Grid RowDefinitions="*,Auto" Margin="0,10,0,0">
     <TabControl Grid.Row="0" Classes="settings">
 
+      <TabItem Header="{loc:T Settings_TabGeneral}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="14,10,14,4">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_Language}" />
+                    <TextBlock Text="{loc:T Settings_LanguageHint}" Classes="muted" FontSize="11" />
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" Width="140" />
+                </Grid>
+                <!-- Only Windows can register the app to start at sign-in. -->
+                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsAutoStartSupported}">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_LaunchAtLogin}" />
+                    <TextBlock Text="{loc:T Settings_LaunchAtLoginHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding LaunchAtLogin}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_StartMinimized}" />
+                    <TextBlock Text="{loc:T Settings_StartMinimizedHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding StartMinimized}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_CloseToTray}" />
+                    <TextBlock Text="{loc:T Settings_CloseToTrayHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{loc:T Settings_KeepOnTop}" VerticalAlignment="Center" />
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{loc:T Settings_LockPosition}" VerticalAlignment="Center" />
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_AutoHide}" />
+                    <TextBlock Text="{loc:T Settings_AutoHideHint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                               IsVisible="{Binding AutoHideAvailable}" />
+                    <TextBlock Text="{loc:T Settings_AutoHideUnavailable}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                               IsVisible="{Binding !AutoHideAvailable}" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsVisible="{Binding AutoHideAvailable}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
       <TabItem Header="{loc:T Settings_TabAppearance}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
@@ -26,10 +84,6 @@
                   <TextBlock Text="{loc:T Settings_Opacity}" VerticalAlignment="Center" />
                   <Slider Grid.Column="1" Minimum="0.3" Maximum="1" Value="{Binding Opacity}" Margin="12,0" />
                   <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat={}{0:P0}}" Classes="muted mono" VerticalAlignment="Center" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto">
-                  <TextBlock Text="{loc:T Settings_KeepOnTop}" VerticalAlignment="Center" />
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
@@ -58,32 +112,11 @@
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding FlashOnUpdate}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
-                  <TextBlock Text="{loc:T Settings_LockPosition}" VerticalAlignment="Center" />
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto">
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_AutoHide}" />
-                    <TextBlock Text="{loc:T Settings_AutoHideHint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
-                               IsVisible="{Binding AutoHideAvailable}" />
-                    <TextBlock Text="{loc:T Settings_AutoHideUnavailable}" Classes="muted" FontSize="11" TextWrapping="Wrap"
-                               IsVisible="{Binding !AutoHideAvailable}" />
-                  </StackPanel>
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsVisible="{Binding AutoHideAvailable}" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Theme}" />
                     <TextBlock Text="{loc:T Settings_ThemeHint}" Classes="muted" FontSize="11" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" Width="140" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto">
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_Language}" />
-                    <TextBlock Text="{loc:T Settings_LanguageHint}" Classes="muted" FontSize="11" />
-                  </StackPanel>
-                  <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" Width="140" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">

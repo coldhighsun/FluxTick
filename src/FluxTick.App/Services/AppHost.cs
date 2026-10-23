@@ -77,6 +77,17 @@ public static class AppHost
         services.AddMarketDataProvider<SimulatedProviderFactory>();
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
+
+        // The entry lives in the machine-wide registry, which the isolated demo mode must not touch.
+        if (OperatingSystem.IsWindows() && !demo)
+        {
+            services.AddSingleton<IAutoStartService, WindowsAutoStartService>();
+        }
+        else
+        {
+            services.AddSingleton<IAutoStartService, NullAutoStartService>();
+        }
+
         services.AddSingleton(sp => new UpdateService(
             AppPaths.UpdateStateFile,
             sp.GetRequiredService<ILogger<UpdateService>>(),

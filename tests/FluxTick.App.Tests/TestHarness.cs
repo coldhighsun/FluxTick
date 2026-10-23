@@ -200,7 +200,10 @@ public sealed class Harness : IAsyncDisposable
     /// <param name="settings">
     /// The initial settings; defaults to an empty watchlist.
     /// </param>
-    public Harness(AppSettings? settings = null)
+    /// <param name="autoStart">
+    /// The start at sign-in registration; defaults to none.
+    /// </param>
+    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null)
     {
         CryptoFactory = new FakeFactory(Crypto, [AssetClass.Crypto]);
         StocksFactory = new FakeFactory(Stocks, [AssetClass.Equity, AssetClass.Index]);
@@ -213,7 +216,7 @@ public sealed class Harness : IAsyncDisposable
         Market = new MarketDataService(registry, NullLoggerFactory.Instance, Time);
         var ui = new InlineDispatcher();
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
-        SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time);
+        SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time, autoStart: autoStart);
         Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, NullLogger<MainViewModel>.Instance);
     }
 
