@@ -35,7 +35,7 @@ jobs:
         run: dotnet test --solution FluxTick.slnx -c Release
 
       - name: Publish single-file, self-contained build
-        run: dotnet publish src/FluxTick.App -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
+        run: dotnet publish src/FluxTick.App -c Release -r ${{ matrix.rid }} -p:OfficialBuild=true -o publish/${{ matrix.rid }}
 
       - name: Package
         shell: bash

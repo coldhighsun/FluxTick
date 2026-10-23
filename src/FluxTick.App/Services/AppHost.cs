@@ -77,6 +77,13 @@ public static class AppHost
         services.AddMarketDataProvider<SimulatedProviderFactory>();
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
+        services.AddSingleton(sp => new UpdateService(
+            AppPaths.UpdateStateFile,
+            sp.GetRequiredService<ILogger<UpdateService>>(),
+            UpdateService.ReadVersion(typeof(AppHost).Assembly),
+            UpdateService.ReadOfficialBuild(typeof(AppHost).Assembly),
+            AppPaths.UpdatesDirectory));
+        services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<AddAssetViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<MainViewModel>();

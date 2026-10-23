@@ -13,7 +13,17 @@
   <PropertyGroup>
     <MinVerTagPrefix>v</MinVerTagPrefix>
     <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+    <!-- The release workflow sets this. Only official builds look for updates by themselves: the version of any other
+         build, such as one from a commit after the last tag, is below every release. -->
+    <OfficialBuild Condition="'$(OfficialBuild)' == ''">false</OfficialBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>OfficialBuild</_Parameter1>
+      <_Parameter2>$(OfficialBuild)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <PublishSingleFile>true</PublishSingleFile>
@@ -35,6 +45,7 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="GitHubReleaseUpdater" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="MinVer" />
