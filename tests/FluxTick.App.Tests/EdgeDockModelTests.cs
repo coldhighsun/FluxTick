@@ -228,22 +228,82 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
-    /// After the platform did not keep the window where it was sent, edge hiding stays off, even when it is switched on.
+    /// A window the platform did not keep beyond the screen ends the dock, and the second miss in a row turns edge
+    /// hiding off even when it is switched on again.
     /// </summary>
     [Fact]
-    public void MarkUnsupported_ThenSetEnabled_StaysOff()
+    public void RecordPlacement_MissedTwice_StaysOff()
     {
         var model = new EdgeDockModel();
         model.SetEnabled(true);
         model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
         model.SetHidden(true);
 
-        model.MarkUnsupported();
-        model.SetEnabled(true);
+        model.RecordPlacement(honored: false);
 
-        model.Enabled.Should().BeFalse();
         model.IsDocked.Should().BeFalse();
         model.Hidden.Should().BeFalse();
+        model.Supported.Should().BeTrue();
+        model.SetEnabled(true);
+        model.Enabled.Should().BeTrue();
+
+        model.RecordPlacement(honored: false);
+
+        model.Supported.Should().BeFalse();
+        model.SetEnabled(true);
+        model.Enabled.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// One miss is forgiven when the window was kept beyond the screen in between.
+    /// </summary>
+    [Fact]
+    public void RecordPlacement_MissThenHonored_KeepsEdgeHidingOn()
+    {
+        var model = new EdgeDockModel();
+        model.SetEnabled(true);
+
+        model.RecordPlacement(honored: false);
+        model.RecordPlacement(honored: true);
+        model.RecordPlacement(honored: false);
+
+        model.Supported.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The tray icon shows and hides a window that is not docked, and slides a docked one out and in.
+    /// </summary>
+    [Fact]
+    public void ToggleFromTray_ByDockState_PicksTheAction()
+    {
+        var model = new EdgeDockModel();
+        model.ToggleFromTray(visible: false).Should().Be(TrayToggle.Show);
+        model.ToggleFromTray(visible: true).Should().Be(TrayToggle.Hide);
+
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.ToggleFromTray(visible: true).Should().Be(TrayToggle.SlideIn);
+
+        model.SetHidden(true);
+        model.ToggleFromTray(visible: true).Should().Be(TrayToggle.SlideOut);
+        model.ToggleFromTray(visible: false).Should().Be(TrayToggle.Show);
+    }
+
+    /// <summary>
+    /// The wait to hide starts again only for a shown, docked window that the pointer is not on.
+    /// </summary>
+    [Fact]
+    public void ShouldResumeLeave_ByWindowState_DecidesToWait()
+    {
+        var model = new EdgeDockModel();
+        model.ShouldResumeLeave(visible: true, pointerOver: false).Should().BeFalse();
+
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.ShouldResumeLeave(visible: true, pointerOver: false).Should().BeTrue();
+        model.ShouldResumeLeave(visible: true, pointerOver: true).Should().BeFalse();
+        model.ShouldResumeLeave(visible: false, pointerOver: false).Should().BeFalse();
+
+        model.SetHidden(true);
+        model.ShouldResumeLeave(visible: true, pointerOver: false).Should().BeFalse();
     }
 
     /// <summary>
