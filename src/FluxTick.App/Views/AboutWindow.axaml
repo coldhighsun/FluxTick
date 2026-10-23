@@ -28,11 +28,11 @@
             <TextBlock Text="{loc:T About_License}" VerticalAlignment="Center" />
             <TextBlock Grid.Column="1" Text="{Binding License}" Classes="muted" VerticalAlignment="Center" />
           </Grid>
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="{loc:T About_Homepage}" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Classes="link" Content="{Binding HomepageUrl}" Click="OnHomepageClick"
-                    HorizontalAlignment="Right" VerticalAlignment="Center" />
-          </Grid>
+          <StackPanel Spacing="2">
+            <TextBlock Text="{loc:T About_Homepage}" />
+            <Button Classes="link" Content="{Binding HomepageUrl}" Click="OnHomepageClick"
+                    HorizontalAlignment="Left" />
+          </StackPanel>
         </StackPanel>
       </Border>
       <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="10"
