@@ -16,8 +16,9 @@
 实时数字、迷你走势图和置顶悬浮窗口；股票、加密货币、外汇、指数与大宗商品并列展示，数据源由*你*自己选择。
 
 <p align="center">
-  <img src="docs/images/main.png" alt="FluxTick 自选列表" width="300" />
-  <img src="docs/images/settings.png" alt="FluxTick 设置" width="300" />
+  <img src="docs/images/main.png" alt="FluxTick 自选列表" width="250" />
+  <img src="docs/images/settings.png" alt="FluxTick 设置" width="250" />
+  <img src="docs/images/add.png" alt="FluxTick 添加品种" width="250" />
 </p>
 
 > 截图使用内置的模拟数据源（`--demo`）。
