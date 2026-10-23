@@ -42,7 +42,15 @@
 | --- | --- | --- | --- |
 | **Binance** | 加密货币现货交易对 | WebSocket 推送（约 1 秒） | 无需 API Key。如果所在网络无法访问 `binance.com`，请在设置中把端点改为 `wss://data-stream.binance.vision/ws` 和 `https://data-api.binance.vision`。 |
 | **Yahoo Finance** | 股票、ETF、指数、外汇、期货 | 轮询（默认 5 秒） | 非官方 API，可能被限流、延迟，或在没有通知的情况下变更。无需 API Key。 |
+| **Tencent Finance（腾讯财经）** | A 股、港股、美股、ETF、指数 | 轮询（默认 5 秒） | 非官方 API，可能存在延迟，或在没有通知的情况下变更。无需 API Key。支持按名称、代码或拼音搜索。分时历史（走势图回填）仅覆盖 A 股和港股，美股的走势图只能由实时报价逐步填充。默认关闭。 |
+| **OKX** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
+| **Coinbase** | 加密货币现货交易对 | WebSocket 推送 | Coinbase Exchange。无需 API Key。默认关闭。 |
+| **Kraken** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
+| **Bybit** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。部分地区无法访问。默认关闭。 |
 | **Simulated（模拟）** | 任意品种 | 本地随机游走 | 用于演示、截图和离线开发。默认关闭。 |
+
+默认关闭的数据源请在**设置 → 数据源**中启用。要显示其中的品种，可以在*添加品种*窗口中选择它，
+或在*路由*标签页中把它设为某类资产的默认数据源。
 
 > 行情数据可能存在延迟或误差，**不构成投资建议**。FluxTick 与任何数据提供方均无关联，
 > 请遵守各数据提供方的使用条款。
@@ -94,8 +102,14 @@ dotnet publish src/FluxTick.App -c Release -r win-x64 -o publish
 ```
 src/FluxTick.Abstractions        稳定的数据源契约（数据源只需引用它）
 src/FluxTick.Core                数据源注册、路由、行情聚合、走势序列、设置
+src/FluxTick.Providers.Common    数据源共用的辅助代码（WebSocket 循环、符号搜索）
 src/FluxTick.Providers.Binance   Binance WebSocket 数据源
+src/FluxTick.Providers.Okx       OKX WebSocket 数据源
+src/FluxTick.Providers.Coinbase  Coinbase WebSocket 数据源
+src/FluxTick.Providers.Kraken    Kraken WebSocket 数据源
+src/FluxTick.Providers.Bybit     Bybit WebSocket 数据源
 src/FluxTick.Providers.Yahoo     Yahoo Finance 轮询数据源
+src/FluxTick.Providers.Tencent   腾讯财经轮询数据源
 src/FluxTick.Providers.Simulated 确定性的演示数据源
 src/FluxTick.App                 Avalonia 桌面应用（FluxTick.exe），组合根
 tests/                           xUnit v3 + AwesomeAssertions
