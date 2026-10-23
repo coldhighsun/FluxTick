@@ -194,9 +194,31 @@ internal sealed class LoopbackServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Abruptly ends the current connection without a closing handshake.
+    /// Ends the current connection from the server side. The server first sends a close frame, because aborting the
+    /// socket alone does not reliably close the underlying connection of the managed <see cref="HttpListener"/> on
+    /// Linux and macOS, which left the client waiting for a keep-alive timeout.
     /// </summary>
-    public void DropCurrentConnection() => _current?.Abort();
+    public void DropCurrentConnection()
+    {
+        var socket = _current;
+        if (socket is null)
+        {
+            return;
+        }
+
+        try
+        {
+            socket.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, "drop", CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
+        {
+            // The connection was already gone.
+        }
+
+        socket.Abort();
+    }
 
     /// <summary>
     /// Waits until a message was received at least once.
