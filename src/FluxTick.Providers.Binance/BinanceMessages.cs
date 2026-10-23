@@ -1,6 +1,6 @@
-using System.Globalization;
 using System.Text.Json;
 using FluxTick.Abstractions;
+using FluxTick.Providers.Common;
 
 namespace FluxTick.Providers.Binance;
 
@@ -77,12 +77,12 @@ internal static class BinanceMessages
             return false;
         }
 
-        if (!TryParseDecimal(close, out var price))
+        if (!JsonValues.TryGetDecimal(close, out var price))
         {
             return false;
         }
 
-        decimal? reference = root.TryGetProperty("o", out var open) && TryParseDecimal(open, out var openPrice) ? openPrice : null;
+        decimal? reference = JsonValues.TryGetPositiveDecimal(root, "o", out var openPrice) ? openPrice : null;
         quote = new Quote(
             new AssetId(providerId, symbol.GetString()!),
             price,
@@ -106,7 +106,7 @@ internal static class BinanceMessages
         var points = new List<PricePoint>();
         foreach (var kline in document.RootElement.EnumerateArray())
         {
-            if (kline.GetArrayLength() > 4 && TryParseDecimal(kline[4], out var close))
+            if (kline.GetArrayLength() > 4 && JsonValues.TryGetDecimal(kline[4], out var close))
             {
                 points.Add(new PricePoint(DateTimeOffset.FromUnixTimeMilliseconds(kline[0].GetInt64()), close));
             }
@@ -131,27 +131,5 @@ internal static class BinanceMessages
             .EnumerateArray()
             .Select(e => e.GetProperty("symbol").GetString()!)
             .ToArray();
-    }
-
-    /// <summary>
-    /// Parses a decimal that Binance transmits as a JSON string.
-    /// </summary>
-    /// <param name="element">
-    /// The JSON element.
-    /// </param>
-    /// <param name="value">
-    /// The parsed value.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> when parsing succeeded.
-    /// </returns>
-    private static bool TryParseDecimal(JsonElement element, out decimal value)
-    {
-        if (element.ValueKind == JsonValueKind.Number)
-        {
-            return element.TryGetDecimal(out value);
-        }
-
-        return decimal.TryParse(element.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 }

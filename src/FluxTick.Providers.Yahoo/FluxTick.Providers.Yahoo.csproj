@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FluxTick.Abstractions\FluxTick.Abstractions.csproj" />
+    <ProjectReference Include="..\FluxTick.Providers.Common\FluxTick.Providers.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -100,4 +100,17 @@ public class BinanceMessagesTests
     {
         BinanceProvider.DisplayNameOf(symbol).Should().Be(expected);
     }
+
+    /// <summary>
+    /// Verifies a zero 24h open is dropped instead of being used as a reference price.
+    /// </summary>
+    [Fact]
+    public void TryParseMiniTicker_ZeroOpen_HasNoReference()
+    {
+        var json = MiniTicker.Replace("\"o\":\"66000.00\"", "\"o\":\"0\"", StringComparison.Ordinal);
+
+        BinanceMessages.TryParseMiniTicker(json, "binance", out var quote).Should().BeTrue();
+
+        quote.Reference.Should().BeNull();
+    }
 }

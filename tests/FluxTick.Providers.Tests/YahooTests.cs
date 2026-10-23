@@ -101,7 +101,29 @@ public class YahooTests
         quotes.Select(q => q.AssetId.Symbol).Should().BeEquivalentTo(["AAPL", "MSFT"]);
         handler.Requests.Select(r => r.RequestUri!.AbsolutePath).Should().BeEquivalentTo(
             ["/v8/finance/chart/AAPL", "/v8/finance/chart/MSFT"]);
-        provider.Status.State.Should().Be(ProviderConnectionState.Connected);
+        // The status is reported after the cycle returns, which can be after the quotes were read.
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+    }
+
+    /// <summary>
+    /// Verifies an endpoint with a path keeps its prefix in the request.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_EndpointWithPath_KeepsItsPrefix()
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        await using var provider = new YahooProvider(
+            new YahooProviderFactory().Descriptor,
+            new Uri("https://proxy.example.test/yahoo/"),
+            TimeSpan.FromSeconds(5),
+            new HttpClient(handler),
+            new FakeTimeProvider(),
+            NullLogger.Instance);
+
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await ReadAsync(provider, 1);
+
+        handler.Requests.Select(r => r.RequestUri!.AbsolutePath).Should().Equal("/yahoo/v8/finance/chart/AAPL");
     }
 
     /// <summary>
@@ -137,12 +159,20 @@ public class YahooTests
         await EventuallyAsync(() => handler.Requests.Count == 1);
         await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Reconnecting);
 
-        time.Advance(TimeSpan.FromSeconds(6));
-        await Task.Delay(200);
-        handler.Requests.Should().HaveCount(1, "the delay doubled to 10 seconds");
+        // Stepping the clock until the next request shows how long the provider waited, whenever its timer was registered.
+        var start = time.GetUtcNow();
+        await EventuallyAsync(() =>
+        {
+            if (handler.Requests.Count == 2)
+            {
+                return true;
+            }
 
-        time.Advance(TimeSpan.FromSeconds(5));
-        await EventuallyAsync(() => handler.Requests.Count == 2);
+            time.Advance(TimeSpan.FromSeconds(1));
+            return false;
+        });
+
+        (time.GetUtcNow() - start).Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(10), "the 5 second delay doubled");
     }
 
     /// <summary>
@@ -156,14 +186,19 @@ public class YahooTests
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Aapl]);
-        for (var cycle = 1; cycle <= 3; cycle++)
-        {
-            await EventuallyAsync(() => handler.Requests.Count == cycle);
-            await Task.Delay(100);
-            time.Advance(TimeSpan.FromSeconds(5));
-        }
 
-        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Failed);
+        // Advancing in steps until the status flips does not depend on the loop having registered its timer already,
+        // which a fixed sleep before a single advance does under load.
+        await EventuallyAsync(() =>
+        {
+            if (provider.Status.State == ProviderConnectionState.Failed)
+            {
+                return true;
+            }
+
+            time.Advance(TimeSpan.FromSeconds(5));
+            return false;
+        });
     }
 
     /// <summary>
