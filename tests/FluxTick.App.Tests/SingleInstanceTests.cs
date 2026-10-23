@@ -9,6 +9,15 @@ namespace FluxTick.App.Tests;
 public sealed class SingleInstanceTests
 {
     /// <summary>
+    /// Makes a name no other test or app uses. It is short, because on macOS the name becomes part of a socket path that
+    /// may hold only 104 characters, after a long temp directory.
+    /// </summary>
+    /// <returns>
+    /// The name.
+    /// </returns>
+    private static string TestName() => $"ft-{Guid.NewGuid():N}"[..11];
+
+    /// <summary>
     /// Verifies the demo mode excludes only other demo copies.
     /// </summary>
     [Fact]
@@ -28,7 +37,7 @@ public sealed class SingleInstanceTests
     [Fact]
     public void TryAcquire_WhileRunning_RefusesSecondCopy()
     {
-        var name = $"FluxTick-test-{Guid.NewGuid():N}";
+        var name = TestName();
         using var first = SingleInstance.TryAcquire(name);
 
         first.Should().NotBeNull();
@@ -45,7 +54,7 @@ public sealed class SingleInstanceTests
     [Fact]
     public void NotifyRunning_FirstListening_RaisesActivated()
     {
-        var name = $"FluxTick-test-{Guid.NewGuid():N}";
+        var name = TestName();
         using var first = SingleInstance.TryAcquire(name);
         using var activated = new ManualResetEventSlim();
         first!.Activated += (_, _) => activated.Set();
@@ -58,9 +67,28 @@ public sealed class SingleInstanceTests
     }
 
     /// <summary>
+    /// Verifies several requests in a row are all served, as the listener takes one connection after the other.
+    /// </summary>
+    [Fact]
+    public void NotifyRunning_Repeated_RaisesActivatedEachTime()
+    {
+        var name = TestName();
+        using var first = SingleInstance.TryAcquire(name);
+        var count = 0;
+        first!.Activated += (_, _) => Interlocked.Increment(ref count);
+        first.StartListening();
+
+        SingleInstance.NotifyRunning(name).Should().BeTrue();
+        SingleInstance.NotifyRunning(name).Should().BeTrue();
+        SingleInstance.NotifyRunning(name).Should().BeTrue();
+
+        Volatile.Read(ref count).Should().Be(3);
+    }
+
+    /// <summary>
     /// Verifies asking fails quickly when no copy listens.
     /// </summary>
     [Fact]
     public void NotifyRunning_NobodyListening_ReturnsFalse() =>
-        SingleInstance.NotifyRunning($"FluxTick-test-{Guid.NewGuid():N}").Should().BeFalse();
+        SingleInstance.NotifyRunning(TestName()).Should().BeFalse();
 }

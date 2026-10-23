@@ -80,7 +80,7 @@ public sealed class SingleInstance : IDisposable
     /// A short lowercase hexadecimal string that is the same for the same user name.
     /// </returns>
     private static string HashOf(string userName) =>
-        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(userName)))[..16];
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(userName)))[..12];
 
     /// <summary>
     /// Tries to become the only running copy.
@@ -116,11 +116,15 @@ public sealed class SingleInstance : IDisposable
     {
         try
         {
-            using var client = new NamedPipeClientStream(".", name, PipeDirection.Out);
+            using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut);
             client.Connect((int)NotifyTimeout.TotalMilliseconds);
-            return true;
+
+            // Wait for the running copy to say it took the request: a client that leaves right after connecting can
+            // make the server's accept fail, and the request would be lost.
+            using var timeout = new CancellationTokenSource(NotifyTimeout);
+            return client.ReadAsync(new byte[1], timeout.Token).AsTask().GetAwaiter().GetResult() == 1;
         }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or OperationCanceledException or ArgumentException)
         {
             return false;
         }
@@ -164,6 +168,31 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>
+    /// Tells the client its request was taken, and waits for the client to leave so that the answer is not cut off.
+    /// </summary>
+    /// <param name="server">
+    /// The connected pipe.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the client left or the wait timed out.
+    /// </returns>
+    private async Task AcknowledgeAsync(NamedPipeServerStream server)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+            timeout.CancelAfter(NotifyTimeout);
+            await server.WriteAsync(new byte[] { 1 }, timeout.Token);
+            await server.FlushAsync(timeout.Token);
+            await server.ReadAtLeastAsync(new byte[1], 1, throwOnEndOfStream: false, timeout.Token);
+        }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException)
+        {
+            // The client left early or never read the answer; the request was raised already.
+        }
+    }
+
+    /// <summary>
     /// Accepts one connection after the other and raises <see cref="Activated"/> for each.
     /// </summary>
     /// <returns>
@@ -175,12 +204,19 @@ public sealed class SingleInstance : IDisposable
         {
             try
             {
-                await using var server = new NamedPipeServerStream(_name, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await using var server = new NamedPipeServerStream(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 await server.WaitForConnectionAsync(_stop.Token);
                 Activated?.Invoke(this, EventArgs.Empty);
+                await AcknowledgeAsync(server);
             }
             catch (OperationCanceledException)
             {
+                return;
+            }
+            catch (ArgumentException)
+            {
+                // The name cannot be used for a pipe on this platform (for instance, it makes the socket path too long);
+                // a second copy then cannot reach this one, but this one keeps running.
                 return;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
