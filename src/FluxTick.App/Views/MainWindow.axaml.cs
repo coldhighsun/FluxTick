@@ -75,7 +75,7 @@ public sealed partial class MainWindow : Window
         PositionChanged += (_, _) =>
         {
             RaiseGeometryChanged();
-            if (!_dockSliding)
+            if (_dock.IsUserMove(Position))
             {
                 ScheduleDockSettle();
             }
@@ -128,9 +128,20 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        Position = DefaultPosition();
+    }
+
+    /// <summary>
+    /// Gets the place the window has when it has no usable saved position: the top-right corner of the primary screen.
+    /// </summary>
+    /// <returns>
+    /// The top-left position of the window.
+    /// </returns>
+    private PixelPoint DefaultPosition()
+    {
         var area = Screens.Primary?.WorkingArea ?? new PixelRect(0, 0, 1280, 720);
         var scale = Screens.Primary?.Scaling ?? 1;
-        Position = new PixelPoint(
+        return new PixelPoint(
             area.Right - (int)(Width * scale) - ScreenMargin,
             area.Y + ScreenMargin);
     }
@@ -432,6 +443,7 @@ public sealed partial class MainWindow : Window
             _toolWindow = null;
             viewModel.EndToolWindow();
             onClosed?.Invoke();
+            ResumeDockLeave();
         }
 
         _toolWindow = window;
@@ -469,14 +481,14 @@ public sealed partial class MainWindow : Window
         {
             // Where the system runs the drag inside this call it returns when the button is released; elsewhere it
             // returns at once, and the wait for the position to settle has to do.
-            _moving = true;
+            _dock.SetMoving(true);
             try
             {
                 BeginMoveDrag(e);
             }
             finally
             {
-                _moving = false;
+                _dock.SetMoving(false);
                 ScheduleDockSettle();
             }
         }
@@ -551,7 +563,7 @@ public sealed partial class MainWindow : Window
     {
         // A window that slides or rests beyond its edge would be saved off the screen; the position it is shown at
         // is the one that is remembered.
-        if (_dockSliding || _dock.Hidden)
+        if (_dock.SuppressesGeometry)
         {
             return;
         }

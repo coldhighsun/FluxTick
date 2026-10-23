@@ -46,6 +46,46 @@ internal sealed class EdgeDockModel
     public PixelRect Area { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether edge hiding is on: the setting is on, the window stays above others and the
+    /// platform can place a window beyond the screen.
+    /// </summary>
+    public bool Enabled { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the platform kept the window where it was sent. It is not the case on systems
+    /// that do not let a window leave the screen, and then edge hiding stays off for good.
+    /// </summary>
+    public bool Supported { get; private set; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether the window moves by itself, so that the changes of position it causes are not
+    /// taken for the user's.
+    /// </summary>
+    public bool Sliding { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the user is dragging the window by its header.
+    /// </summary>
+    public bool Moving { get; private set; }
+
+    /// <summary>
+    /// Gets the position the window was last sent to. A move that ends there is the window's own, even when the
+    /// system reports it after the slide is over.
+    /// </summary>
+    public PixelPoint? Expected { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether a docking decision may be taken now.
+    /// </summary>
+    public bool CanSettle => Enabled && !Sliding && !Moving;
+
+    /// <summary>
+    /// Gets a value indicating whether the geometry should not be saved: a window that slides or rests beyond its edge
+    /// would be saved off the screen, and the position it is shown at is the one that is remembered.
+    /// </summary>
+    public bool SuppressesGeometry => Sliding || Hidden;
+
+    /// <summary>
     /// Gets a value indicating whether the window is docked to an edge.
     /// </summary>
     public bool IsDocked => Edge != DockEdge.None;
@@ -54,6 +94,100 @@ internal sealed class EdgeDockModel
     /// Gets a value indicating whether the pointer leaving the window should start the wait to hide it.
     /// </summary>
     public bool ShouldWaitToHide => IsDocked && !Hidden;
+
+    /// <summary>
+    /// Turns edge hiding on or off. It stays off once the platform turned out not to support it.
+    /// </summary>
+    /// <param name="on">
+    /// Whether the settings ask for edge hiding.
+    /// </param>
+    public void SetEnabled(bool on) => Enabled = on && Supported;
+
+    /// <summary>
+    /// Records that the user started or stopped dragging the window by its header.
+    /// </summary>
+    /// <param name="moving">
+    /// <see langword="true"/> while the drag lasts.
+    /// </param>
+    public void SetMoving(bool moving) => Moving = moving;
+
+    /// <summary>
+    /// Records that the window starts moving by itself to a position.
+    /// </summary>
+    /// <param name="target">
+    /// The position it is sent to.
+    /// </param>
+    public void BeginSlide(PixelPoint target)
+    {
+        Sliding = true;
+        Expected = target;
+    }
+
+    /// <summary>
+    /// Records that the window stopped moving by itself.
+    /// </summary>
+    public void EndSlide() => Sliding = false;
+
+    /// <summary>
+    /// Determines whether a change of position is the user's, so that the window has to settle again.
+    /// </summary>
+    /// <param name="position">
+    /// The position the window has now.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when edge hiding is on and the window did not move by itself.
+    /// </returns>
+    public bool IsUserMove(PixelPoint position) => Enabled && !Sliding && position != Expected;
+
+    /// <summary>
+    /// Turns edge hiding off for good, because the platform did not keep the window where it was sent.
+    /// </summary>
+    public void MarkUnsupported()
+    {
+        Supported = false;
+        Enabled = false;
+        Reset();
+    }
+
+    /// <summary>
+    /// Keeps the remembered work area in step with the screens that exist now.
+    /// </summary>
+    /// <param name="workAreas">
+    /// The work areas of all screens.
+    /// </param>
+    /// <returns>
+    /// <see langword="false"/> when the screen the window was docked to is gone and the dock cannot be kept; otherwise
+    /// <see langword="true"/>, with the area replaced by the one that took its place when it changed, for example
+    /// because the taskbar moved.
+    /// </returns>
+    public bool Rebase(IReadOnlyList<PixelRect> workAreas)
+    {
+        if (workAreas.Count == 0 || workAreas.Contains(Area))
+        {
+            return true;
+        }
+
+        PixelRect? best = null;
+        long bestShare = 0;
+        foreach (var candidate in workAreas)
+        {
+            var overlap = candidate.Intersect(Area);
+            var share = (long)overlap.Width * overlap.Height;
+            if (share > bestShare)
+            {
+                best = candidate;
+                bestShare = share;
+            }
+        }
+
+        if (best is null)
+        {
+            return false;
+        }
+
+        Area = best.Value;
+        return true;
+    }
 
     /// <summary>
     /// Takes in where the window came to rest and decides whether it is docked there. A hidden window does not change.

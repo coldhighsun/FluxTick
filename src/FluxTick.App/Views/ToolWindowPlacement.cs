@@ -64,5 +64,5 @@ public static class ToolWindowPlacement
     /// <returns>
     /// The clamped value.
     /// </returns>
-    private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(value, max));
+    internal static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(value, max));
 }
