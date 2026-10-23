@@ -167,9 +167,10 @@ public sealed partial class MainWindow : Window
                 Activate();
                 break;
             case TrayToggle.SlideIn:
-                // Hiding the window to the tray closes the tool window; sliding it away does the same, so one is not
-                // left open beside a window that is gone.
+                // Hiding the window to the tray closes the tool window; sliding it away does the same, so none is left
+                // open beside a window that is gone, and neither is a menu or pop-up.
                 _toolWindow?.Close();
+                CloseDockPopups();
                 SlideDock(hide: true);
                 break;
         }
