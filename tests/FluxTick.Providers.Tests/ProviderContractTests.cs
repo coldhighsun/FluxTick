@@ -1,6 +1,11 @@
 using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
+using FluxTick.Providers.Bybit;
+using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.Kraken;
+using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
+using FluxTick.Providers.Tencent;
 using FluxTick.Providers.Yahoo;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -114,3 +119,28 @@ public sealed class BinanceProviderContractTests : ProviderContractTests<Binance
 /// Contract tests for the Yahoo provider.
 /// </summary>
 public sealed class YahooProviderContractTests : ProviderContractTests<YahooProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Tencent provider.
+/// </summary>
+public sealed class TencentProviderContractTests : ProviderContractTests<TencentProviderFactory>;
+
+/// <summary>
+/// Contract tests for the OKX provider.
+/// </summary>
+public sealed class OkxProviderContractTests : ProviderContractTests<OkxProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Coinbase provider.
+/// </summary>
+public sealed class CoinbaseProviderContractTests : ProviderContractTests<CoinbaseProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Kraken provider.
+/// </summary>
+public sealed class KrakenProviderContractTests : ProviderContractTests<KrakenProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Bybit provider.
+/// </summary>
+public sealed class BybitProviderContractTests : ProviderContractTests<BybitProviderFactory>;

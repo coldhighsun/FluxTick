@@ -3,7 +3,12 @@ using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 using FluxTick.Core.Infrastructure;
 using FluxTick.Providers.Binance;
+using FluxTick.Providers.Bybit;
+using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.Kraken;
+using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
+using FluxTick.Providers.Tencent;
 using FluxTick.Providers.Yahoo;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -61,6 +66,11 @@ public static class AppHost
         // Data sources: add one line per provider. Nothing else in the app needs to change.
         services.AddMarketDataProvider<BinanceProviderFactory>();
         services.AddMarketDataProvider<YahooProviderFactory>();
+        services.AddMarketDataProvider<TencentProviderFactory>();
+        services.AddMarketDataProvider<OkxProviderFactory>();
+        services.AddMarketDataProvider<CoinbaseProviderFactory>();
+        services.AddMarketDataProvider<KrakenProviderFactory>();
+        services.AddMarketDataProvider<BybitProviderFactory>();
         services.AddMarketDataProvider<SimulatedProviderFactory>();
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
