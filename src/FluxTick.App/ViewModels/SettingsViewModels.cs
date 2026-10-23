@@ -687,6 +687,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     private bool _loading;
 
     /// <summary>
+    /// The start at sign-in registration, or <see langword="null"/> when the platform has none.
+    /// </summary>
+    private readonly IAutoStartService? _autoStart;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
     /// </summary>
     /// <param name="settings">
@@ -710,6 +715,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="updates">
     /// The update section, or <see langword="null"/> when the page has none.
     /// </param>
+    /// <param name="autoStart">
+    /// The start at sign-in registration, or <see langword="null"/> when the platform has none.
+    /// </param>
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
@@ -717,10 +725,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         MarketDataService market,
         IUiDispatcher ui,
         TimeProvider timeProvider,
-        UpdateViewModel? updates = null)
+        UpdateViewModel? updates = null,
+        IAutoStartService? autoStart = null)
         : base(ui)
     {
         _settings = settings;
+        _autoStart = autoStart;
         Updates = updates;
         _router = router;
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
@@ -797,6 +807,29 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the routing rows, one per asset class.
     /// </summary>
     public ObservableCollection<RoutingRowViewModel> Routing { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the platform can start the app at sign-in.
+    /// </summary>
+    public bool IsAutoStartSupported => _autoStart?.IsSupported == true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the app starts when the user signs in.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool LaunchAtLogin { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the app starts hidden in the tray.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool StartMinimized { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether closing the window hides it to the tray instead of exiting.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CloseToTray { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the background opacity between 0.3 and 1.
@@ -886,6 +919,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         try
         {
             var current = _settings.Current;
+
+            // The system's entry is the only record; it is not saved to the settings file, as the user may remove it in
+            // the system settings.
+            LaunchAtLogin = IsAutoStartSupported && _autoStart!.IsEnabled();
+            StartMinimized = current.General.StartMinimized;
+            CloseToTray = current.General.CloseToTray;
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Compact = current.Appearance.Compact;
@@ -927,12 +966,60 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     }
 
     /// <summary>
+    /// Registers or unregisters the start at sign-in. When the system refuses, the switch goes back.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnLaunchAtLoginChanged(bool value)
+    {
+        if (_loading || !IsAutoStartSupported)
+        {
+            return;
+        }
+
+        try
+        {
+            _autoStart!.SetEnabled(value);
+        }
+        catch (Exception)
+        {
+            // The service has logged the reason.
+            _loading = true;
+            try
+            {
+                LaunchAtLogin = !value;
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Saves the start-minimized flag.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnStartMinimizedChanged(bool value) => SaveSetting(s => s.General.StartMinimized = value);
+
+    /// <summary>
+    /// Saves the close-to-tray flag.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnCloseToTrayChanged(bool value) => SaveSetting(s => s.General.CloseToTray = value);
+
+    /// <summary>
     /// Saves the always-on-top flag.
     /// </summary>
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnAlwaysOnTopChanged(bool value) => SaveAppearance(s => s.Appearance.AlwaysOnTop = value);
+    partial void OnAlwaysOnTopChanged(bool value) => SaveSetting(s => s.Appearance.AlwaysOnTop = value);
 
     /// <summary>
     /// Saves the compact flag.
@@ -940,7 +1027,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnCompactChanged(bool value) => SaveAppearance(s => s.Appearance.Compact = value);
+    partial void OnCompactChanged(bool value) => SaveSetting(s => s.Appearance.Compact = value);
 
     /// <summary>
     /// Saves the flash-on-update flag.
@@ -948,7 +1035,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnFlashOnUpdateChanged(bool value) => SaveAppearance(s => s.Appearance.FlashOnUpdate = value);
+    partial void OnFlashOnUpdateChanged(bool value) => SaveSetting(s => s.Appearance.FlashOnUpdate = value);
 
     /// <summary>
     /// Saves the edge auto-hide setting.
@@ -956,7 +1043,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnAutoHideAtEdgeChanged(bool value) => SaveAppearance(s => s.Appearance.AutoHideAtEdge = value);
+    partial void OnAutoHideAtEdgeChanged(bool value) => SaveSetting(s => s.Appearance.AutoHideAtEdge = value);
 
     /// <summary>
     /// Saves the locked flag.
@@ -964,7 +1051,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnLockedChanged(bool value) => SaveAppearance(s => s.Appearance.Locked = value);
+    partial void OnLockedChanged(bool value) => SaveSetting(s => s.Appearance.Locked = value);
 
     /// <summary>
     /// Saves the color convention.
@@ -972,7 +1059,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnSelectedColorConventionChanged(ColorConvention value) => SaveAppearance(s => s.Appearance.ColorConvention = value);
+    partial void OnSelectedColorConventionChanged(ColorConvention value) => SaveSetting(s => s.Appearance.ColorConvention = value);
 
     /// <summary>
     /// Saves the color scheme.
@@ -980,7 +1067,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnSelectedThemeModeChanged(ThemeMode value) => SaveAppearance(s => s.Appearance.ThemeMode = value);
+    partial void OnSelectedThemeModeChanged(ThemeMode value) => SaveSetting(s => s.Appearance.ThemeMode = value);
 
     /// <summary>
     /// Saves a changed interface language.
@@ -988,7 +1075,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new language.
     /// </param>
-    partial void OnSelectedLanguageChanged(LanguageMode value) => SaveAppearance(s => s.Appearance.Language = value);
+    partial void OnSelectedLanguageChanged(LanguageMode value) => SaveSetting(s => s.Appearance.Language = value);
 
     /// <inheritdoc />
     protected override void OnLanguageChanged()
@@ -1010,7 +1097,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnSelectedLayoutChanged(WatchlistLayout value) => SaveAppearance(s => s.Appearance.Layout = value);
+    partial void OnSelectedLayoutChanged(WatchlistLayout value) => SaveSetting(s => s.Appearance.Layout = value);
 
     /// <summary>
     /// Saves the card grouping.
@@ -1018,15 +1105,15 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnSelectedGroupingChanged(CardGrouping value) => SaveAppearance(s => s.Appearance.Grouping = value);
+    partial void OnSelectedGroupingChanged(CardGrouping value) => SaveSetting(s => s.Appearance.Grouping = value);
 
     /// <summary>
-    /// Persists an appearance change unless values are being loaded.
+    /// Persists a change of a general or appearance setting unless values are being loaded.
     /// </summary>
     /// <param name="change">
     /// The change to apply.
     /// </param>
-    private void SaveAppearance(Action<AppSettings> change)
+    private void SaveSetting(Action<AppSettings> change)
     {
         if (!_loading)
         {

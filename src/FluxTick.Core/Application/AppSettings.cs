@@ -320,6 +320,22 @@ public sealed class UpdateSettings
 }
 
 /// <summary>
+/// Persisted general settings.
+/// </summary>
+public sealed class GeneralSettings
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether the app starts hidden in the tray instead of showing its window.
+    /// </summary>
+    public bool StartMinimized { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether closing the window hides it to the tray; otherwise it exits the app.
+    /// </summary>
+    public bool CloseToTray { get; set; } = true;
+}
+
+/// <summary>
 /// Persisted window geometry.
 /// </summary>
 public sealed class WindowSettings
@@ -384,6 +400,11 @@ public sealed class AppSettings
     /// Gets or sets the appearance and behavior settings.
     /// </summary>
     public AppearanceSettings Appearance { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the general settings.
+    /// </summary>
+    public GeneralSettings General { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the update check settings.
