@@ -147,18 +147,20 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Shows the window when hidden, hides it when visible.
+    /// Shows the window when hidden, hides it when visible. A window that is docked to a screen edge is not hidden to
+    /// the tray but slides to its edge and back out, the same way it does for the pointer.
     /// </summary>
     public void ToggleVisibility()
     {
         if (IsVisible)
         {
-            // A window that rests at its edge is still visible, but what the user asks for is to see it.
-            if (!RevealDocked())
+            if (_dock.IsDocked)
             {
-                Hide();
+                SlideDock(hide: !_dock.Hidden);
+                return;
             }
 
+            Hide();
             return;
         }
 
