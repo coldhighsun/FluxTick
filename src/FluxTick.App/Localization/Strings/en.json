@@ -1,4 +1,8 @@
 {
+  "About_Author": "Author",
+  "About_Homepage": "Project home page",
+  "About_License": "License",
+  "About_WindowTitle": "About FluxTick",
   "Add_AlreadyOnList": "{0} is already on your list.",
   "Add_AssetClass": "ASSET CLASS",
   "Add_Button": "Add",
@@ -112,6 +116,7 @@
   "ThemeMode_Auto": "Auto",
   "ThemeMode_Dark": "Dark",
   "ThemeMode_Light": "Light",
+  "Tray_About": "About",
   "Tray_Exit": "Exit",
   "Tray_ShowHide": "Show / hide",
   "Tray_UpdateAvailable": "New version {0} available",
