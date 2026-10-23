@@ -16,9 +16,13 @@ Real-time numbers, tiny sparklines and a floating always-on-top window. Stocks, 
 commodities side by side, from the data sources *you* choose.
 
 <p align="center">
-  <img src="docs/images/main.png" alt="FluxTick watchlist" width="250" />
-  <img src="docs/images/settings.png" alt="FluxTick settings" width="250" />
-  <img src="docs/images/add.png" alt="FluxTick add instrument" width="250" />
+  <img src="docs/images/en/main-list.png" alt="FluxTick watchlist (list layout)" width="250" />
+  <img src="docs/images/en/main-cards.png" alt="FluxTick watchlist (card layout, dark theme)" width="300" />
+</p>
+<p align="center">
+  <img src="docs/images/en/settings.png" alt="FluxTick settings" width="220" />
+  <img src="docs/images/en/add.png" alt="FluxTick add instrument" width="220" />
+  <img src="docs/images/en/about.png" alt="FluxTick about" width="220" />
 </p>
 
 > Screenshots use the built-in simulated data source (`--demo`).
