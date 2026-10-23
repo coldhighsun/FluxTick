@@ -51,6 +51,16 @@ public static class AppPaths
     public static string SettingsFile(bool demo) => Path.Combine(DataDirectory, demo ? "settings.demo.json" : "settings.json");
 
     /// <summary>
+    /// Gets the directory that downloaded update packages are kept in.
+    /// </summary>
+    public static string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
+
+    /// <summary>
+    /// Gets the path of the file that remembers when the update check last ran.
+    /// </summary>
+    public static string UpdateStateFile => Path.Combine(DataDirectory, "update-state.json");
+
+    /// <summary>
     /// Gets the rolling log file path pattern.
     /// </summary>
     public static string LogFile => Path.Combine(DataDirectory, "logs", "fluxtick-.log");

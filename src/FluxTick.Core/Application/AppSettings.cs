@@ -309,6 +309,17 @@ public sealed class AppearanceSettings
 }
 
 /// <summary>
+/// Persisted settings of the update check.
+/// </summary>
+public sealed class UpdateSettings
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether the app looks for a newer release by itself when it starts.
+    /// </summary>
+    public bool AutoCheck { get; set; } = true;
+}
+
+/// <summary>
 /// Persisted window geometry.
 /// </summary>
 public sealed class WindowSettings
@@ -373,6 +384,11 @@ public sealed class AppSettings
     /// Gets or sets the appearance and behavior settings.
     /// </summary>
     public AppearanceSettings Appearance { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the update check settings.
+    /// </summary>
+    public UpdateSettings Updates { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the window geometry.

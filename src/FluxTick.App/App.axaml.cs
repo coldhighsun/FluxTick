@@ -63,6 +63,16 @@ public sealed partial class App : Application
     private NativeMenuItem? _trayExit;
 
     /// <summary>
+    /// The tray menu entry that announces a newer release. It is part of the menu only while there is one.
+    /// </summary>
+    private NativeMenuItem? _trayUpdate;
+
+    /// <summary>
+    /// The update check.
+    /// </summary>
+    private UpdateService? _updates;
+
+    /// <summary>
     /// The language setting that was applied last, so that settings changes that leave it alone cost nothing.
     /// </summary>
     private LanguageMode? _appliedLanguage;
@@ -113,6 +123,10 @@ public sealed partial class App : Application
                 IsExiting = true;
                 _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
             };
+
+            _updates = _services.GetRequiredService<UpdateService>();
+            _updates.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyUpdateTray);
+            StartUpdateCheck();
 
             _ = StartAsync(viewModel, desktop.Args ?? []);
         }
@@ -199,7 +213,78 @@ public sealed partial class App : Application
 
             _trayToggle.Header = Loc.Get("Tray_ShowHide");
             _trayExit.Header = Loc.Get("Tray_Exit");
+            ApplyUpdateTray();
         }
+    }
+
+    /// <summary>
+    /// Looks for a newer release once the app is up, unless the user turned that off or this is a development build.
+    /// </summary>
+    private void StartUpdateCheck()
+    {
+        if (_settings!.Current.Updates.AutoCheck && _updates!.CanAutoCheck)
+        {
+            Dispatcher.UIThread.Post(async () => await _updates.CheckAsync(manual: false), DispatcherPriority.Background);
+        }
+    }
+
+    /// <summary>
+    /// Adds the "new version" entry to the top of the tray menu while a newer release is known, and removes it otherwise.
+    /// </summary>
+    private void ApplyUpdateTray()
+    {
+        if (_updates is null || TrayIcon.GetIcons(this)?.FirstOrDefault()?.Menu is not { } menu)
+        {
+            return;
+        }
+
+        var announce = _updates.Status is UpdateStatus.Available or UpdateStatus.Downloading or UpdateStatus.Downloaded or UpdateStatus.Failed
+            && _updates.LatestVersion is not null;
+        if (!announce)
+        {
+            if (_trayUpdate is not null)
+            {
+                menu.Items.Remove(_trayUpdate);
+            }
+
+            return;
+        }
+
+        if (_trayUpdate is null)
+        {
+            _trayUpdate = new NativeMenuItem();
+            _trayUpdate.Click += OnTrayUpdateClicked;
+        }
+
+        _trayUpdate.Header = Loc.Get("Tray_UpdateAvailable", UpdateService.FormatVersion(_updates.LatestVersion!));
+        if (!menu.Items.Contains(_trayUpdate))
+        {
+            menu.Items.Insert(0, _trayUpdate);
+        }
+    }
+
+    /// <summary>
+    /// Opens the settings page, where the new release can be downloaded.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnTrayUpdateClicked(object? sender, EventArgs e)
+    {
+        if (_window is null || _services is null)
+        {
+            return;
+        }
+
+        if (!_window.IsVisible)
+        {
+            _window.ToggleVisibility();
+        }
+
+        _services.GetRequiredService<MainViewModel>().ShowSettings();
     }
 
     /// <summary>

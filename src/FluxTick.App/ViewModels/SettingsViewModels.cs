@@ -707,16 +707,21 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="timeProvider">
     /// The clock used for debouncing.
     /// </param>
+    /// <param name="updates">
+    /// The update section, or <see langword="null"/> when the page has none.
+    /// </param>
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
         ProviderRouter router,
         MarketDataService market,
         IUiDispatcher ui,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        UpdateViewModel? updates = null)
         : base(ui)
     {
         _settings = settings;
+        Updates = updates;
         _router = router;
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
@@ -762,6 +767,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the languages to choose from.
     /// </summary>
     public IReadOnlyList<LanguageMode> Languages { get; } = Enum.GetValues<LanguageMode>();
+
+    /// <summary>
+    /// Gets the update section, or <see langword="null"/> when the page has none.
+    /// </summary>
+    public UpdateViewModel? Updates { get; }
 
     /// <summary>
     /// Gets the editor of the user-defined groups.
