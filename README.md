@@ -20,6 +20,10 @@ commodities side by side, from the data sources *you* choose.
   <img src="docs/images/en/main-cards.png" alt="FluxTick watchlist (card layout, dark theme)" width="300" />
 </p>
 <p align="center">
+  <img src="docs/images/en/group-type.png" alt="Cards grouped by asset type" width="250" />
+  <img src="docs/images/en/group-custom.png" alt="Custom groups" width="250" />
+</p>
+<p align="center">
   <img src="docs/images/en/settings.png" alt="FluxTick settings" width="220" />
   <img src="docs/images/en/add.png" alt="FluxTick add instrument" width="220" />
   <img src="docs/images/en/about.png" alt="FluxTick about" width="220" />

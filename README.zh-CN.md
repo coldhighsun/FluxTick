@@ -20,6 +20,10 @@
   <img src="docs/images/zh/main-cards.png" alt="FluxTick 自选列表（卡片布局，深色主题）" width="300" />
 </p>
 <p align="center">
+  <img src="docs/images/zh/group-type.png" alt="按资产类型分组的卡片" width="250" />
+  <img src="docs/images/zh/group-custom.png" alt="自定义分组" width="250" />
+</p>
+<p align="center">
   <img src="docs/images/zh/settings.png" alt="FluxTick 设置" width="220" />
   <img src="docs/images/zh/add.png" alt="FluxTick 添加品种" width="220" />
   <img src="docs/images/zh/about.png" alt="FluxTick 关于" width="220" />
