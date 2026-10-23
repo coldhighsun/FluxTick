@@ -148,18 +148,12 @@ public sealed partial class MainWindow
     /// <summary>
     /// Shows a docked window that is hidden at its edge.
     /// </summary>
-    /// <returns>
-    /// <see langword="true"/> when the window was hidden at its edge and is now coming out.
-    /// </returns>
-    private bool RevealDocked()
+    private void RevealDocked()
     {
-        if (!_dock.Hidden)
+        if (_dock.Hidden)
         {
-            return false;
+            SlideDock(hide: false);
         }
-
-        SlideDock(hide: false);
-        return true;
     }
 
     /// <summary>
