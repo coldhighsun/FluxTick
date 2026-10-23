@@ -26,7 +26,7 @@ commodities side by side, from the data sources *you* choose.
 ## Features
 
 - **Multi-asset watchlist**: crypto, equities & ETFs, indices, forex and commodities in one list.
-- **Live prices**: tick flash on every change, 60-minute sparklines, change vs. previous close / 24h open.
+- **Live prices**: optional tick flash on every change (off by default, turn it on in Settings), 60-minute sparklines, change vs. previous close / 24h open.
 - **Floating widget**: borderless, translucent, always on top, draggable, resizable, lockable; hides to the tray.
 - **You pick the data source**: enable or disable sources, tune their options and choose the default source per
   asset class in **Settings**. Move any instrument to another source with **Change data source…**.
@@ -94,6 +94,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Restore a data source | *Restore defaults* in its expanded card puts its options back to the built-in values (secret values such as keys are kept) |
 | Data source status | The footer shows one dot per data source in use (green connected, orange off or failing, grey idle or reconnecting). Sources with a problem come first; when not all fit, a **+N** chip appears. Click the footer to list every source with its state and error message |
 | Compact mode | Double-click the header, or toggle in Settings |
+| Price flash | Off by default; turn *Flash on price change* on in Settings → Appearance |
 | Hide / show | **×** hides to the tray; click the tray icon to bring it back; *Exit* in the tray menu quits |
 
 Settings and logs live in `%APPDATA%\FluxTick` on Windows and `~/.config/FluxTick` on Linux and macOS.
