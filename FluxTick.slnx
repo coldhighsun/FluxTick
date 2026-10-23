@@ -24,8 +24,13 @@
   </Folder>
   <Folder Name="/src/providers/">
     <Project Path="src/FluxTick.Providers.Binance/FluxTick.Providers.Binance.csproj" />
+    <Project Path="src/FluxTick.Providers.Bybit/FluxTick.Providers.Bybit.csproj" />
+    <Project Path="src/FluxTick.Providers.Coinbase/FluxTick.Providers.Coinbase.csproj" />
     <Project Path="src/FluxTick.Providers.Common/FluxTick.Providers.Common.csproj" />
+    <Project Path="src/FluxTick.Providers.Kraken/FluxTick.Providers.Kraken.csproj" />
+    <Project Path="src/FluxTick.Providers.Okx/FluxTick.Providers.Okx.csproj" />
     <Project Path="src/FluxTick.Providers.Simulated/FluxTick.Providers.Simulated.csproj" />
+    <Project Path="src/FluxTick.Providers.Tencent/FluxTick.Providers.Tencent.csproj" />
     <Project Path="src/FluxTick.Providers.Yahoo/FluxTick.Providers.Yahoo.csproj" />
   </Folder>
   <Folder Name="/tests/">
