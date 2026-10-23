@@ -53,7 +53,7 @@ internal enum TrayToggle
 /// The dock state of the main window: which edge it rests at and whether it is hidden there. It holds no timers and
 /// touches no window, so the transitions can be tested on their own.
 /// </summary>
-internal sealed class EdgeDockModel(bool supported = true)
+internal sealed class EdgeDockModel
 {
     /// <summary>
     /// Gets the edge the window is docked to.
@@ -66,9 +66,9 @@ internal sealed class EdgeDockModel(bool supported = true)
     public bool Hidden { get; private set; }
 
     /// <summary>
-    /// The number of edges a window can dock to.
+    /// The number of edges a window can dock to: every edge there is, except none.
     /// </summary>
-    private const int AllEdges = 3;
+    private static readonly int AllEdges = Enum.GetValues<DockEdge>().Length - 1;
 
     /// <summary>
     /// The edges beyond which the platform did not keep the window.
@@ -93,16 +93,10 @@ internal sealed class EdgeDockModel(bool supported = true)
     public bool Enabled => _wanted && Available;
 
     /// <summary>
-    /// Gets a value indicating whether the platform lets a window be placed beyond the screen, as far as it is known
-    /// up front.
+    /// Gets a value indicating whether edge hiding can work at all: at least one edge was not refused. This is the one
+    /// place that knows, and <see cref="AvailabilityChanged"/> tells when it changes.
     /// </summary>
-    public bool Supported { get; } = supported;
-
-    /// <summary>
-    /// Gets a value indicating whether edge hiding can work at all: the platform supports it and at least one edge was
-    /// not refused. This is the one place that knows, and <see cref="AvailabilityChanged"/> tells when it changes.
-    /// </summary>
-    public bool Available => Supported && _refused.Count < AllEdges;
+    public bool Available => _refused.Count < AllEdges;
 
     /// <summary>
     /// Raised when <see cref="Available"/> changes.
@@ -209,6 +203,43 @@ internal sealed class EdgeDockModel(bool supported = true)
             AvailabilityChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>
+    /// Stops using every edge, because the platform did not move the window at all: it ignores where a window is
+    /// placed, so no edge can work.
+    /// </summary>
+    public void RefuseAll()
+    {
+        foreach (var edge in Enum.GetValues<DockEdge>())
+        {
+            if (edge != DockEdge.None)
+            {
+                Refuse(edge);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Decides whether a slide that was held back is still wanted when it can be carried out.
+    /// </summary>
+    /// <param name="hide">
+    /// <see langword="true"/> for a slide to the edge, <see langword="false"/> for one out of it.
+    /// </param>
+    /// <param name="explicitRequest">
+    /// Whether the user asked for it directly, with the tray icon, rather than the pointer causing it.
+    /// </param>
+    /// <param name="pointerOver">
+    /// Whether the pointer is on the window now.
+    /// </param>
+    /// <param name="canHide">
+    /// Whether nothing needs the window to stay out.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> for a docked window when the request was direct, or when the pointer is still where it
+    /// was when it caused the slide.
+    /// </returns>
+    public bool StillWanted(bool hide, bool explicitRequest, bool pointerOver, bool canHide) =>
+        IsDocked && (explicitRequest || (hide ? !pointerOver && canHide : pointerOver));
 
     /// <summary>
     /// Decides what a click on the tray icon does.

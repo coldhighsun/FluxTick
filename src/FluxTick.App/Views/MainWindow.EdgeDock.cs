@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
-using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 
 namespace FluxTick.App.Views;
@@ -44,7 +43,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// The dock state.
     /// </summary>
-    private readonly EdgeDockModel _dock = new(PlatformCapabilities.CanPlaceWindowsOffScreen);
+    private readonly EdgeDockModel _dock = new();
 
     /// <summary>
     /// Slides the window to and from its edge.
@@ -68,10 +67,10 @@ public sealed partial class MainWindow
     private IDisposable? _dockScreens;
 
     /// <summary>
-    /// A slide that was asked for while the screens were still changing and waits for them: <see langword="true"/>
-    /// to hide, <see langword="false"/> to bring out.
+    /// A slide that was asked for while the screens were still changing and waits for them: whether it hides or brings
+    /// the window out, and whether the user asked for it directly.
     /// </summary>
-    private bool? _dockSlideAfterScreens;
+    private (bool Hide, bool Explicit)? _dockSlideAfterScreens;
 
     /// <summary>
     /// The settings that follow <see cref="EdgeDockModel.Available"/>.
@@ -221,7 +220,7 @@ public sealed partial class MainWindow
     {
         if (_dock.Hidden)
         {
-            SlideDock(hide: false);
+            SlideDock(hide: false, explicitRequest: true);
         }
     }
 
@@ -267,9 +266,10 @@ public sealed partial class MainWindow
                 _dockScreens = null;
                 var slide = _dockSlideAfterScreens;
                 _dockSlideAfterScreens = null;
-                if (EnsureDockArea() && slide is { } hide)
+                if (EnsureDockArea() && slide is { } held
+                    && _dock.StillWanted(held.Hide, held.Explicit, IsPointerOver, CanAutoHide()))
                 {
-                    SlideDock(hide);
+                    SlideDock(held.Hide, held.Explicit);
                 }
             },
             DockScreensDelay);
@@ -416,12 +416,16 @@ public sealed partial class MainWindow
     /// <param name="hide">
     /// <see langword="true"/> to hide the window at its edge, <see langword="false"/> to bring it out.
     /// </param>
-    private void SlideDock(bool hide)
+    /// <param name="explicitRequest">
+    /// Whether the user asked for it directly, with the tray icon, rather than the pointer causing it.
+    /// </param>
+    private void SlideDock(bool hide, bool explicitRequest = false)
     {
-        // A target computed from a list of screens that is still changing may lie on a screen that is gone.
+        // A target computed from a list of screens that is still changing may lie on a screen that is gone. The slide
+        // is held back, and checked again once the screens are known, because what caused it may be over by then.
         if (_dockScreens is not null)
         {
-            _dockSlideAfterScreens = hide;
+            _dockSlideAfterScreens = (hide, explicitRequest);
             return;
         }
 
@@ -482,8 +486,9 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// Checks a little after the window was sent beyond its edge that the system left it there. A window the system
-    /// kept in sight is not taken for hidden, and edge hiding stays off from then on. Platforms that are known not to
-    /// place windows (see <see cref="PlatformCapabilities.CanPlaceWindowsOffScreen"/>) never get this far.
+    /// kept in sight is not taken for hidden. When it moved part of the way, as the top edge does on systems that keep a
+    /// window under the menu bar, only that edge is given up; when it did not move at all, the system ignores where a
+    /// window is placed and every edge is given up.
     /// </summary>
     /// <param name="target">
     /// The hidden position the window was sent to.
@@ -503,7 +508,16 @@ public sealed partial class MainWindow
                     // The window is in plain sight or stranded beyond the edge, so it goes back to where it is shown
                     // before the edge is given up.
                     var shown = _dock.ShownPosition(CurrentPixelBounds());
-                    _dock.Refuse(_dock.Edge);
+                    var unmoved = Math.Abs(Position.X - shown.X) <= tolerance && Math.Abs(Position.Y - shown.Y) <= tolerance;
+                    if (unmoved)
+                    {
+                        _dock.RefuseAll();
+                    }
+                    else
+                    {
+                        _dock.Refuse(_dock.Edge);
+                    }
+
                     MoveDock(shown);
                     RaiseGeometryChanged();
                 }
