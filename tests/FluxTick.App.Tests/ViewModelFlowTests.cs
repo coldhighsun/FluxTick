@@ -155,6 +155,74 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies rows do not flash on price changes by default.
+    /// </summary>
+    [Fact]
+    public async Task Quote_PriceChangesWithDefaultSettings_DoesNotFlash()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+
+        await EmitPricesAsync(h, 100m, 101m);
+
+        h.Main.Settings.FlashOnUpdate.Should().BeFalse();
+        h.Main.Rows.Single().FlashVersion.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Verifies the persisted flash setting is applied to the rows built at startup.
+    /// </summary>
+    [Fact]
+    public async Task Quote_PriceChangesWithPersistedFlashOn_FlashesRow()
+    {
+        var settings = Harness.WatchlistOf(Btc);
+        settings.Appearance.FlashOnUpdate = true;
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        await EmitPricesAsync(h, 100m, 101m);
+
+        h.Main.Rows.Single().FlashVersion.Should().Be(1);
+        h.Main.Rows.Single().FlashUp.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies the flash setting reaches existing rows and is persisted.
+    /// </summary>
+    [Fact]
+    public async Task FlashOnUpdate_Toggled_UpdatesRowsAndPersists()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+
+        h.Main.Settings.FlashOnUpdate = true;
+
+        h.Main.Rows.Single().FlashEnabled.Should().BeTrue();
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.FlashOnUpdate);
+    }
+
+    /// <summary>
+    /// Emits the given prices for the Bitcoin asset in order, waiting for each one to reach its row.
+    /// </summary>
+    /// <param name="h">
+    /// The harness to emit through.
+    /// </param>
+    /// <param name="prices">
+    /// The prices to emit.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the last price is shown.
+    /// </returns>
+    private static async Task EmitPricesAsync(Harness h, params decimal[] prices)
+    {
+        foreach (var price in prices)
+        {
+            h.CryptoFactory.Fake.Emit(new Quote(Btc.Id, price, 100m, h.Time.GetUtcNow()));
+            await Harness.EventuallyAsync(() => h.Main.Rows.Single().PriceText == $"{price:0.00}");
+        }
+    }
+
+    /// <summary>
     /// Verifies opening the add instrument page prepares it and raises a request for its window.
     /// </summary>
     [Fact]

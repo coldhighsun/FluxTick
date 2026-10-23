@@ -118,6 +118,11 @@ public sealed class AppearanceSettings
     public bool Locked { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether a row flashes when its price changes.
+    /// </summary>
+    public bool FlashOnUpdate { get; set; }
+
+    /// <summary>
     /// Gets or sets the up/down color convention.
     /// </summary>
     public ColorConvention ColorConvention { get; set; } = ColorConvention.Auto;

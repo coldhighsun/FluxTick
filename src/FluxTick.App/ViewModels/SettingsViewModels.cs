@@ -720,6 +720,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool Locked { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether rows flash when their price changes.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool FlashOnUpdate { get; set; }
+
+    /// <summary>
     /// Gets or sets the color convention.
     /// </summary>
     [ObservableProperty]
@@ -738,6 +744,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Compact = current.Appearance.Compact;
             Locked = current.Appearance.Locked;
+            FlashOnUpdate = current.Appearance.FlashOnUpdate;
             SelectedColorConvention = current.Appearance.ColorConvention;
             foreach (var provider in Providers)
             {
@@ -782,6 +789,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// The new value.
     /// </param>
     partial void OnCompactChanged(bool value) => SaveAppearance(s => s.Appearance.Compact = value);
+
+    /// <summary>
+    /// Saves the flash-on-update flag.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnFlashOnUpdateChanged(bool value) => SaveAppearance(s => s.Appearance.FlashOnUpdate = value);
 
     /// <summary>
     /// Saves the locked flag.

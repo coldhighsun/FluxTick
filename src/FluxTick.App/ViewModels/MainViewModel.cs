@@ -151,6 +151,10 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 ApplyCompact();
             }
+            else if (e.PropertyName == nameof(SettingsViewModel.FlashOnUpdate))
+            {
+                ApplyFlash();
+            }
         };
     }
 
@@ -414,7 +418,11 @@ public sealed partial class MainViewModel : ObservableObject
             var row = Rows.FirstOrDefault(r => r.Asset.Id == asset.Id);
             if (row is null)
             {
-                row = new AssetRowViewModel(asset, ProviderName(asset.ProviderId)) { ShowSparkline = !Settings.Compact };
+                row = new AssetRowViewModel(asset, ProviderName(asset.ProviderId))
+                {
+                    ShowSparkline = !Settings.Compact,
+                    FlashEnabled = Settings.FlashOnUpdate,
+                };
                 Rows.Insert(i, row);
             }
             else
@@ -452,6 +460,17 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var row in Rows)
         {
             row.ShowSparkline = !Settings.Compact;
+        }
+    }
+
+    /// <summary>
+    /// Enables or disables the price-change flash of every row according to the flash setting.
+    /// </summary>
+    private void ApplyFlash()
+    {
+        foreach (var row in Rows)
+        {
+            row.FlashEnabled = Settings.FlashOnUpdate;
         }
     }
 

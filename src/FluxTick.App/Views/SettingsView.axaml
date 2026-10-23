@@ -28,6 +28,10 @@
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding Compact}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Flash on price change" VerticalAlignment="Center" />
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding FlashOnUpdate}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
                   <TextBlock Text="Lock position" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
                 </Grid>
