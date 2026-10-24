@@ -59,6 +59,13 @@
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding TrayHoverList}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_ConnectOnDemand}" />
+                    <TextBlock Text="{loc:T Settings_ConnectOnDemandHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding ConnectOnDemand}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
                   <TextBlock Text="{loc:T Settings_KeepOnTop}" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
                 </Grid>

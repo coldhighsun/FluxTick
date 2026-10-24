@@ -13,6 +13,7 @@ using FluxTick.Providers.Yahoo;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using ThrottledLogging;
 
 namespace FluxTick.App.Services;
 
@@ -44,6 +45,18 @@ public sealed class AvaloniaUiDispatcher : IUiDispatcher
 public static class AppHost
 {
     /// <summary>
+    /// The language of the log files, which is English whatever the interface language is, so that one file never mixes
+    /// languages and can be read by anyone who gets it for support.
+    /// </summary>
+    internal static readonly System.Globalization.CultureInfo LogCulture = System.Globalization.CultureInfo.GetCultureInfo("en");
+
+    /// <summary>
+    /// Pins the language of the note ThrottledLogging adds about held back messages to <see cref="LogCulture"/>. Without
+    /// it the note follows the culture of the thread that logs, and threads of the app differ in that.
+    /// </summary>
+    internal static void ConfigureThrottledLogging() => ThrottledLogger.Language = LogCulture;
+
+    /// <summary>
     /// Builds the service provider.
     /// </summary>
     /// <param name="demo">
@@ -58,9 +71,15 @@ public static class AppHost
 
         var serilog = new LoggerConfiguration()
             .MinimumLevel.Information()
-            .WriteTo.File(AppPaths.LogFile, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7)
+            .WriteTo.File(
+                AppPaths.LogFile,
+                rollingInterval: RollingInterval.Day,
+                fileSizeLimitBytes: 10 * 1024 * 1024,
+                rollOnFileSizeLimit: true,
+                retainedFileCountLimit: 5)
             .CreateLogger();
         services.AddLogging(builder => builder.AddSerilog(serilog, dispose: true));
+        ConfigureThrottledLogging();
 
         services.AddFluxTickCore();
         services.AddSingleton<ISettingsStore>(sp =>

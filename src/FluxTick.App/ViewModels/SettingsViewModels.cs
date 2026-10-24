@@ -505,6 +505,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
             null => (Loc.Get("Provider_Off"), false, false),
             { State: ProviderConnectionState.Connected } => (Loc.Get("Provider_Connected"), true, false),
             { State: ProviderConnectionState.Idle } => (Loc.Get("Provider_Idle"), false, false),
+            { State: ProviderConnectionState.Paused } => (Loc.Get("Provider_Paused"), false, false),
             { State: ProviderConnectionState.Reconnecting } s => (s.Message is { Length: > 0 } m ? Loc.Get("Common_LabelValue", Loc.Get("Provider_Reconnecting"), m) : Loc.Get("Provider_Reconnecting"), false, false),
             { State: ProviderConnectionState.Failed } s => (s.Message is { Length: > 0 } m ? Loc.Get("Common_LabelValue", Loc.Get("Provider_Error"), m) : Loc.Get("Provider_Error"), false, true),
             _ => (Loc.Get("Provider_Unknown"), false, false),
@@ -883,6 +884,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool TrayHoverList { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the data sources connect only while the window or the tray list is shown.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ConnectOnDemand { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the background opacity between 0.3 and 1.
     /// </summary>
     [ObservableProperty]
@@ -977,6 +984,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
             TrayHoverList = current.General.TrayHoverList;
+            ConnectOnDemand = current.General.ConnectOnDemand;
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Compact = current.Appearance.Compact;
@@ -1070,6 +1078,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     }
 
     partial void OnTrayHoverListChanged(bool value) => SaveSetting(s => s.General.TrayHoverList = value);
+
+    /// <summary>
+    /// Saves the connect-on-demand flag.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnConnectOnDemandChanged(bool value) => SaveSetting(s => s.General.ConnectOnDemand = value);
 
     /// <summary>
     /// Saves the always-on-top flag.

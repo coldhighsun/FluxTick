@@ -73,6 +73,7 @@ public sealed class MySourceProvider(ProviderDescriptor descriptor, TimeSpan int
 Rules of thumb:
 
 - Do no network I/O in the constructor or in the factory; start lazily on the first subscription.
+- Expect empty and non-empty subscription sets to alternate. While nobody looks at the data (the window is hidden to the tray and *Connect data sources on demand* is on), the app sends every provider an empty set, and the full watchlist again when someone does. On an empty set close the connection, stop timers and report `Idle`; on the next non-empty set start from scratch, as on the first one. The base classes do this for you.
 - Report problems with `SetStatus(ProviderConnectionState.Reconnecting | Failed, message)` so the UI can show them.
 - Observe `ShutdownToken` in every background loop.
 - Prefer `TimeProvider` over `DateTime.UtcNow` / `Task.Delay` so the provider is testable with `FakeTimeProvider`.
@@ -159,8 +160,9 @@ and add a project reference from `FluxTick.App`. That's the whole integration.
 
 ## 6. Test it
 
-Add a two-line contract test; it checks descriptor sanity, option fallback, idle-without-subscriptions and
-prompt disposal for free:
+Add a two-line contract test; it checks descriptor sanity, option fallback, idle-without-subscriptions and prompt
+disposal for free (the restart after an empty set is covered for the shared base classes; test it yourself if you
+implement `IMarketDataProvider` directly):
 
 ```csharp
 public sealed class MySourceProviderContractTests : ProviderContractTests<MySourceProviderFactory>;

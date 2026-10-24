@@ -71,7 +71,16 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
         IReadOnlyCollection<Asset> current,
         IReadOnlyCollection<Asset> added,
         IReadOnlyCollection<Asset> removed,
-        CancellationToken cancellationToken) => Task.CompletedTask;
+        CancellationToken cancellationToken)
+    {
+        // Like the real providers: nothing subscribed means nothing connected.
+        if (current.Count == 0)
+        {
+            SetStatus(ProviderConnectionState.Idle);
+        }
+
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     protected override ValueTask DisposeCoreAsync()
