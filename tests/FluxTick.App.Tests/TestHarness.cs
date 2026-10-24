@@ -240,8 +240,14 @@ public sealed class Harness : IAsyncDisposable
         var ui = new InlineDispatcher();
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
         SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true));
-        Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, NullLogger<MainViewModel>.Instance);
+        Alerts = new AlertsViewModel(Settings, registry, ui);
+        Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, Alerts, NullLogger<MainViewModel>.Instance);
     }
+
+    /// <summary>
+    /// Gets the price alerts view model of the main window.
+    /// </summary>
+    public AlertsViewModel Alerts { get; }
 
     /// <summary>
     /// Gets the clock.

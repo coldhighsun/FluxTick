@@ -504,10 +504,10 @@ public class QuickSwitchTests
         await using var h = new Harness(Harness.WatchlistOf(Btc));
         await h.Main.InitializeAsync();
 
-        h.Main.ToggleFlashCommand.Execute(null);
+        h.Main.ToggleRollCommand.Execute(null);
 
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.FlashOnUpdate);
-        h.Main.Rows.Should().OnlyContain(r => r.FlashEnabled);
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.RollPriceOnUpdate);
+        h.Main.Rows.Should().OnlyContain(r => r.RollEnabled);
     }
 
     /// <summary>

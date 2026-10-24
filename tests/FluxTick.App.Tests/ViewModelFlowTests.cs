@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -37,6 +38,136 @@ public class ViewModelFlowTests
         h.Main.Rows.Select(r => r.Symbol).Should().Equal("AAPL", "BTC");
         h.Main.IsEmpty.Should().BeFalse();
         h.Main.Chips.Select(c => c.Name).Should().BeEquivalentTo(["STOCKS", "CRYPTO"]);
+    }
+
+    /// <summary>
+    /// Verifies a full screen window shows the cards, without touching the layout setting, and the list comes back
+    /// afterwards.
+    /// </summary>
+    [Fact]
+    public async Task SetFullScreen_ListLayout_ShowsCardsTemporarily()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Aapl, Btc));
+        await h.Main.InitializeAsync();
+        h.Main.IsCardLayout.Should().BeFalse();
+
+        var tipBefore = h.Main.FullScreenTip;
+
+        h.Main.SetFullScreen(true);
+
+        h.Main.IsFullScreen.Should().BeTrue();
+        h.Main.FullScreenTip.Should().NotBe(tipBefore);
+        h.Main.IsCardLayout.Should().BeTrue();
+        h.Settings.Current.Appearance.Layout.Should().Be(WatchlistLayout.List);
+
+        h.Main.SetFullScreen(false);
+
+        h.Main.IsFullScreen.Should().BeFalse();
+        h.Main.FullScreenTip.Should().Be(tipBefore);
+        h.Main.IsCardLayout.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies choosing the list layout while the window is full screen asks it to leave full screen, with the saved list
+    /// layout, and that the other layout choices do not.
+    /// </summary>
+    [Fact]
+    public async Task ChooseListWhileFullScreen_AsksToLeaveFullScreen()
+    {
+        var settings = Harness.WatchlistOf(Aapl, Btc);
+        settings.Appearance.Layout = WatchlistLayout.Cards;
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+        var requests = 0;
+        h.Main.FullScreenExitRequested += (_, _) => requests++;
+
+        // Not full screen: nothing to leave. Choosing the cards while full screen does not leave either.
+        await h.Main.SetLayoutCommand.ExecuteAsync(WatchlistLayout.List);
+        requests.Should().Be(0);
+        h.Main.SetFullScreen(true);
+        await h.Main.SetLayoutCommand.ExecuteAsync(WatchlistLayout.Cards);
+        requests.Should().Be(0);
+
+        await h.Main.SetLayoutCommand.ExecuteAsync(WatchlistLayout.List);
+
+        requests.Should().Be(1);
+        h.Settings.Current.Appearance.Layout.Should().Be(WatchlistLayout.List);
+        h.Main.SetFullScreen(false);
+        h.Main.IsCardLayout.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the layout button of the header goes to the list while the window is full screen, even though the saved
+    /// layout is the list already and the cards are only shown because of the full screen.
+    /// </summary>
+    [Fact]
+    public async Task ToggleLayoutWhileFullScreen_GoesToTheListAndLeavesFullScreen()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Aapl, Btc));
+        await h.Main.InitializeAsync();
+        var requests = 0;
+        h.Main.FullScreenExitRequested += (_, _) => requests++;
+        h.Main.SetFullScreen(true);
+
+        await h.Main.ToggleLayoutCommand.ExecuteAsync(null);
+
+        requests.Should().Be(1);
+        h.Settings.Current.Appearance.Layout.Should().Be(WatchlistLayout.List);
+    }
+
+    /// <summary>
+    /// Verifies a window that already shows the cards keeps them after full screen.
+    /// </summary>
+    [Fact]
+    public async Task SetFullScreen_CardLayout_KeepsCards()
+    {
+        var settings = Harness.WatchlistOf(Aapl, Btc);
+        settings.Appearance.Layout = WatchlistLayout.Cards;
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        h.Main.SetFullScreen(true);
+        h.Main.SetFullScreen(false);
+
+        h.Main.IsCardLayout.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies the card size command saves the size, hands it to every row and updates the menu check marks.
+    /// </summary>
+    [Fact]
+    public async Task SetCardSize_SavesAndAppliesToRows()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Aapl, Btc));
+        await h.Main.InitializeAsync();
+        h.Main.CardSize.Should().Be(CardSize.Medium);
+        h.Main.IsCardSizeMedium.Should().BeTrue();
+
+        await h.Main.SetCardSizeCommand.ExecuteAsync(CardSize.Large);
+
+        h.Main.CardSize.Should().Be(CardSize.Large);
+        h.Main.IsCardSizeLarge.Should().BeTrue();
+        h.Main.IsCardSizeMedium.Should().BeFalse();
+        h.Main.Rows.Should().OnlyContain(r => r.CardSize == CardSize.Large && r.IsLargeCard && !r.IsSmallCard);
+        h.Store.Stored!.Appearance.CardSize.Should().Be(CardSize.Large);
+    }
+
+    /// <summary>
+    /// Verifies the size chosen in the settings reaches the rows, and a saved size is used when the app starts.
+    /// </summary>
+    [Fact]
+    public async Task CardSize_FromSettingsPageAndFromSavedSettings()
+    {
+        var settings = Harness.WatchlistOf(Aapl);
+        settings.Appearance.CardSize = CardSize.Small;
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+        h.Main.Rows.Single().CardSize.Should().Be(CardSize.Small);
+
+        h.Main.Settings.SelectedCardSize = CardSize.Large;
+
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.CardSize == CardSize.Large);
+        await Harness.EventuallyAsync(() => h.Main.Rows.Single().CardSize == CardSize.Large);
     }
 
     /// <summary>
@@ -165,8 +296,8 @@ public class ViewModelFlowTests
 
         await EmitPricesAsync(h, 100m, 101m);
 
-        h.Main.Settings.FlashOnUpdate.Should().BeFalse();
-        h.Main.Rows.Single().FlashVersion.Should().Be(0);
+        h.Main.Settings.RollPriceOnUpdate.Should().BeFalse();
+        h.Main.Rows.Single().RollVersion.Should().Be(0);
     }
 
     /// <summary>
@@ -176,14 +307,14 @@ public class ViewModelFlowTests
     public async Task Quote_PriceChangesWithPersistedFlashOn_FlashesRow()
     {
         var settings = Harness.WatchlistOf(Btc);
-        settings.Appearance.FlashOnUpdate = true;
+        settings.Appearance.RollPriceOnUpdate = true;
         await using var h = new Harness(settings);
         await h.Main.InitializeAsync();
 
         await EmitPricesAsync(h, 100m, 101m);
 
-        h.Main.Rows.Single().FlashVersion.Should().Be(1);
-        h.Main.Rows.Single().FlashUp.Should().BeTrue();
+        h.Main.Rows.Single().RollVersion.Should().Be(1);
+        h.Main.Rows.Single().RollUp.Should().BeTrue();
     }
 
     /// <summary>
@@ -225,10 +356,10 @@ public class ViewModelFlowTests
         await using var h = new Harness(Harness.WatchlistOf(Btc));
         await h.Main.InitializeAsync();
 
-        h.Main.Settings.FlashOnUpdate = true;
+        h.Main.Settings.RollPriceOnUpdate = true;
 
-        h.Main.Rows.Single().FlashEnabled.Should().BeTrue();
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.FlashOnUpdate);
+        h.Main.Rows.Single().RollEnabled.Should().BeTrue();
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.RollPriceOnUpdate);
     }
 
     /// <summary>
@@ -757,6 +888,117 @@ public class ViewModelFlowTests
             (Harness.Stocks, "A"),
             (Harness.Plain, "B"),
             (Harness.Stocks, "C"));
+    }
+
+    /// <summary>
+    /// Verifies moving an instrument to another data source takes its alerts along, and leaves those of other instruments.
+    /// </summary>
+    [Fact]
+    public async Task ChangeSource_KeepsTheAlertsOfTheInstrument()
+    {
+        var first = new Asset(Harness.Stocks, "A", "A", AssetClass.Equity);
+        var second = new Asset(Harness.Stocks, "B", "B", AssetClass.Equity);
+        var settings = Harness.WatchlistOf(first, second);
+        settings.Alerts.Add(new AlertRule { Id = "a", ProviderId = Harness.Stocks, Symbol = "A", Threshold = 5 });
+        settings.Alerts.Add(new AlertRule { Id = "b-up", ProviderId = Harness.Stocks, Symbol = "B", Condition = AlertCondition.PriceAbove, Threshold = 10 });
+        settings.Alerts.Add(new AlertRule { Id = "b-down", ProviderId = Harness.Stocks, Symbol = "B", Condition = AlertCondition.PriceBelow, Threshold = 2 });
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        var told = new List<AlertsMovedEventArgs>();
+        h.AddAsset.AlertsMoved += (_, e) => told.Add(e);
+
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[1]);
+        await h.AddAsset.AddCommand.ExecuteAsync(new Asset(Harness.Plain, "B", "B", AssetClass.Equity));
+
+        h.Store.Stored!.Alerts.Select(a => (a.Id, a.ProviderId, a.Symbol)).Should().Equal(
+            ("a", Harness.Stocks, "A"),
+            ("b-up", Harness.Plain, "B"),
+            ("b-down", Harness.Plain, "B"));
+        told.Should().ContainSingle().Which.Should().Match<AlertsMovedEventArgs>(e => e.Symbol == "B" && e.Count == 2 && e.ProviderName.Length > 0);
+    }
+
+    /// <summary>
+    /// Verifies changing the data source is refused while the alerts would clash with those the instrument already has at
+    /// the new source, with a message that names the condition; once the clash is deleted, the change goes through.
+    /// </summary>
+    [Fact]
+    public async Task ChangeSource_AlertsClash_IsRefusedUntilTheyAreDeleted()
+    {
+        var here = new Asset(Harness.Stocks, "B", "B", AssetClass.Equity);
+        var there = new Asset(Harness.Plain, "B", "B", AssetClass.Equity);
+        var settings = Harness.WatchlistOf(here, there);
+        settings.Alerts.Add(new AlertRule { Id = "here-up", ProviderId = Harness.Stocks, Symbol = "B", Condition = AlertCondition.PriceAbove, Threshold = 10 });
+        settings.Alerts.Add(new AlertRule { Id = "there-up", ProviderId = Harness.Plain, Symbol = "B", Condition = AlertCondition.PriceAbove, Threshold = 20 });
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+        var completed = 0;
+        h.AddAsset.Completed += (_, _) => completed++;
+
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[0]);
+        await h.AddAsset.AddCommand.ExecuteAsync(there);
+
+        completed.Should().Be(0);
+        var names = h.AddAsset.AvailableProviders.Select(ProviderText.Name).ToList();
+        names.Should().Contain(n => n.Length > 0);
+        h.AddAsset.Message.Should().Contain("B").And.Contain(ProviderText.Name(h.AddAsset.AvailableProviders.Single(d => d.Id == Harness.Stocks)))
+            .And.Contain(ProviderText.Name(h.AddAsset.AvailableProviders.Single(d => d.Id == Harness.Plain)), "it names both sources, so it is clear that either alert can go");
+        h.Store.Stored!.Watchlist.Select(e => e.ProviderId).Should().Equal(Harness.Stocks, Harness.Plain);
+        h.Store.Stored.Alerts.Select(a => a.Id).Should().Equal("here-up", "there-up");
+
+        await h.Settings.UpdateAsync(s => s.Alerts.RemoveAll(a => a.Id == "there-up"));
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[0]);
+        await h.AddAsset.AddCommand.ExecuteAsync(there);
+
+        completed.Should().Be(1);
+        h.Store.Stored!.Alerts.Should().ContainSingle().Which.ProviderId.Should().Be(Harness.Plain);
+    }
+
+    /// <summary>
+    /// Verifies the user is not told about moved alerts when an instrument without alerts changes its data source.
+    /// </summary>
+    [Fact]
+    public async Task ChangeSource_WithoutAlerts_SaysNothing()
+    {
+        var first = new Asset(Harness.Stocks, "A", "A", AssetClass.Equity);
+        await using var h = new Harness(Harness.WatchlistOf(first));
+        await h.Main.InitializeAsync();
+        var told = 0;
+        h.AddAsset.AlertsMoved += (_, _) => told++;
+
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[0]);
+        await h.AddAsset.AddCommand.ExecuteAsync(new Asset(Harness.Plain, "A", "A", AssetClass.Equity));
+
+        told.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Verifies the settings page filling its controls from the saved settings is not a choice of the list layout: a window
+    /// that is full screen stays so when Settings is opened.
+    /// </summary>
+    [Fact]
+    public async Task OpeningSettingsWhileFullScreen_DoesNotLeaveFullScreen()
+    {
+        var settings = Harness.WatchlistOf(Aapl, Btc);
+        settings.Appearance.Layout = WatchlistLayout.Cards;
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        // The layout is changed without the settings page: its control still shows the cards.
+        await h.Settings.UpdateAsync(s => s.Appearance.Layout = WatchlistLayout.List);
+        h.Main.SetFullScreen(true);
+        var requests = 0;
+        h.Main.FullScreenExitRequested += (_, _) => requests++;
+
+        h.Main.Settings.Reload();
+
+        h.Main.Settings.SelectedLayout.Should().Be(WatchlistLayout.List);
+        requests.Should().Be(0);
+
+        // A choice of the user in the settings does leave full screen.
+        h.Main.Settings.SelectedLayout = WatchlistLayout.Cards;
+        h.Main.Settings.SelectedLayout = WatchlistLayout.List;
+        requests.Should().Be(1);
     }
 
     /// <summary>

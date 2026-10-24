@@ -747,6 +747,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
         Groups = new GroupsSettingsViewModel(settings);
+        Alerts = new AlertsViewModel(settings, registry, ui);
         Providers = new ObservableCollection<ProviderSettingsViewModel>(
             registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p))));
         Routing = new ObservableCollection<RoutingRowViewModel>(
@@ -757,7 +758,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     }
 
     /// <inheritdoc />
-    protected override void Detach() => Market.ProviderStatusChanged -= OnProviderStatusChanged;
+    protected override void Detach()
+    {
+        Market.ProviderStatusChanged -= OnProviderStatusChanged;
+        Alerts.Dispose();
+    }
 
     /// <summary>
     /// Shows the new state of the data sources when one changes.
@@ -801,6 +806,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public GroupsSettingsViewModel Groups { get; }
 
     /// <summary>
+    /// Gets the price alerts of all instruments.
+    /// </summary>
+    public AlertsViewModel Alerts { get; }
+
+    /// <summary>
     /// Gets the selectable watchlist layouts.
     /// </summary>
     public IReadOnlyList<WatchlistLayout> Layouts { get; } = Enum.GetValues<WatchlistLayout>();
@@ -809,6 +819,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the selectable card groupings.
     /// </summary>
     public IReadOnlyList<CardGrouping> Groupings { get; } = Enum.GetValues<CardGrouping>();
+
+    /// <summary>
+    /// Gets the selectable card sizes.
+    /// </summary>
+    public IReadOnlyList<CardSize> CardSizes { get; } = Enum.GetValues<CardSize>();
 
     /// <summary>
     /// Gets the data source entries.
@@ -917,7 +932,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets or sets a value indicating whether rows flash when their price changes.
     /// </summary>
     [ObservableProperty]
-    public partial bool FlashOnUpdate { get; set; }
+    public partial bool RollPriceOnUpdate { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether edge hiding can work here. It does until the platform turns out not to
@@ -969,6 +984,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial CardGrouping SelectedGrouping { get; set; }
 
     /// <summary>
+    /// Gets or sets how large the cards are.
+    /// </summary>
+    [ObservableProperty]
+    public partial CardSize SelectedCardSize { get; set; }
+
+    /// <summary>
     /// Reloads every control from the persisted settings. Call when the page is opened.
     /// </summary>
     public void Reload()
@@ -989,13 +1010,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Compact = current.Appearance.Compact;
             Locked = current.Appearance.Locked;
-            FlashOnUpdate = current.Appearance.FlashOnUpdate;
+            RollPriceOnUpdate = current.Appearance.RollPriceOnUpdate;
             AutoHideAtEdge = current.Appearance.AutoHideAtEdge;
             SelectedColorConvention = current.Appearance.ColorConvention;
             SelectedThemeMode = current.Appearance.ThemeMode;
             SelectedLanguage = current.Appearance.Language;
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
+            SelectedCardSize = current.Appearance.CardSize;
             foreach (var provider in Providers)
             {
                 provider.Load(current);
@@ -1007,6 +1029,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         }
 
         Groups.Reload();
+        Alerts.Reload(discardEdits: true);
         RefreshRouting();
         RefreshStatuses();
     }
@@ -1109,7 +1132,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnFlashOnUpdateChanged(bool value) => SaveSetting(s => s.Appearance.FlashOnUpdate = value);
+    partial void OnRollPriceOnUpdateChanged(bool value) => SaveSetting(s => s.Appearance.RollPriceOnUpdate = value);
 
     /// <summary>
     /// Saves the edge auto-hide setting.
@@ -1172,7 +1195,19 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnSelectedLayoutChanged(WatchlistLayout value) => SaveSetting(s => s.Appearance.Layout = value);
+    partial void OnSelectedLayoutChanged(WatchlistLayout value)
+    {
+        SaveSetting(s => s.Appearance.Layout = value);
+        if (!_loading)
+        {
+            LayoutChosen?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>
+    /// Raised when the user chose a layout on the settings page. Filling the page from the saved settings is not a choice.
+    /// </summary>
+    public event EventHandler<WatchlistLayout>? LayoutChosen;
 
     /// <summary>
     /// Saves the card grouping.
@@ -1181,6 +1216,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new value.
     /// </param>
     partial void OnSelectedGroupingChanged(CardGrouping value) => SaveSetting(s => s.Appearance.Grouping = value);
+
+    /// <summary>
+    /// Persists the card size.
+    /// </summary>
+    /// <param name="value">
+    /// The new size.
+    /// </param>
+    partial void OnSelectedCardSizeChanged(CardSize value) => SaveSetting(s => s.Appearance.CardSize = value);
 
     /// <summary>
     /// Persists a change of a general or appearance setting unless values are being loaded.

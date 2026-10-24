@@ -34,6 +34,11 @@ public enum ToolWindowKind
     /// The about window.
     /// </summary>
     About,
+
+    /// <summary>
+    /// The price alerts window of an instrument.
+    /// </summary>
+    Alerts,
 }
 
 /// <summary>
@@ -151,6 +156,9 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <param name="settingsPage">
     /// The settings page.
     /// </param>
+    /// <param name="alerts">
+    /// The price alerts of the instrument whose alerts window is open.
+    /// </param>
     /// <param name="logger">
     /// The logger.
     /// </param>
@@ -161,6 +169,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         IUiDispatcher ui,
         AddAssetViewModel addAsset,
         SettingsViewModel settingsPage,
+        AlertsViewModel alerts,
         ILogger<MainViewModel> logger)
         : base(ui)
     {
@@ -171,18 +180,58 @@ public sealed partial class MainViewModel : LocalizedViewModel
         _logger = logger;
         AddAsset = addAsset;
         Settings = settingsPage;
+        AlertEditor = alerts;
 
         // The window sizes itself after the layout, so the layout must be right before the first rows exist.
         IsCardLayout = settings.Current.Appearance.Layout == WatchlistLayout.Cards;
+        CardSize = settings.Current.Appearance.CardSize;
         Grouping = settings.Current.Appearance.Grouping;
 
         Settings.PropertyChanged += OnSettingsPagePropertyChanged;
+        Settings.LayoutChosen += OnLayoutChosen;
     }
 
     /// <summary>
     /// Gets the watchlist rows in display order.
     /// </summary>
     public ObservableCollection<AssetRowViewModel> Rows { get; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether the window fills the screen, which shows the cards whatever the layout setting
+    /// is. The view reports it through <see cref="SetFullScreen"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FullScreenTip))]
+    public partial bool IsFullScreen { get; private set; }
+
+    /// <summary>
+    /// Gets the tooltip of the full screen button, which says what the next click does.
+    /// </summary>
+    public string FullScreenTip => Loc.Get(IsFullScreen ? "Main_ExitFullScreen" : "Main_FullScreen");
+
+    /// <summary>
+    /// Gets how large the cards are.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCardSizeSmall))]
+    [NotifyPropertyChangedFor(nameof(IsCardSizeMedium))]
+    [NotifyPropertyChangedFor(nameof(IsCardSizeLarge))]
+    public partial CardSize CardSize { get; private set; } = CardSize.Medium;
+
+    /// <summary>
+    /// Gets a value indicating whether the cards are small, for the check mark of the menu.
+    /// </summary>
+    public bool IsCardSizeSmall => CardSize == CardSize.Small;
+
+    /// <summary>
+    /// Gets a value indicating whether the cards are of the usual size, for the check mark of the menu.
+    /// </summary>
+    public bool IsCardSizeMedium => CardSize == CardSize.Medium;
+
+    /// <summary>
+    /// Gets a value indicating whether the cards are large, for the check mark of the menu.
+    /// </summary>
+    public bool IsCardSizeLarge => CardSize == CardSize.Large;
 
     /// <summary>
     /// Gets the sections of the card layout. They hold the same row view models as <see cref="Rows"/>, grouped
@@ -246,6 +295,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public SettingsViewModel Settings { get; }
 
     /// <summary>
+    /// Gets the price alerts of the instrument whose alerts window is open.
+    /// </summary>
+    public AlertsViewModel AlertEditor { get; }
+
+    /// <summary>
     /// Gets the modal tool window that is currently open. The view reports it through
     /// <see cref="BeginToolWindow"/> and <see cref="EndToolWindow"/>.
     /// </summary>
@@ -278,6 +332,17 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public event EventHandler? AboutRequested;
 
     /// <summary>
+    /// Raised when the price alerts window of an instrument should be shown.
+    /// </summary>
+    public event EventHandler? AlertsRequested;
+
+    /// <summary>
+    /// Raised when the window should leave full screen, because the list layout was chosen: the list does not fill a
+    /// screen, so it is shown in the normal window.
+    /// </summary>
+    public event EventHandler? FullScreenExitRequested;
+
+    /// <summary>
     /// Gets a value indicating whether the watchlist is empty and a hint should be shown.
     /// </summary>
     public bool IsEmpty => Rows.Count == 0;
@@ -301,6 +366,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     protected override void Detach()
     {
         Settings.PropertyChanged -= OnSettingsPagePropertyChanged;
+        Settings.LayoutChosen -= OnLayoutChosen;
         _market.SnapshotChanged -= OnMarketSnapshotChanged;
         _market.ProviderStatusChanged -= OnProviderStatusChanged;
         _settings.Changed -= OnSettingsChanged;
@@ -321,11 +387,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
         {
             ApplyCompact();
         }
-        else if (e.PropertyName == nameof(SettingsViewModel.FlashOnUpdate))
+        else if (e.PropertyName == nameof(SettingsViewModel.RollPriceOnUpdate))
         {
-            ApplyFlash();
+            ApplyRoll();
         }
-        else if (e.PropertyName is nameof(SettingsViewModel.SelectedLayout) or nameof(SettingsViewModel.SelectedGrouping))
+        else if (e.PropertyName is nameof(SettingsViewModel.SelectedLayout) or nameof(SettingsViewModel.SelectedGrouping) or nameof(SettingsViewModel.SelectedCardSize))
         {
             RebuildSections();
         }
@@ -442,7 +508,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// Toggles the flash of a row when its price changes.
     /// </summary>
     [RelayCommand]
-    public void ToggleFlash() => Settings.FlashOnUpdate = !Settings.FlashOnUpdate;
+    public void ToggleRoll() => Settings.RollPriceOnUpdate = !Settings.RollPriceOnUpdate;
 
     /// <summary>
     /// Requests the window that moves an instrument to another data source.
@@ -460,6 +526,33 @@ public sealed partial class MainViewModel : LocalizedViewModel
 
         AddAsset.BeginReplace(row.Asset);
         AddAssetRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Makes the row or card of an instrument flash because an alert of it fired. Call it on the UI thread.
+    /// </summary>
+    /// <param name="alert">
+    /// The alert that fired.
+    /// </param>
+    public void FlashAlert(AlertTriggeredEventArgs alert) =>
+        Rows.FirstOrDefault(r => r.Asset.Id == alert.Asset.Id)?.FlashAlert(alert.Rule.Condition == AlertCondition.PriceAbove);
+
+    /// <summary>
+    /// Requests the price alerts window of an instrument, which is shown by the view.
+    /// </summary>
+    /// <param name="row">
+    /// The instrument.
+    /// </param>
+    [RelayCommand]
+    public void EditAlerts(AssetRowViewModel? row)
+    {
+        if (row is null || IsToolWindowOpen)
+        {
+            return;
+        }
+
+        AlertEditor.Begin(row.Asset);
+        AlertsRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -639,11 +732,61 @@ public sealed partial class MainViewModel : LocalizedViewModel
     [RelayCommand]
     public Task ToggleLayoutAsync()
     {
+        // The cards that fill the screen are shown whatever the saved layout is, so the only way on from there is the list.
+        if (IsFullScreen)
+        {
+            return SetLayoutAsync(WatchlistLayout.List);
+        }
+
         // The next layout is decided on the saved settings, not on what is shown: a click that arrives while the
         // previous change is still being saved must flip that change, not repeat it.
         var task = _settings.UpdateAsync(s => s.Appearance.Layout = s.Appearance.Layout == WatchlistLayout.Cards ? WatchlistLayout.List : WatchlistLayout.Cards);
         RebuildSections();
         return task;
+    }
+
+    /// <summary>
+    /// Tells the view model that the window fills the screen. The watchlist is shown as cards then, which use the room
+    /// better than a list, whatever the layout setting says. The setting itself is not changed, so the list comes back
+    /// when the window is back to its normal size.
+    /// </summary>
+    /// <param name="value">
+    /// Whether the window is full screen.
+    /// </param>
+    public void SetFullScreen(bool value)
+    {
+        if (IsFullScreen == value)
+        {
+            return;
+        }
+
+        IsFullScreen = value;
+        RebuildSections();
+    }
+
+    /// <summary>
+    /// Leaves full screen when the user chose the list layout on the settings page.
+    /// </summary>
+    /// <param name="sender">
+    /// The settings page.
+    /// </param>
+    /// <param name="layout">
+    /// The layout that was chosen.
+    /// </param>
+    private void OnLayoutChosen(object? sender, WatchlistLayout layout) => LeaveFullScreenForList(layout);
+
+    /// <summary>
+    /// Asks the window to leave full screen when the list layout was chosen while it is full screen.
+    /// </summary>
+    /// <param name="layout">
+    /// The layout that was chosen.
+    /// </param>
+    private void LeaveFullScreenForList(WatchlistLayout layout)
+    {
+        if (layout == WatchlistLayout.List && IsFullScreen)
+        {
+            FullScreenExitRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>
@@ -661,6 +804,26 @@ public sealed partial class MainViewModel : LocalizedViewModel
         var task = _settings.UpdateAsync(s => s.Appearance.Layout = layout);
 
         // The update publishes the new settings before it first yields, so the view can switch immediately.
+        RebuildSections();
+        LeaveFullScreenForList(layout);
+        return task;
+    }
+
+    /// <summary>
+    /// Sets how large the cards are and shows the result right away.
+    /// </summary>
+    /// <param name="size">
+    /// The new size.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task SetCardSizeAsync(CardSize size)
+    {
+        var task = _settings.UpdateAsync(s => s.Appearance.CardSize = size);
+
+        // The update publishes the new settings before it first yields, so the cards can change at once.
         RebuildSections();
         return task;
     }
@@ -931,7 +1094,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
                 row = new AssetRowViewModel(asset, ProviderName(asset.ProviderId))
                 {
                     ShowSparkline = !Settings.Compact,
-                    FlashEnabled = Settings.FlashOnUpdate,
+                    RollEnabled = Settings.RollPriceOnUpdate,
+                    CardSize = CardSize,
                 };
                 Rows.Insert(i, row);
             }
@@ -945,6 +1109,10 @@ public sealed partial class MainViewModel : LocalizedViewModel
             }
 
             row.GroupId = entries[i].GroupId;
+            var alerts = _settings.Current.Alerts.Where(a => a.Enabled && a.AssetId == asset.Id).ToList();
+            row.HasAlert = alerts.Count > 0;
+            row.AlertAbove = alerts.Find(a => a.Condition == AlertCondition.PriceAbove)?.Threshold;
+            row.AlertBelow = alerts.Find(a => a.Condition == AlertCondition.PriceBelow)?.Threshold;
 
             if (snapshots.TryGetValue(asset.Id, out var snapshot))
             {
@@ -964,7 +1132,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
     {
         var settings = _settings.Current;
         var appearance = settings.Appearance;
-        IsCardLayout = appearance.Layout == WatchlistLayout.Cards;
+        IsCardLayout = appearance.Layout == WatchlistLayout.Cards || IsFullScreen;
+        CardSize = appearance.CardSize;
         Grouping = appearance.Grouping;
 
         _rebuildingSections = true;
@@ -1180,6 +1349,20 @@ public sealed partial class MainViewModel : LocalizedViewModel
         Rows.FirstOrDefault(r => r.Asset.Id == snapshot.Asset.Id)?.Update(snapshot);
 
     /// <summary>
+    /// Gives every row the size of the cards.
+    /// </summary>
+    /// <param name="value">
+    /// The new size.
+    /// </param>
+    partial void OnCardSizeChanged(CardSize value)
+    {
+        foreach (var row in Rows)
+        {
+            row.CardSize = value;
+        }
+    }
+
+    /// <summary>
     /// Shows or hides the sparkline of every row according to the compact setting.
     /// </summary>
     private void ApplyCompact()
@@ -1193,11 +1376,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <summary>
     /// Enables or disables the price-change flash of every row according to the flash setting.
     /// </summary>
-    private void ApplyFlash()
+    private void ApplyRoll()
     {
         foreach (var row in Rows)
         {
-            row.FlashEnabled = Settings.FlashOnUpdate;
+            row.RollEnabled = Settings.RollPriceOnUpdate;
         }
     }
 
@@ -1205,6 +1388,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     protected override void OnLanguageChanged()
     {
         OnPropertyChanged(nameof(LayoutToggleTip));
+        OnPropertyChanged(nameof(FullScreenTip));
         foreach (var row in Rows)
         {
             row.RefreshLanguage(ProviderName(row.Asset.ProviderId));

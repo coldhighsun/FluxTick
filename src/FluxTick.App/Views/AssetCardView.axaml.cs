@@ -13,6 +13,6 @@ public sealed partial class AssetCardView : UserControl
     public AssetCardView()
     {
         InitializeComponent();
-        _ = new FlashAnimator(this);
+        _ = new RowAnimator(this);
     }
 }

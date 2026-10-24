@@ -18,6 +18,9 @@
           <Border Classes="chip" VerticalAlignment="Center">
             <TextBlock Text="{Binding ClassLabel}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
           </Border>
+          <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
+                StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center"
+                IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
         </StackPanel>
         <TextBlock Text="{Binding Name}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
       </StackPanel>
@@ -26,11 +29,28 @@
                                  ToolTip.Tip="{loc:T Row_SparklineTip}"
                                  IsVisible="{Binding ShowSparkline}"
                                  Points="{Binding Sparkline}"
+                                 AboveLevel="{Binding AlertAbove}"
+                                 BelowLevel="{Binding AlertBelow}"
                                  Classes.up="{Binding IsUp}"
                                  Classes.down="{Binding IsDown}" />
 
       <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="86" Spacing="1">
-        <TextBlock Text="{Binding PriceText}" Classes="mono" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" />
+        <!-- The price rolls when it changes (see RowAnimator): the old number slides out of this clipped box while the new
+             one slides in. PriceText is the real price and sizes the box; PriceOld lies over it and is only seen while it
+             rolls. The transforms are elements, not strings, so that the animation has a TranslateTransform to change. -->
+        <Grid HorizontalAlignment="Right" ClipToBounds="True">
+          <TextBlock Name="PriceOld" Text="{Binding PreviousPriceText}" Classes="mono" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right"
+                     IsVisible="False" Opacity="0" IsHitTestVisible="False">
+            <TextBlock.RenderTransform>
+              <TranslateTransform />
+            </TextBlock.RenderTransform>
+          </TextBlock>
+          <TextBlock Name="PriceText" Text="{Binding PriceText}" Classes="mono" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right">
+            <TextBlock.RenderTransform>
+              <TranslateTransform />
+            </TextBlock.RenderTransform>
+          </TextBlock>
+        </Grid>
         <TextBlock Text="{Binding ChangeText}" IsVisible="{Binding !HasStatus}" Classes="mono"
                    Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" FontSize="11" HorizontalAlignment="Right" />
         <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" Classes="warn" FontSize="11" HorizontalAlignment="Right" />

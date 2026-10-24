@@ -35,6 +35,12 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
     public IReadOnlyList<Asset> SearchResults { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the price of a quote that is published for every instrument the moment it is subscribed, like a source
+    /// that sends its first price right away, or <see langword="null"/> to publish nothing.
+    /// </summary>
+    public decimal? QuoteOnSubscribe { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether the provider was disposed.
     /// </summary>
     public bool IsDisposed { get; private set; }
@@ -77,6 +83,14 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
         if (current.Count == 0)
         {
             SetStatus(ProviderConnectionState.Idle);
+        }
+
+        if (QuoteOnSubscribe is { } price)
+        {
+            foreach (var asset in added)
+            {
+                Publish(new Quote(asset.Id, price, null, TimeProvider.GetUtcNow()));
+            }
         }
 
         return Task.CompletedTask;

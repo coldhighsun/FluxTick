@@ -116,6 +116,7 @@ public static class AppHost
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<AddAssetViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<AlertsViewModel>();
         services.AddSingleton<MainViewModel>();
 
         return services.BuildServiceProvider();

@@ -1102,6 +1102,22 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies history still seeds the sparkline when a source sends its first price the moment it is subscribed, before
+    /// the service has looked at the sparkline.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_FirstQuoteArrivesImmediately_StillSeedsSparkline()
+    {
+        var factory = new HistoryFactory(_time.GetUtcNow(), quoteOnSubscribe: 5m);
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+
+        await service.ApplyAsync(SettingsFor(Btc));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 3);
+        service.GetSnapshots().Single().Sparkline.Should().Equal(1m, 2m, 5m);
+    }
+
+    /// <summary>
     /// Verifies search is routed to the named provider and unavailable providers return nothing.
     /// </summary>
     [Fact]
@@ -1323,7 +1339,10 @@ public class MarketDataServiceTests
     /// <param name="now">
     /// The current time used to build the history.
     /// </param>
-    private sealed class HistoryFactory(DateTimeOffset now) : IMarketDataProviderFactory
+    /// <param name="quoteOnSubscribe">
+    /// The price the provider publishes right when an instrument is subscribed, or <see langword="null"/> for none.
+    /// </param>
+    private sealed class HistoryFactory(DateTimeOffset now, decimal? quoteOnSubscribe = null) : IMarketDataProviderFactory
     {
         /// <inheritdoc />
         public ProviderDescriptor Descriptor { get; } = new("crypto", "Crypto", "Test", [AssetClass.Crypto], ProviderUpdateMode.Streaming);
@@ -1333,6 +1352,7 @@ public class MarketDataServiceTests
             new FakeProvider(Descriptor, context.Options)
             {
                 History = [new PricePoint(now.AddMinutes(-2), 1m), new PricePoint(now.AddMinutes(-1), 2m)],
+                QuoteOnSubscribe = quoteOnSubscribe,
             };
     }
 }

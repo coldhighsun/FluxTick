@@ -21,13 +21,24 @@
                     IsChecked="{Binding IsCardLayout, Mode=OneWay}"
                     Command="{Binding SetLayoutCommand}" CommandParameter="{x:Static core:WatchlistLayout.Cards}" />
         </MenuItem>
+        <MenuItem Header="{loc:T Settings_CardSize}" IsVisible="{Binding IsCardLayout}">
+          <MenuItem Header="{loc:T CardSize_Small}" ToggleType="Radio"
+                    IsChecked="{Binding IsCardSizeSmall, Mode=OneWay}"
+                    Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Small}" />
+          <MenuItem Header="{loc:T CardSize_Medium}" ToggleType="Radio"
+                    IsChecked="{Binding IsCardSizeMedium, Mode=OneWay}"
+                    Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Medium}" />
+          <MenuItem Header="{loc:T CardSize_Large}" ToggleType="Radio"
+                    IsChecked="{Binding IsCardSizeLarge, Mode=OneWay}"
+                    Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Large}" />
+        </MenuItem>
         <!-- The entries are added in code just before the menu opens (see GroupingMenu), so they exist only once. -->
         <MenuItem Name="GroupCardsMenu" Header="{loc:T Main_GroupCards}" IsVisible="{Binding IsCardLayout}" />
         <MenuItem Header="{loc:T Main_NewGroup}" IsVisible="{Binding IsCardLayout}" Click="OnNewGroupFromBlankClicked" />
         <Separator />
         <!-- The check mark is drawn inside an icon of fixed size instead of using ToggleType: the built-in check only
              takes room while it is checked, which moved the entries of the whole menu sideways. -->
-        <MenuItem Header="{loc:T Settings_Compact}" Command="{Binding ToggleCompactCommand}">
+        <MenuItem Header="{loc:T Settings_Compact}" Command="{Binding ToggleCompactCommand}" IsVisible="{Binding !IsCardLayout}">
           <MenuItem.Icon>
             <Border Width="16" Height="16">
               <Path Data="M3 8.5l3.2 3.2L13 5" Stroke="{Binding $parent[MenuItem].Foreground}" StrokeThickness="1.6"
@@ -35,11 +46,11 @@
             </Border>
           </MenuItem.Icon>
         </MenuItem>
-        <MenuItem Header="{loc:T Settings_Flash}" Command="{Binding ToggleFlashCommand}">
+        <MenuItem Header="{loc:T Settings_Roll}" Command="{Binding ToggleRollCommand}">
           <MenuItem.Icon>
             <Border Width="16" Height="16">
               <Path Data="M3 8.5l3.2 3.2L13 5" Stroke="{Binding $parent[MenuItem].Foreground}" StrokeThickness="1.6"
-                    StrokeLineCap="Round" StrokeJoin="Round" IsVisible="{Binding Settings.FlashOnUpdate}" />
+                    StrokeLineCap="Round" StrokeJoin="Round" IsVisible="{Binding Settings.RollPriceOnUpdate}" />
             </Border>
           </MenuItem.Icon>
         </MenuItem>
@@ -55,6 +66,9 @@
                 <ContextMenu>
                   <MenuItem Header="{loc:T Watch_ChangeSource}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
+                            CommandParameter="{Binding}" />
+                  <MenuItem Header="{loc:T Watch_Alert}"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditAlertsCommand}"
                             CommandParameter="{Binding}" />
                   <Separator />
                   <MenuItem Header="{loc:T Watch_Remove}"
@@ -127,6 +141,9 @@
                         <ContextMenu>
                           <MenuItem Header="{loc:T Watch_ChangeSource}"
                                     Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ChangeSourceCommand}"
+                                    CommandParameter="{Binding}" />
+                          <MenuItem Header="{loc:T Watch_Alert}"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditAlertsCommand}"
                                     CommandParameter="{Binding}" />
                           <Separator />
                           <MenuItem Header="{loc:T Watch_Remove}"

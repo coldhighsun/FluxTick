@@ -15,7 +15,7 @@ public class WindowWidthRulesTests
     public void For_ListLayout_IsFixedAndDependsOnCompact()
     {
         WindowWidthRules.For(WatchlistLayout.List, compact: false).Should().Be(new WidthRule(340, 340));
-        WindowWidthRules.For(WatchlistLayout.List, compact: true).Should().Be(new WidthRule(260, 260));
+        WindowWidthRules.For(WatchlistLayout.List, compact: true).Should().Be(new WidthRule(280, 280));
     }
 
     /// <summary>
@@ -26,7 +26,7 @@ public class WindowWidthRulesTests
     [InlineData(true)]
     public void For_CardLayout_IsFreeAboveMinimum(bool compact)
     {
-        WindowWidthRules.For(WatchlistLayout.Cards, compact).Should().Be(new WidthRule(300, double.PositiveInfinity));
+        WindowWidthRules.For(WatchlistLayout.Cards, compact).Should().Be(new WidthRule(330, double.PositiveInfinity));
     }
 
     /// <summary>
@@ -34,7 +34,7 @@ public class WindowWidthRulesTests
     /// </summary>
     [Theory]
     [InlineData(false, 340)]
-    [InlineData(true, 260)]
+    [InlineData(true, 280)]
     public void TargetWidth_ListLayout_IgnoresCardWidth(bool compact, double expected)
     {
         WindowWidthRules.TargetWidth(WatchlistLayout.List, compact, 555).Should().Be(expected);
@@ -51,8 +51,8 @@ public class WindowWidthRulesTests
     /// </param>
     [Theory]
     [InlineData(555, 555)]
-    [InlineData(300, 300)]
-    [InlineData(100, 300)]
+    [InlineData(330, 330)]
+    [InlineData(100, 330)]
     public void TargetWidth_CardLayout_UsesRememberedWidthAboveMinimum(double remembered, double expected)
     {
         WindowWidthRules.TargetWidth(WatchlistLayout.Cards, compact: false, remembered).Should().Be(expected);
@@ -74,8 +74,8 @@ public class WindowWidthRulesTests
     /// The expected left edge.
     /// </param>
     [Theory]
-    [InlineData(1000, 340, 260, 1080)]
-    [InlineData(1080, 260, 340, 1000)]
+    [InlineData(1000, 340, 280, 1060)]
+    [InlineData(1060, 280, 340, 1000)]
     [InlineData(1000, 510, 340, 1170)]
     [InlineData(500, 340, 340, 500)]
     public void LeftForRightEdge_WidthChanges_KeepsRightEdge(int left, double oldWidth, double newWidth, int expected)
@@ -114,14 +114,14 @@ public class WindowWidthRulesTests
     [Fact]
     public void Animate_Progress_RunsFromStartToEndWithoutOvershoot()
     {
-        WindowWidthRules.Animate(340, 260, 0).Should().Be(340);
-        WindowWidthRules.Animate(340, 260, 1).Should().Be(260);
-        WindowWidthRules.Animate(340, 260, -1).Should().Be(340);
-        WindowWidthRules.Animate(340, 260, 2).Should().Be(260);
+        WindowWidthRules.Animate(340, 280, 0).Should().Be(340);
+        WindowWidthRules.Animate(340, 280, 1).Should().Be(280);
+        WindowWidthRules.Animate(340, 280, -1).Should().Be(340);
+        WindowWidthRules.Animate(340, 280, 2).Should().Be(280);
 
         for (var step = 0; step <= 20; step++)
         {
-            WindowWidthRules.Animate(340, 260, step / 20.0).Should().BeInRange(260, 340);
+            WindowWidthRules.Animate(340, 280, step / 20.0).Should().BeInRange(280, 340);
         }
     }
 
