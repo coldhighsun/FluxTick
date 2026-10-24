@@ -38,14 +38,14 @@ commodities side by side, from the data sources *you* choose.
   Group the cards by asset class, by data source or into your own groups; every group collapses on its own, and
   cards can be dragged to reorder them or to move them between your groups. The layout and the grouping switch
   from the header, and new groups are created right where you are working.
-- **Live prices**: optional rolling of the price number on every change (the old price slides out upwards and the new one in from below when the price rises, the other way round when it falls; off by default, turn it on in Settings), 60-minute sparklines, change vs. previous close / 24h open.
+- **Live prices**: optional rolling of the price number on every change (the old price slides out upwards and the new one in from below when the price rises, the other way round when it falls; off by default, turn it on in Settings), 60-minute sparklines drawn along the time (a gray dashed line where no price came in, such as before the first price or after the market closed), change vs. previous close / 24h open.
 - **Price alerts**: right-click an instrument and choose **Price alerts…** to be told when its price rises to or falls
   to a price. An alert fires once when the condition comes true (or every time it comes true again, if you choose
   **Repeat**), shows a small notification at the corner of the screen, makes the card or row of the instrument flash for a few seconds, and keeps the data sources connected while it is on, even when the window is hidden.
 - **Floating widget**: borderless, translucent, always on top, draggable, resizable, lockable; can hide at a screen edge and hides to the tray.
 - **You pick the data source**: enable or disable sources, tune their options and choose the default source per
   asset class in **Settings**. Move any instrument to another source with **Change data source…**.
-- **Honest about data quality**: rows show `Stale`, `Reconnecting`, `Source off` instead of silently showing old prices.
+- **Honest about data quality**: rows show `Stale`, `Reconnecting`, `Source off` instead of silently showing old prices. A price is `Stale` when nothing came in for the stale threshold (one minute by default), or when what keeps coming in was traded longer ago than that (a closed market).
 - **Language**: Simplified Chinese or English, switchable at runtime; Auto follows the system language.
 - **Up/down colors**: green-up or red-up, automatic by UI language (red-up for Chinese).
 - **Cross-platform**: Windows, Linux and macOS (built on [Avalonia](https://avaloniaui.net/) and .NET 10).

@@ -33,11 +33,6 @@ public enum PriceDirection
 public sealed partial class AssetRowViewModel : ObservableObject
 {
     /// <summary>
-    /// The last price shown, used to detect tick direction for the flash effect.
-    /// </summary>
-    private decimal? _lastPrice;
-
-    /// <summary>
     /// The snapshot shown last, kept to build the texts again when the language changes.
     /// </summary>
     private AssetSnapshot? _lastSnapshot;
@@ -125,6 +120,20 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial IReadOnlyList<decimal> Sparkline { get; set; }
+
+    /// <summary>
+    /// Gets or sets when each of the <see cref="Sparkline"/> prices was traded, or <see langword="null"/> when that is
+    /// not known.
+    /// </summary>
+    [ObservableProperty]
+    public partial SparklineTimeline? SparklineTimeline { get; set; }
+
+    /// <summary>
+    /// Gets or sets the latest price, which the sparkline places the alert lines by when it has no prices of its own, or
+    /// <see langword="null"/> before the first quote.
+    /// </summary>
+    [ObservableProperty]
+    public partial decimal? CurrentPrice { get; set; }
 
     /// <summary>
     /// Gets or sets the data health.
@@ -305,9 +314,16 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public bool HasStatus => StatusText.Length > 0;
 
     /// <summary>
-    /// Gets a value indicating whether the displayed data is not trustworthy and should be dimmed.
+    /// Gets a value indicating whether the prices are not coming in, whatever the reason (stale, reconnecting, failed,
+    /// switched off), which the sparkline shows as a gray dashed line from the last price on.
     /// </summary>
-    public bool IsDimmed => Health is not (AssetHealth.Live or AssetHealth.Waiting);
+    public bool IsStopped => Health is not (AssetHealth.Live or AssetHealth.Waiting);
+
+    /// <summary>
+    /// Gets a value indicating whether the displayed data is not trustworthy and should be dimmed, which it is while the
+    /// prices are not coming in.
+    /// </summary>
+    public bool IsDimmed => IsStopped;
 
     /// <summary>
     /// Applies a new snapshot of the instrument.
@@ -321,6 +337,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         Health = snapshot.Health;
         StatusText = StatusOf(snapshot);
         Sparkline = snapshot.Sparkline;
+        SparklineTimeline = snapshot.Timeline;
 
         if (snapshot.Quote is { } quote)
         {
@@ -342,7 +359,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
             Tooltip = BuildTooltip(snapshot, quote);
 
             // A change that does not show in the text, because of the rounding, has nothing to roll.
-            if (RollEnabled && _lastPrice is { } previous && previous != quote.Price && shownBefore != PriceText)
+            if (RollEnabled && CurrentPrice is { } previous && previous != quote.Price && shownBefore != PriceText)
             {
                 // The old price is set before the version moves on: the view reads it when the version changes.
                 PreviousPriceText = shownBefore;
@@ -350,7 +367,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
                 RollVersion++;
             }
 
-            _lastPrice = quote.Price;
+            CurrentPrice = quote.Price;
         }
         else
         {
@@ -402,7 +419,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// <param name="value">
     /// The new health.
     /// </param>
-    partial void OnHealthChanged(AssetHealth value) => OnPropertyChanged(nameof(IsDimmed));
+    partial void OnHealthChanged(AssetHealth value)
+    {
+        OnPropertyChanged(nameof(IsStopped));
+        OnPropertyChanged(nameof(IsDimmed));
+    }
 
     /// <summary>
     /// Derives the short status note of a snapshot.

@@ -72,6 +72,7 @@
 
   <Style Selector="controls|SparklineControl">
     <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
+    <Setter Property="StoppedStroke" Value="{DynamicResource MutedBrush}" />
     <Setter Property="AboveStroke" Value="{DynamicResource UpBrush}" />
     <Setter Property="BelowStroke" Value="{DynamicResource DownBrush}" />
   </Style>

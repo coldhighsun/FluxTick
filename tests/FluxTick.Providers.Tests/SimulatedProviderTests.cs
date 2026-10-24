@@ -85,6 +85,39 @@ public class SimulatedProviderTests
     }
 
     /// <summary>
+    /// Verifies the market hours symbol trades for its open time, then repeats its last price with the old trade time
+    /// for its closed time, and trades again after that.
+    /// </summary>
+    [Fact]
+    public async Task Stream_WithMarketHoursSymbol_TradesThenRepeatsTheLastPriceThenTradesAgain()
+    {
+        var time = new FakeTimeProvider();
+        var start = time.GetUtcNow();
+        var hours = new Asset(SimulatedProviderFactory.ProviderId, SimulatedProvider.MarketHoursSymbol, "Hours", AssetClass.Equity);
+        await using var provider = Create(time);
+        await provider.SetSubscriptionsAsync([hours]);
+
+        // The provider ticks once a second (its default) and CollectAsync moves the clock a second per quote, so the
+        // index of a quote is, within a second or so, the number of seconds since the start. The symbol trades first,
+        // is closed after that, and trades again after that; the checks sit a minute inside the phases, so each phase
+        // has to be longer than two minutes.
+        var open = (int)SimulatedProvider.OpenFor.TotalSeconds;
+        var closed = (int)SimulatedProvider.ClosedFor.TotalSeconds;
+        const int minute = 60;
+        var earlyInClosedPhase = open + minute;
+        var lateInClosedPhase = open + closed - minute;
+        var inNextOpenPhase = open + closed + minute;
+        var quotes = await CollectAsync(provider, time, inNextOpenPhase + 1);
+
+        var early = quotes[earlyInClosedPhase];
+        var late = quotes[lateInClosedPhase];
+        early.Timestamp.Should().BeBefore(start + SimulatedProvider.OpenFor, "it is the time of the last trade");
+        late.Timestamp.Should().Be(early.Timestamp);
+        late.Price.Should().Be(early.Price);
+        quotes[inNextOpenPhase].Timestamp.Should().BeAfter(start + SimulatedProvider.OpenFor + SimulatedProvider.ClosedFor);
+    }
+
+    /// <summary>
     /// Verifies removing the last subscription stops generation and the provider goes idle.
     /// </summary>
     [Fact]

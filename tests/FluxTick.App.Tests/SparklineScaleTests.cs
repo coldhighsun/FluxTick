@@ -62,4 +62,24 @@ public class SparklineScaleTests
     [Fact]
     public void Place_ChartWithoutSpan_IsTheMiddle() =>
         SparklineScale.Place(100, 100, 100).Should().Be((0.5, false));
+
+    /// <summary>
+    /// The end of the window used by the time tests.
+    /// </summary>
+    private static readonly DateTimeOffset AsOf = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Verifies the start of the window is at the left, its end at the right, and times outside it sit at the edges.
+    /// </summary>
+    [Fact]
+    public void TimeX_PlacesTimesAlongTheWindow()
+    {
+        var window = TimeSpan.FromMinutes(60);
+
+        SparklineScale.TimeX(AsOf, AsOf, window).Should().Be(1);
+        SparklineScale.TimeX(AsOf.AddMinutes(-60), AsOf, window).Should().Be(0);
+        SparklineScale.TimeX(AsOf.AddMinutes(-30), AsOf, window).Should().Be(0.5);
+        SparklineScale.TimeX(AsOf.AddMinutes(-90), AsOf, window).Should().Be(0);
+        SparklineScale.TimeX(AsOf.AddMinutes(5), AsOf, window).Should().Be(1);
+    }
 }

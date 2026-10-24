@@ -38,8 +38,11 @@
       <controls:SparklineControl Grid.Row="2" Classes="detail chart" Margin="0,4"
                                  ToolTip.Tip="{loc:T Row_SparklineTip}"
                                  Points="{Binding Sparkline}"
+                                 Timeline="{Binding SparklineTimeline}"
                                  AboveLevel="{Binding AlertAbove}"
                                  BelowLevel="{Binding AlertBelow}"
+                                 Price="{Binding CurrentPrice}"
+                                 IsStopped="{Binding IsStopped}"
                                  Classes.up="{Binding IsUp}"
                                  Classes.down="{Binding IsDown}" />
 

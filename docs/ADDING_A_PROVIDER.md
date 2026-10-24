@@ -70,6 +70,12 @@ public sealed class MySourceProvider(ProviderDescriptor descriptor, TimeSpan int
 }
 ```
 
+The last argument of `Quote` is **when the price was traded**, not when your code received or parsed it. The app
+compares it with the clock: a quote older than the stale threshold (one minute by default) makes the instrument show as `Stale` (even though quotes keep
+arriving, as a polled source does after the market closed), and the sparkline places the price at that time, so a
+stretch without trades shows as a gray dashed line. Use the time the API reports; fall back to
+`TimeProvider.GetUtcNow()` only when it reports none.
+
 Rules of thumb:
 
 - Do no network I/O in the constructor or in the factory; start lazily on the first subscription.
