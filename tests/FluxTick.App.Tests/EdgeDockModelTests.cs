@@ -116,6 +116,26 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
+    /// Hiding, showing and forgetting the dock each raise the change once, and repeating a state raises nothing.
+    /// </summary>
+    [Fact]
+    public void Hidden_Changes_RaiseHiddenChangedOnlyOnChange()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        var raised = 0;
+        model.HiddenChanged += (_, _) => raised++;
+
+        model.SetHidden(true);
+        model.SetHidden(true);
+        model.SetHidden(false);
+        model.SetHidden(true);
+        model.Reset();
+
+        raised.Should().Be(4);
+    }
+
+    /// <summary>
     /// A hidden window does not wait to hide again when the pointer leaves it.
     /// </summary>
     [Fact]

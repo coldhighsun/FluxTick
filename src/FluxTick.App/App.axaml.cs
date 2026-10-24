@@ -113,6 +113,11 @@ public sealed partial class App : Application
     private LanguageMode? _appliedLanguage;
 
     /// <summary>
+    /// How long a window that is about to open counts as showing prices before its real state counts.
+    /// </summary>
+    private static readonly TimeSpan OpeningTimeLimit = TimeSpan.FromSeconds(15);
+
+    /// <summary>
     /// How many times starting the hover watcher is tried before giving up.
     /// </summary>
     private const int TrayHoverMaxAttempts = 5;
@@ -150,7 +155,12 @@ public sealed partial class App : Application
             _window.RestoreGeometry(_settings.Current.Window);
             _window.GeometryChanged += OnGeometryChanged;
             _window.Closed += OnWindowClosed;
-            if (TrayPolicy.StartHidden(_settings.Current.General, desktop.Args ?? [], () => HasTrayIcon))
+
+            // A window that is about to open counts as shown from the start, so the data sources are not told to stay
+            // disconnected by the first settings only to connect a moment later when the window appears.
+            var startHidden = TrayPolicy.StartHidden(_settings.Current.General, desktop.Args ?? [], () => HasTrayIcon);
+            BindUsage(_window, _services.GetRequiredService<MarketDataService>(), () => _window!.IsDockedAway, handler => _window!.DockedAwayChanged += handler, expectOpen: !startHidden);
+            if (startHidden)
             {
                 ShowFromTrayLater(desktop, _window);
             }
@@ -371,6 +381,39 @@ public sealed partial class App : Application
     }
 
     /// <summary>
+    /// Holds a usage of the market data for as long as the window is shown and not minimized, so that the data sources
+    /// only stay connected while somebody can see the prices.
+    /// </summary>
+    /// <param name="window">
+    /// The window that shows prices.
+    /// </param>
+    /// <param name="market">
+    /// The market data service.
+    /// </param>
+    /// <param name="isAway">
+    /// Tells whether the window is shown but parked out of sight, such as at a screen edge; <see langword="null"/> for never.
+    /// </param>
+    /// <param name="subscribeAway">
+    /// Subscribes a handler to the changes of <paramref name="isAway"/>.
+    /// </param>
+    /// <param name="expectOpen">
+    /// Whether the window is about to open, and counts as shown until it does.
+    /// </param>
+    private static void BindUsage(Window window, MarketDataService market, Func<bool>? isAway = null, Action<EventHandler>? subscribeAway = null, bool expectOpen = false)
+    {
+        var source = new OpeningShownSource(new WindowShownSource(window, isAway, subscribeAway), expectOpen);
+        if (expectOpen)
+        {
+            window.Opened += (_, _) => source.EndOpening();
+
+            // A window that never opens must not keep the sources connected.
+            DispatcherTimer.RunOnce(source.EndOpening, OpeningTimeLimit);
+        }
+
+        _ = new UsageBinding(market, source);
+    }
+
+    /// <summary>
     /// Starts or stops listing the instruments when the pointer rests on the tray icon, according to the setting.
     /// Only Windows can tell where the tray icon is; elsewhere the tray keeps its plain tooltip.
     /// </summary>
@@ -401,7 +444,13 @@ public sealed partial class App : Application
             return;
         }
 
-        var popup = _trayPopup ??= new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services.GetRequiredService<MainViewModel>().Rows) };
+        if (_trayPopup is null)
+        {
+            _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services.GetRequiredService<MainViewModel>().Rows) };
+            BindUsage(_trayPopup, _services.GetRequiredService<MarketDataService>());
+        }
+
+        var popup = _trayPopup;
         var hover = WindowsTrayHover.TryCreate(tray, () => popup.IsPointerOver, () => popup.IsVisible);
         if (hover is null)
         {

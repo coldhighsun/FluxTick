@@ -86,6 +86,26 @@ public class PollingProviderBaseTests
     }
 
     /// <summary>
+    /// Verifies polling starts again, with every instrument fetched at once, when instruments come back after an empty
+    /// set, which is what the app does when somebody looks at the data again.
+    /// </summary>
+    [Fact]
+    public async Task SubscriptionsAfterEmptySet_StartPollingAgain()
+    {
+        var time = new FakeTimeProvider();
+        await using var provider = new TestProvider(time, _ => Ok());
+        await provider.SetSubscriptionsAsync([Coin]);
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        await provider.SetSubscriptionsAsync([]);
+        var callsBefore = provider.Calls;
+
+        await provider.SetSubscriptionsAsync([Coin]);
+
+        await TestWait.EventuallyAsync(() => provider.Calls > callsBefore);
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+    }
+
+    /// <summary>
     /// Verifies an immediate poll that finishes after every instrument was removed does not replace the idle status.
     /// </summary>
     [Fact]

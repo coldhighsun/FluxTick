@@ -184,6 +184,23 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies a settings file written before connecting on demand existed connects on demand.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithoutConnectOnDemandKey_DefaultsToOn()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "general": { "startMinimized": true } }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.General.ConnectOnDemand.Should().BeTrue();
+        loaded.General.StartMinimized.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies the flash defaults to off, including for a settings file written before the option existed.
     /// </summary>
     [Fact]

@@ -412,6 +412,25 @@ public class WebSocketProviderBaseTests
     }
 
     /// <summary>
+    /// Verifies the connection is opened again and the instrument subscribed again when instruments come back after an
+    /// empty set, which is what the app does when somebody looks at the data again.
+    /// </summary>
+    [Fact]
+    public async Task SubscriptionsAfterEmptySet_ConnectAndSubscribeAgain()
+    {
+        await using var server = LoopbackServer.Start();
+        await using var provider = new TestProvider(server.Uri);
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+        await server.WaitForMessageCountAsync("sub:A", 1);
+        await provider.SetSubscriptionsAsync([]);
+
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+
+        await server.WaitForMessageCountAsync("sub:A", 2);
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+    }
+
+    /// <summary>
     /// Verifies an unreachable server reports a reconnecting state rather than throwing.
     /// </summary>
     [Fact]

@@ -1,6 +1,8 @@
 using FluxTick.Abstractions;
 using FluxTick.Core.Domain;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using ThrottledLogging;
 
 namespace FluxTick.Core.Application;
 
@@ -28,6 +30,25 @@ public sealed record MarketDataServiceOptions
     /// Gets how often health is re-evaluated.
     /// </summary>
     public TimeSpan HealthInterval { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Gets how long the sources stay connected after the last user of the data is gone, when connecting on demand.
+    /// A window that is shown and hidden in quick succession then does not reconnect every time.
+    /// </summary>
+    public TimeSpan IdleDisconnectDelay { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Gets how long a handler of <see cref="MarketDataService.ProviderStatusChanged"/> or
+    /// <see cref="MarketDataService.SnapshotChanged"/> may take before a warning is logged, because the events behind it
+    /// wait.
+    /// </summary>
+    public TimeSpan SlowHandlerWarning { get; init; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Gets the shortest time between two log messages about the same failing or slow event handler. Such a problem
+    /// repeats with every quote, and the messages in between are only counted.
+    /// </summary>
+    public TimeSpan HandlerLogInterval { get; init; } = TimeSpan.FromMinutes(1);
 }
 
 /// <summary>
@@ -103,6 +124,64 @@ public sealed class MarketDataService : IAsyncDisposable
     private readonly ITimer _healthTimer;
 
     /// <summary>
+    /// The settings applied last, used to re-route the subscriptions when the use of the data changes.
+    /// </summary>
+    private AppSettings? _lastSettings;
+
+    /// <summary>
+    /// How many users currently look at the data. Guarded by <see cref="_gate"/>.
+    /// </summary>
+    private int _usageCount;
+
+    /// <summary>
+    /// Whether sources connect only while the data is used. Guarded by <see cref="_gate"/>.
+    /// </summary>
+    private bool _onDemand;
+
+    /// <summary>
+    /// Whether the last user left recently and the sources are still kept connected. Guarded by <see cref="_gate"/>.
+    /// </summary>
+    private bool _inGrace;
+
+    /// <summary>
+    /// Ends the grace period. Guarded by <see cref="_gate"/>.
+    /// </summary>
+    private ITimer? _graceTimer;
+
+    /// <summary>
+    /// Identifies the running grace period, so that a callback of one that was replaced is ignored. Guarded by
+    /// <see cref="_gate"/>.
+    /// </summary>
+    private int _graceVersion;
+
+    /// <summary>
+    /// Whether the subscriptions were last routed to the providers, or <see langword="null"/> before the first time.
+    /// Guarded by <see cref="_applyLock"/>.
+    /// </summary>
+    private bool? _connected;
+
+    /// <summary>
+    /// Whether the service was disposed; set once, read under <see cref="_applyLock"/>.
+    /// </summary>
+    private volatile bool _disposed;
+
+    /// <summary>
+    /// The providers whose status is to be announced, in order. Events are never raised on the thread that reports a
+    /// change, because that may be the one holding the apply lock; <see cref="_statusPump"/> raises them.
+    /// </summary>
+    private readonly Channel<string> _statusQueue = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+
+    /// <summary>
+    /// Raises the queued status events one after the other.
+    /// </summary>
+    private readonly Task _statusPump;
+
+    /// <summary>
+    /// How long disposing waits for an apply that is still running.
+    /// </summary>
+    private static readonly TimeSpan DisposeWait = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MarketDataService"/> class.
     /// </summary>
     /// <param name="registry">
@@ -129,15 +208,27 @@ public sealed class MarketDataService : IAsyncDisposable
         _options = options ?? new MarketDataServiceOptions();
         _logger = loggerFactory.CreateLogger<MarketDataService>();
         _healthTimer = timeProvider.CreateTimer(_ => RefreshHealth(), null, _options.HealthInterval, _options.HealthInterval);
+        _statusPump = Task.Run(PumpStatusAsync);
     }
 
     /// <summary>
-    /// Raised when the snapshot of an instrument changed. May be raised on any thread.
+    /// Raised when the snapshot of an instrument changed. May be raised on any thread: on the one that delivers the
+    /// quote of a provider, and on the ones that apply settings, refresh health or report a status change. Handlers must
+    /// return quickly (post to the UI thread instead of waiting), because they hold up the quotes of the provider, or the
+    /// status events of all providers, while they run. A handler that throws is logged and does not keep the other
+    /// handlers from getting the snapshot or the provider from delivering more quotes, and a slow one is reported.
+    /// Both are logged at most once per <see cref="MarketDataServiceOptions.HandlerLogInterval"/>.
     /// </summary>
     public event EventHandler<AssetSnapshot>? SnapshotChanged;
 
     /// <summary>
-    /// Raised when a provider's connection status changed. May be raised on any thread.
+    /// Raised when a provider's connection status changed, or what is shown for it (for example paused instead of idle).
+    /// Events are queued and raised one after the other by a thread of the service, in the order they were queued, so
+    /// they can arrive a moment after the change and after <c>ApplyAsync</c> returned. The status in the event is the
+    /// one the provider has when the event is raised, so a change can be delivered with an earlier queue entry of the
+    /// same provider, and quick changes may be seen as one. A status equal to the one raised last is not raised again. Handlers must return quickly (post to the UI thread instead of waiting): a handler that blocks
+    /// holds back the events of every provider, and a warning is logged when one is slow. A handler that throws is logged
+    /// and does not keep the other handlers from getting the event.
     /// </summary>
     public event EventHandler<ProviderStatusChangedEventArgs>? ProviderStatusChanged;
 
@@ -168,7 +259,7 @@ public sealed class MarketDataService : IAsyncDisposable
     {
         lock (_gate)
         {
-            return _slots.TryGetValue(providerId, out var slot) ? slot.Provider.Status : null;
+            return _slots.TryGetValue(providerId, out var slot) ? EffectiveStatus(slot.Provider.Status) : null;
         }
     }
 
@@ -225,6 +316,32 @@ public sealed class MarketDataService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Registers that someone looks at the data. While connecting on demand, the sources only connect while at least one
+    /// usage is held (and for a short grace period after the last one ends). Dispose the result to end the usage.
+    /// </summary>
+    /// <returns>
+    /// The usage to dispose when the data is no longer looked at.
+    /// </returns>
+    public IDisposable AcquireUsage()
+    {
+        bool changed;
+        lock (_gate)
+        {
+            var before = WantsConnection;
+            _usageCount++;
+            CancelGrace();
+            changed = WantsConnection != before;
+        }
+
+        if (changed)
+        {
+            _ = ReapplyAsync();
+        }
+
+        return new Usage(this);
+    }
+
+    /// <summary>
     /// Reconciles the running providers and subscriptions with the settings: starts newly enabled providers,
     /// restarts those whose options changed, stops disabled ones and routes the watchlist.
     /// </summary>
@@ -239,9 +356,33 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </returns>
     public async Task ApplyAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
+        List<string> announced = [];
+        List<AssetId> snapshots = [];
         await _applyLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            bool connect;
+            lock (_gate)
+            {
+                // The first settings are the ones the app starts with: nobody has looked yet, so nothing connects until
+                // somebody does. Only a later switch-on gets the grace period of a user who just left.
+                var first = _lastSettings is null;
+                _lastSettings = settings;
+                var onDemand = settings.General.ConnectOnDemand;
+                if (onDemand && !_onDemand && _usageCount == 0 && !first)
+                {
+                    StartGrace();
+                }
+
+                _onDemand = onDemand;
+                connect = WantsConnection;
+            }
+
             var desired = new Dictionary<string, IReadOnlyDictionary<string, string>>();
             foreach (var descriptor in _registry.Descriptors.Where(settings.IsProviderEnabled))
             {
@@ -249,36 +390,66 @@ public sealed class MarketDataService : IAsyncDisposable
             }
 
             await RetireProvidersAsync(desired).ConfigureAwait(false);
-            StartMissingProviders(desired);
+            announced.AddRange(await StartMissingProvidersAsync(desired).ConfigureAwait(false));
 
-            var watchlist = settings.Watchlist.Select(e => e.ToAsset()).DistinctBy(a => a.Id).ToList();
+            var watchlist = WatchlistOf(settings);
             UpdateAssets(watchlist);
-
-            List<ProviderSlot> slots;
-            lock (_gate)
-            {
-                slots = [.. _slots.Values];
-            }
-
-            foreach (var slot in slots)
-            {
-                var mine = watchlist.Where(a => a.ProviderId == slot.Id).ToArray();
-                await slot.Provider.SetSubscriptionsAsync(mine, cancellationToken).ConfigureAwait(false);
-            }
-
-            SeedEmptySeries();
-            RefreshHealth(forceRaise: true);
+            announced.AddRange(await RouteSubscriptionsAsync(watchlist, connect, cancellationToken).ConfigureAwait(false));
+            snapshots = CollectHealthChanges(forceRaise: true);
         }
         finally
         {
             _applyLock.Release();
         }
+
+        // Events leave the service only after the lock is released, so a handler that waits for another apply cannot
+        // deadlock.
+        RaiseSnapshots(snapshots);
+        EnqueueStatus(announced);
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        // Later applies do nothing from here on. The providers are disposed first, which also frees an apply that waits
+        // on one of them, so a stuck provider cannot block shutdown.
+        _disposed = true;
         await _healthTimer.DisposeAsync().ConfigureAwait(false);
+        lock (_gate)
+        {
+            CancelGrace();
+        }
+
+        await DisposeSlotsAsync().ConfigureAwait(false);
+
+        // An apply that was already running may have started providers meanwhile; give it a moment, then dispose those.
+        if (await _applyLock.WaitAsync(DisposeWait).ConfigureAwait(false))
+        {
+            _applyLock.Release();
+        }
+
+        await DisposeSlotsAsync().ConfigureAwait(false);
+
+        // Let the queued events out, but do not wait for a handler that never returns.
+        _statusQueue.Writer.TryComplete();
+        try
+        {
+            await _statusPump.WaitAsync(DisposeWait).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // A handler that never returns; the process is going away anyway.
+        }
+    }
+
+    /// <summary>
+    /// Disposes every running provider.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once they are disposed.
+    /// </returns>
+    private async Task DisposeSlotsAsync()
+    {
         List<ProviderSlot> slots;
         lock (_gate)
         {
@@ -289,6 +460,360 @@ public sealed class MarketDataService : IAsyncDisposable
         foreach (var slot in slots)
         {
             await slot.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the sources should be connected. Must be called while holding the lock.
+    /// </summary>
+    private bool WantsConnection => !_onDemand || _usageCount > 0 || _inGrace;
+
+    /// <summary>
+    /// Ends one usage and, when it was the last one, keeps the sources for the grace period.
+    /// </summary>
+    private void ReleaseUsage()
+    {
+        lock (_gate)
+        {
+            if (_usageCount == 0)
+            {
+                return;
+            }
+
+            _usageCount--;
+            if (_usageCount == 0 && _onDemand)
+            {
+                StartGrace();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts the grace period after which the sources disconnect. Must be called while holding the lock.
+    /// </summary>
+    private void StartGrace()
+    {
+        CancelGrace();
+        _inGrace = true;
+        var version = _graceVersion;
+        _graceTimer = _timeProvider.CreateTimer(_ => OnGraceElapsed(version), null, _options.IdleDisconnectDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>
+    /// Stops a running grace period. Must be called while holding the lock.
+    /// </summary>
+    private void CancelGrace()
+    {
+        _inGrace = false;
+        _graceVersion++;
+        _graceTimer?.Dispose();
+        _graceTimer = null;
+    }
+
+    /// <summary>
+    /// Disconnects the sources when the grace period ended without a new usage.
+    /// </summary>
+    /// <param name="version">
+    /// The grace period the callback belongs to.
+    /// </param>
+    private void OnGraceElapsed(int version)
+    {
+        lock (_gate)
+        {
+            if (!_inGrace || version != _graceVersion)
+            {
+                return;
+            }
+
+            CancelGrace();
+            if (WantsConnection)
+            {
+                return;
+            }
+        }
+
+        _ = ReapplyAsync();
+    }
+
+    /// <summary>
+    /// Routes the subscriptions again with the settings applied last, after the use of the data changed.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the subscriptions are updated.
+    /// </returns>
+    private async Task ReapplyAsync()
+    {
+        List<string> announced = [];
+        List<AssetId> snapshots = [];
+        await _applyLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            AppSettings? settings;
+            bool connect;
+            lock (_gate)
+            {
+                settings = _lastSettings;
+                connect = WantsConnection;
+            }
+
+            // Nothing to do before the first apply, after dispose, or when the use changed but the state did not
+            // (for example the window was shown and hidden again within the grace period).
+            if (settings is null || _disposed || connect == _connected)
+            {
+                return;
+            }
+
+            announced.AddRange(await RouteSubscriptionsAsync(WatchlistOf(settings), connect, CancellationToken.None).ConfigureAwait(false));
+            snapshots = CollectHealthChanges(forceRaise: false);
+        }
+        catch (Exception ex) when (_disposed && ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The providers were disposed under the apply; nothing is left to update.
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogError(ex, "Could not update the subscriptions after the use of the data changed");
+        }
+        finally
+        {
+            _applyLock.Release();
+        }
+
+        RaiseSnapshots(snapshots);
+        EnqueueStatus(announced);
+    }
+
+    /// <summary>
+    /// Builds the instruments of the watchlist, once per id, in display order.
+    /// </summary>
+    /// <param name="settings">
+    /// The settings that hold the watchlist.
+    /// </param>
+    /// <returns>
+    /// The instruments.
+    /// </returns>
+    private static List<Asset> WatchlistOf(AppSettings settings) =>
+        settings.Watchlist.Select(e => e.ToAsset()).DistinctBy(a => a.Id).ToList();
+
+    /// <summary>
+    /// Sends every provider its instruments, or none while disconnected. Must be called while holding the apply lock.
+    /// </summary>
+    /// <param name="watchlist">
+    /// The instruments to track.
+    /// </param>
+    /// <param name="connect">
+    /// Whether the sources should be connected.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token to cancel the operation.
+    /// </param>
+    /// <returns>
+    /// The ids of the providers whose shown status changed, to announce once the apply lock is released.
+    /// </returns>
+    private async Task<List<string>> RouteSubscriptionsAsync(List<Asset> watchlist, bool connect, CancellationToken cancellationToken)
+    {
+        // The age of the last quote is kept across a pause, so prices from before it show as stale until new ones arrive.
+        List<ProviderSlot> slots;
+        lock (_gate)
+        {
+            slots = [.. _slots.Values];
+        }
+
+        foreach (var slot in slots)
+        {
+            var mine = connect ? watchlist.Where(a => a.ProviderId == slot.Id).ToArray() : [];
+            await slot.Provider.SetSubscriptionsAsync(mine, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Only now: if routing failed above, the next apply still sees the old state and does the work again.
+        var previous = _connected;
+        _connected = connect;
+        List<string> announced = [];
+        if (previous != connect)
+        {
+            LogConnectionChange(connect, first: previous is null);
+
+            // A provider that stays idle sends no event of its own, but what it is shown as changed.
+            announced.AddRange(slots.Where(slot => slot.Provider.Status.State == ProviderConnectionState.Idle).Select(slot => slot.Id));
+        }
+
+        if (connect)
+        {
+            SeedEmptySeries();
+        }
+
+        return announced;
+    }
+
+    /// <summary>
+    /// Queues a status event for each provider. The event carries the status the provider has when it is raised, so
+    /// events that wait for each other still end on the current state.
+    /// </summary>
+    /// <param name="providerIds">
+    /// The providers whose shown status changed.
+    /// </param>
+    private void EnqueueStatus(IEnumerable<string> providerIds)
+    {
+        foreach (var id in providerIds)
+        {
+            _statusQueue.Writer.TryWrite(id);
+        }
+    }
+
+    /// <summary>
+    /// Raises the snapshot event.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The snapshot.
+    /// </param>
+    private void RaiseSnapshot(AssetSnapshot snapshot) => Raise(SnapshotChanged, snapshot, nameof(SnapshotChanged));
+
+    /// <summary>
+    /// Raises an event one subscriber at a time, so a subscriber that throws or is slow does not keep the others from
+    /// getting it. A failure is logged, and a subscriber that takes longer than the limit is reported, because the
+    /// events behind it wait. Both are logged at most once per <see cref="MarketDataServiceOptions.HandlerLogInterval"/>
+    /// per event, as they would otherwise repeat with every quote.
+    /// </summary>
+    /// <typeparam name="TArgs">
+    /// The event data type.
+    /// </typeparam>
+    /// <param name="handler">
+    /// The event.
+    /// </param>
+    /// <param name="args">
+    /// The event data.
+    /// </param>
+    /// <param name="eventName">
+    /// The name of the event, for the log.
+    /// </param>
+    private void Raise<TArgs>(EventHandler<TArgs>? handler, TArgs args, string eventName)
+    {
+        if (handler is null)
+        {
+            return;
+        }
+
+        // Enumerating the invocation list does not allocate, which matters because every quote goes through here.
+        foreach (var subscriber in Delegate.EnumerateInvocationList(handler))
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
+            {
+                subscriber(this, args);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _logger.LogErrorThrottled($"{eventName}:failed", _options.HandlerLogInterval, ex, "A handler of {Event} failed", eventName);
+            }
+
+            var took = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            if (took > _options.SlowHandlerWarning)
+            {
+                _logger.LogWarningThrottled($"{eventName}:slow", _options.HandlerLogInterval, "A handler of {Event} took {Elapsed} ms; the events behind it wait", eventName, (int)took.TotalMilliseconds);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Raises the queued status events in order, each followed by a health refresh.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the queue is completed and drained.
+    /// </returns>
+    private async Task PumpStatusAsync()
+    {
+        // What was raised last for each provider, so a change that leaves the shown status as it is raises nothing.
+        Dictionary<string, ProviderStatus> raised = [];
+        await foreach (var id in _statusQueue.Reader.ReadAllAsync().ConfigureAwait(false))
+        {
+            // After disposal the providers are gone; refreshing now would report every instrument as having no source.
+            if (_disposed)
+            {
+                continue;
+            }
+
+            try
+            {
+                ProviderStatus? status;
+                lock (_gate)
+                {
+                    status = _slots.TryGetValue(id, out var slot) ? EffectiveStatus(slot.Provider.Status) : null;
+                }
+
+                if (status is null)
+                {
+                    raised.Remove(id);
+                }
+                else if (!raised.TryGetValue(id, out var last) || last != status)
+                {
+                    raised[id] = status;
+                    Raise(ProviderStatusChanged, new ProviderStatusChangedEventArgs(id, status), nameof(ProviderStatusChanged));
+                }
+
+                // The handler may have run while the service was being disposed.
+                if (!_disposed)
+                {
+                    RefreshHealth();
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _logger.LogError(ex, "Could not handle the status of provider {ProviderId}", id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Logs that the sources were connected or disconnected on purpose, with the reason.
+    /// </summary>
+    /// <param name="connected">
+    /// Whether the sources are connected now.
+    /// </param>
+    /// <param name="first">
+    /// Whether this is the first state since the start, so nothing was connected or disconnected before it.
+    /// </param>
+    private void LogConnectionChange(bool connected, bool first)
+    {
+        bool onDemand;
+        int usages;
+        lock (_gate)
+        {
+            onDemand = _onDemand;
+            usages = _usageCount;
+        }
+
+        if (connected)
+        {
+            _logger.LogInformation(
+                onDemand ? "Data sources connected: {Usages} window(s) show prices" : "Data sources connected: connecting on demand is off",
+                usages);
+        }
+        else if (first)
+        {
+            _logger.LogInformation("Data sources stay disconnected: no window shows prices yet");
+        }
+        else
+        {
+            _logger.LogInformation("Data sources disconnected: no window shows prices and the grace period is over");
+        }
+    }
+
+    /// <summary>
+    /// Reports a provider that was disconnected on purpose as paused instead of idle.
+    /// </summary>
+    /// <param name="status">
+    /// The status the provider reports.
+    /// </param>
+    /// <returns>
+    /// The status to show.
+    /// </returns>
+    private ProviderStatus EffectiveStatus(ProviderStatus status)
+    {
+        lock (_gate)
+        {
+            return status.State == ProviderConnectionState.Idle && !WantsConnection
+                ? new ProviderStatus(ProviderConnectionState.Paused)
+                : status;
         }
     }
 
@@ -328,12 +853,21 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <param name="desired">
     /// The wanted providers and their options.
     /// </param>
-    private void StartMissingProviders(Dictionary<string, IReadOnlyDictionary<string, string>> desired)
+    /// <returns>
+    /// The ids of the providers that were started, to announce once the apply lock is released.
+    /// </returns>
+    private async Task<List<string>> StartMissingProvidersAsync(Dictionary<string, IReadOnlyDictionary<string, string>> desired)
     {
+        List<string> started = [];
         foreach (var (id, options) in desired)
         {
             lock (_gate)
             {
+                if (_disposed)
+                {
+                    return started;
+                }
+
                 if (_slots.ContainsKey(id))
                 {
                     continue;
@@ -352,18 +886,34 @@ public sealed class MarketDataService : IAsyncDisposable
                     _loggerFactory,
                     _timeProvider));
                 var slot = new ProviderSlot(id, provider, options);
-                provider.StatusChanged += (_, status) => OnProviderStatusChanged(id, status);
+                provider.StatusChanged += (_, _) => OnProviderStatusChanged(id);
                 slot.Pump = Task.Run(() => PumpAsync(slot));
+                bool rejected;
                 lock (_gate)
                 {
-                    _slots[id] = slot;
+                    // Disposal may have cleared the slots while the provider was being created; nobody would dispose it.
+                    rejected = _disposed;
+                    if (!rejected)
+                    {
+                        _slots[id] = slot;
+                    }
                 }
+
+                if (rejected)
+                {
+                    await slot.DisposeAsync().ConfigureAwait(false);
+                    return started;
+                }
+
+                started.Add(id);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _logger.LogError(ex, "Failed to create provider {ProviderId}", id);
             }
         }
+
+        return started;
     }
 
     /// <summary>
@@ -472,7 +1022,7 @@ public sealed class MarketDataService : IAsyncDisposable
 
         if (snapshot is not null)
         {
-            SnapshotChanged?.Invoke(this, snapshot);
+            RaiseSnapshot(snapshot);
         }
     }
 
@@ -527,7 +1077,7 @@ public sealed class MarketDataService : IAsyncDisposable
             state.LastHealth = snapshot.Health;
         }
 
-        SnapshotChanged?.Invoke(this, snapshot);
+        RaiseSnapshot(snapshot);
     }
 
     /// <summary>
@@ -536,42 +1086,72 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <param name="forceRaise">
     /// Raise an event for every instrument, even when its health did not change.
     /// </param>
-    private void RefreshHealth(bool forceRaise = false)
+    private void RefreshHealth(bool forceRaise = false) => RaiseSnapshots(CollectHealthChanges(forceRaise));
+
+    /// <summary>
+    /// Re-evaluates the health of all instruments and returns the ones that changed, without raising events.
+    /// </summary>
+    /// <param name="forceRaise">
+    /// Return every instrument, even when its health did not change.
+    /// </param>
+    /// <returns>
+    /// The instruments whose snapshot is to be raised.
+    /// </returns>
+    private List<AssetId> CollectHealthChanges(bool forceRaise)
     {
-        List<AssetSnapshot> changed = [];
+        List<AssetId> changed = [];
         lock (_gate)
         {
             foreach (var state in _assets.Values)
             {
-                var snapshot = BuildSnapshot(state);
-                if (forceRaise || snapshot.Health != state.LastHealth)
+                // Only the health is needed here; the snapshot is built when the event is raised.
+                var (health, _) = ComputeHealth(state);
+                if (forceRaise || health != state.LastHealth)
                 {
-                    state.LastHealth = snapshot.Health;
-                    changed.Add(snapshot);
+                    state.LastHealth = health;
+                    changed.Add(state.Asset.Id);
                 }
             }
         }
 
-        foreach (var snapshot in changed)
+        return changed;
+    }
+
+    /// <summary>
+    /// Raises the snapshot event for each instrument with what it looks like now. Building the snapshot only when the
+    /// event is raised keeps one that waited for a lock from overtaking a newer quote with older data.
+    /// </summary>
+    /// <param name="ids">
+    /// The instruments whose snapshot changed.
+    /// </param>
+    private void RaiseSnapshots(List<AssetId> ids)
+    {
+        foreach (var id in ids)
         {
-            SnapshotChanged?.Invoke(this, snapshot);
+            AssetSnapshot? snapshot = null;
+            lock (_gate)
+            {
+                if (_assets.TryGetValue(id, out var state))
+                {
+                    snapshot = BuildSnapshot(state);
+                    state.LastHealth = snapshot.Health;
+                }
+            }
+
+            if (snapshot is not null)
+            {
+                RaiseSnapshot(snapshot);
+            }
         }
     }
 
     /// <summary>
-    /// Handles a provider status change by updating health and forwarding the event.
+    /// Handles a provider status change by queueing its event, which also refreshes health.
     /// </summary>
     /// <param name="providerId">
     /// The provider id.
     /// </param>
-    /// <param name="status">
-    /// The new status.
-    /// </param>
-    private void OnProviderStatusChanged(string providerId, ProviderStatus status)
-    {
-        ProviderStatusChanged?.Invoke(this, new ProviderStatusChangedEventArgs(providerId, status));
-        RefreshHealth();
-    }
+    private void OnProviderStatusChanged(string providerId) => EnqueueStatus([providerId]);
 
     /// <summary>
     /// Builds an immutable snapshot. Must be called while holding the lock.
@@ -669,6 +1249,29 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </returns>
     private static bool OptionsEqual(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) =>
         left.Count == right.Count && left.All(p => right.TryGetValue(p.Key, out var v) && v == p.Value);
+
+    /// <summary>
+    /// One held usage of the data; disposing it more than once ends it only once.
+    /// </summary>
+    /// <param name="owner">
+    /// The service that counts the usage.
+    /// </param>
+    private sealed class Usage(MarketDataService owner) : IDisposable
+    {
+        /// <summary>
+        /// Whether the usage was already ended.
+        /// </summary>
+        private int _disposed;
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                owner.ReleaseUsage();
+            }
+        }
+    }
 
     /// <summary>
     /// Mutable per-instrument state guarded by the service lock.

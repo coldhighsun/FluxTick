@@ -66,6 +66,17 @@ public sealed partial class MainWindow : Window
     private double _cardsWidth = WindowWidthRules.ListWidthWithChart;
 
     /// <summary>
+    /// Raised when the window moved to, or came back from, its hidden position at a screen edge.
+    /// </summary>
+    public event EventHandler? DockedAwayChanged;
+
+    /// <summary>
+    /// Gets a value indicating whether the window rests in its hidden position at a screen edge, where only a sliver of
+    /// it can be seen and no prices are read.
+    /// </summary>
+    public bool IsDockedAway => _dock.Hidden;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
     /// </summary>
     public MainWindow()
@@ -82,6 +93,7 @@ public sealed partial class MainWindow : Window
             }
         };
         Resized += OnResized;
+        _dock.HiddenChanged += (_, _) => DockedAwayChanged?.Invoke(this, EventArgs.Empty);
         if (GroupButton.Flyout is MenuFlyout groupFlyout)
         {
             groupFlyout.Opening += (_, _) =>

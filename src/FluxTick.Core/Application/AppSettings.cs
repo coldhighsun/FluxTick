@@ -338,6 +338,11 @@ public sealed class GeneralSettings
     /// Gets or sets a value indicating whether hovering the tray icon lists the watched instruments.
     /// </summary>
     public bool TrayHoverList { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the data sources connect only while the window or the tray list is shown.
+    /// </summary>
+    public bool ConnectOnDemand { get; set; } = true;
 }
 
 /// <summary>
