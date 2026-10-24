@@ -259,14 +259,26 @@ public class MarketDataServiceTests
     public async Task OnDemand_Disconnected_ReportsProviderAsPaused()
     {
         await using var service = NewService();
+        var statuses = new List<ProviderConnectionState>();
+
+        // Subscribed before the first apply: the pump raises a status only when it differs from the one it raised last,
+        // so an event raised before the subscription could leave this test with nothing to see.
+        service.ProviderStatusChanged += (_, e) =>
+        {
+            if (e.ProviderId == "crypto")
+            {
+                lock (statuses)
+                {
+                    statuses.Add(e.Status.State);
+                }
+            }
+        };
         await service.ApplyAsync(OnDemandFor(Btc));
         var provider = _crypto.Created.Single();
         var usage = service.AcquireUsage();
         await WaitUntilAsync(() => provider.Subscribed.Count == 1);
         service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Idle);
         provider.ChangeStatus(ProviderConnectionState.Connected);
-        var statuses = new List<ProviderConnectionState>();
-        service.ProviderStatusChanged += (_, e) => statuses.Add(e.Status.State);
 
         usage.Dispose();
         _time.Advance(TimeSpan.FromSeconds(31));
@@ -274,7 +286,15 @@ public class MarketDataServiceTests
         provider.ChangeStatus(ProviderConnectionState.Idle);
 
         service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Paused);
-        statuses.Should().Contain(ProviderConnectionState.Paused);
+
+        // The event is raised by the service's own thread, a moment after the change.
+        await WaitUntilAsync(() =>
+        {
+            lock (statuses)
+            {
+                return statuses.Contains(ProviderConnectionState.Paused);
+            }
+        });
     }
 
     /// <summary>
@@ -342,8 +362,10 @@ public class MarketDataServiceTests
     public async Task OnDemand_IdleProvider_AnnouncesPausedAndBack()
     {
         await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
         var states = new List<ProviderConnectionState>();
+
+        // Subscribed before the first apply: the pump raises a status only when it differs from the one it raised last,
+        // so an event raised before the subscription could leave this test with nothing to see.
         service.ProviderStatusChanged += (_, e) =>
         {
             if (e.ProviderId == "crypto")
@@ -354,6 +376,7 @@ public class MarketDataServiceTests
                 }
             }
         };
+        await service.ApplyAsync(OnDemandFor(Btc));
 
         var usage = service.AcquireUsage();
         await WaitUntilAsync(() => _crypto.Created.Single().Subscribed.Count == 1);
@@ -587,16 +610,19 @@ public class MarketDataServiceTests
     public async Task OnDemand_QuickCycles_LastAnnouncedStatusIsTheCurrentOne()
     {
         await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var last = ProviderConnectionState.Failed;
+        var last = (int)ProviderConnectionState.Failed;
+
+        // Subscribed before the first apply: the pump raises a status only when it differs from the one it raised last,
+        // so if the quick cycles end where they began, the only event is the one the first apply causes.
         service.ProviderStatusChanged += (_, e) =>
         {
             if (e.ProviderId == "crypto")
             {
-                last = e.Status.State;
+                Volatile.Write(ref last, (int)e.Status.State);
             }
         };
+        await service.ApplyAsync(OnDemandFor(Btc));
+        var provider = _crypto.Created.Single();
 
         for (var i = 0; i < 10; i++)
         {
@@ -607,11 +633,11 @@ public class MarketDataServiceTests
             await WaitUntilAsync(() => provider.Subscribed.Count == 0);
         }
 
-        await WaitUntilAsync(() => last == ProviderConnectionState.Paused);
+        await WaitUntilAsync(() => Volatile.Read(ref last) == (int)ProviderConnectionState.Paused);
         service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Paused);
 
         using var again = service.AcquireUsage();
-        await WaitUntilAsync(() => last == ProviderConnectionState.Idle);
+        await WaitUntilAsync(() => Volatile.Read(ref last) == (int)ProviderConnectionState.Idle);
         service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Idle);
     }
 
