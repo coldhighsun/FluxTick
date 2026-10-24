@@ -84,6 +84,27 @@ public enum WatchlistLayout
 }
 
 /// <summary>
+/// How large the cards are in the card layout.
+/// </summary>
+public enum CardSize
+{
+    /// <summary>
+    /// Small cards with the name and the price only; the rest is in the tooltip.
+    /// </summary>
+    Small,
+
+    /// <summary>
+    /// The usual cards with a chart and the change.
+    /// </summary>
+    Medium,
+
+    /// <summary>
+    /// Large cards with a taller chart, the change in amount and percent, the reference price and the range.
+    /// </summary>
+    Large,
+}
+
+/// <summary>
 /// How the cards are grouped. Only applies to <see cref="WatchlistLayout.Cards"/>.
 /// </summary>
 public enum CardGrouping
@@ -248,9 +269,10 @@ public sealed class AppearanceSettings
     public bool Locked { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether a row flashes when its price changes.
+    /// Gets or sets a value indicating whether the price rolls (the old number slides out and the new one slides in) when
+    /// it changes.
     /// </summary>
-    public bool FlashOnUpdate { get; set; }
+    public bool RollPriceOnUpdate { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the window hides at the screen edge it is dragged to and slides out when
@@ -277,6 +299,11 @@ public sealed class AppearanceSettings
     /// Gets or sets how the watchlist is laid out.
     /// </summary>
     public WatchlistLayout Layout { get; set; } = WatchlistLayout.List;
+
+    /// <summary>
+    /// Gets or sets how large the cards are when <see cref="Layout"/> is <see cref="WatchlistLayout.Cards"/>.
+    /// </summary>
+    public CardSize CardSize { get; set; } = CardSize.Medium;
 
     /// <summary>
     /// Gets or sets how the cards are grouped when <see cref="Layout"/> is <see cref="WatchlistLayout.Cards"/>.
@@ -397,6 +424,11 @@ public sealed class AppSettings
     public List<WatchGroup> Groups { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the price alert rules.
+    /// </summary>
+    public List<AlertRule> Alerts { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the settings of each provider keyed by provider id.
     /// </summary>
     public Dictionary<string, ProviderSettings> Providers { get; set; } = [];
@@ -459,6 +491,17 @@ public sealed class AppSettings
             entry.GroupId = Groups[0].Id;
             changed = true;
         }
+
+        // A rule is dropped when its instrument left the watchlist, when its threshold cannot be used, when its id
+        // repeats an earlier one, or when an earlier rule already has the same condition on the same instrument: an
+        // instrument has at most one alert above and one below.
+        var ids = new HashSet<string>();
+        var conditions = new HashSet<(string, string, AlertCondition)>();
+        changed |= Alerts.RemoveAll(rule =>
+            !AlertRule.IsValidThreshold(rule.Threshold)
+            || Watchlist.TrueForAll(e => e.ProviderId != rule.ProviderId || e.Symbol != rule.Symbol)
+            || !ids.Add(rule.Id)
+            || !conditions.Add((rule.ProviderId, rule.Symbol, rule.Condition))) > 0;
 
         return changed;
     }

@@ -13,6 +13,6 @@ public sealed partial class AssetRowView : UserControl
     public AssetRowView()
     {
         InitializeComponent();
-        _ = new FlashAnimator(this);
+        _ = new RowAnimator(this);
     }
 }

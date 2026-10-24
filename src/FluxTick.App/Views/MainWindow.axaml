@@ -35,7 +35,7 @@
             <TextBlock Text="FluxTick" FontWeight="SemiBold" FontSize="13" />
           </StackPanel>
 
-          <!-- The header holds up to seven buttons. Their width is set on each button (24 px instead of the 26 px of the
+          <!-- The header holds up to nine buttons. Their width is set on each button (24 px instead of the 26 px of the
                icon style) because a value on the element always wins, so it fits the narrowest window widths for sure. -->
           <StackPanel Grid.Column="1" Orientation="Horizontal">
             <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Add_Title}" Command="{Binding ShowAddCommand}">
@@ -52,6 +52,32 @@
                   <!-- The grouping entries are added in code just before the flyout opens (see GroupingMenu). -->
                   <Separator />
                   <MenuItem Header="{loc:T Main_NewGroup}" Click="OnNewGroupClicked" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+            <!-- Four corners pointing out mean "fill the screen"; pointing in they mean "go back". -->
+            <Button Classes="icon" Width="24" ToolTip.Tip="{Binding FullScreenTip}" Click="OnFullScreenClicked" Classes.active="{Binding IsFullScreen}"
+                    AutomationProperties.Name="{loc:T Main_FullScreen}">
+              <Panel>
+                <Path Data="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" IsVisible="{Binding !IsFullScreen}" />
+                <Path Data="M5 2v3H2M9 2v3h3M12 9H9v3M2 9h3v3" IsVisible="{Binding IsFullScreen}" />
+              </Panel>
+            </Button>
+            <!-- Three squares growing in size read as "card size"; a drop down picks small, medium or large. -->
+            <Button Name="CardSizeButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Settings_CardSize}" IsVisible="{Binding IsCardLayout}"
+                    AutomationProperties.Name="{loc:T Settings_CardSize}">
+              <Path Data="M2 12V9.5h2.5V12zM6 12V6.5h2.5V12zM10 12V2.5h2.5V12z" />
+              <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                  <MenuItem Header="{loc:T CardSize_Small}" ToggleType="Radio"
+                            IsChecked="{Binding IsCardSizeSmall, Mode=OneWay}"
+                            Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Small}" />
+                  <MenuItem Header="{loc:T CardSize_Medium}" ToggleType="Radio"
+                            IsChecked="{Binding IsCardSizeMedium, Mode=OneWay}"
+                            Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Medium}" />
+                  <MenuItem Header="{loc:T CardSize_Large}" ToggleType="Radio"
+                            IsChecked="{Binding IsCardSizeLarge, Mode=OneWay}"
+                            Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Large}" />
                 </MenuFlyout>
               </Button.Flyout>
             </Button>

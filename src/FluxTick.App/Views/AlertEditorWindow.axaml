@@ -1,0 +1,42 @@
+<views:ToolWindow xmlns="https://github.com/avaloniaui"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:loc="using:FluxTick.App.Localization"
+                  xmlns:vm="using:FluxTick.App.ViewModels"
+                  xmlns:views="using:FluxTick.App.Views"
+                  x:Class="FluxTick.App.Views.AlertEditorWindow"
+                  x:DataType="vm:AlertsViewModel"
+                  Title="{Binding Title}"
+                  Height="440" MinHeight="320"
+                  Icon="/Assets/fluxtick.png">
+
+  <views:ToolWindowFrame Title="{Binding Title}">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="14,14,14,0">
+
+      <StackPanel Grid.Row="0" Spacing="3">
+        <TextBlock Text="{loc:T Alert_ConditionLabel}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <ComboBox ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Conditions}"
+                  SelectedItem="{Binding SelectedCondition}" HorizontalAlignment="Stretch" />
+      </StackPanel>
+
+      <StackPanel Grid.Row="1" Spacing="3" Margin="0,10,0,0">
+        <TextBlock Text="{loc:T Alert_ThresholdLabel}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Text="{Binding ThresholdText}" PlaceholderText="{loc:T Alert_ThresholdPlaceholder}" MaxLength="24"
+                   TextAlignment="Right" views:NumericInput.Enabled="True">
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Enter" Command="{Binding AddCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
+          <Button Grid.Column="1" Classes="primary" Content="{loc:T Alert_Add}" Margin="8,0,0,0" Command="{Binding AddCommand}" />
+        </Grid>
+      </StackPanel>
+
+      <CheckBox Grid.Row="2" Content="{loc:T Alert_Repeat}" IsChecked="{Binding NewRepeat}" FontSize="12" Margin="0,8,0,0"
+                ToolTip.Tip="{loc:T Alert_RepeatTip}" />
+
+      <ScrollViewer Grid.Row="3" Margin="0,10,0,0" VerticalScrollBarVisibility="Auto">
+        <views:AlertRuleListView />
+      </ScrollViewer>
+    </Grid>
+  </views:ToolWindowFrame>
+</views:ToolWindow>

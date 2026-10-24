@@ -307,7 +307,7 @@ public sealed partial class MainWindow
     private void ScheduleDockSettle()
     {
         CancelDockSettle();
-        if (_dock.Enabled && IsVisible)
+        if (_dock.Enabled && IsVisible && WindowState == WindowState.Normal)
         {
             _dockSettle = DispatcherTimer.RunOnce(OnDockSettled, DockSettleDelay);
         }
@@ -401,6 +401,7 @@ public sealed partial class MainWindow
         // A menu that was torn down without reporting that it closed must not keep the window open forever.
         OpenMenus.RemoveWhere(menu => !menu.IsOpen);
         return IsVisible
+            && WindowState == WindowState.Normal
             && !_dock.Moving
             && _dockSettle is null
             && _toolWindow is null

@@ -44,6 +44,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ProviderRouter>();
         services.TryAddSingleton<MarketDataService>();
         services.TryAddSingleton<SettingsManager>();
+        services.TryAddSingleton<AlertService>();
         return services;
     }
 }

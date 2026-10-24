@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:FluxTick.App.Localization"
+             xmlns:vm="using:FluxTick.App.ViewModels"
+             xmlns:views="using:FluxTick.App.Views"
+             x:Class="FluxTick.App.Views.AlertRuleListView"
+             x:DataType="vm:AlertsViewModel">
+
+  <StackPanel>
+    <TextBlock Text="{Binding Message}" Classes="warn" FontSize="12" TextWrapping="Wrap" Margin="2,0,2,6" IsVisible="{Binding HasMessage}" />
+    <TextBlock Text="{loc:T Alert_Empty}" Classes="muted" FontSize="12" Margin="2,6" IsVisible="{Binding IsEmpty}" />
+    <ItemsControl ItemsSource="{Binding Items}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:AlertRuleItemViewModel">
+          <Border Classes="card" Padding="10,6">
+            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto">
+              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <Border Classes="chip" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding ProviderName}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
+                </Border>
+              </StackPanel>
+              <Grid Grid.Row="1" Grid.ColumnSpan="4" ColumnDefinitions="*,8,100,8,Auto" Margin="0,6,0,0">
+                <ComboBox ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Conditions}"
+                          SelectedItem="{Binding SelectedCondition}" HorizontalAlignment="Stretch" />
+                <TextBox Grid.Column="2" Text="{Binding ThresholdText}" MaxLength="24" PlaceholderText="{loc:T Alert_ThresholdPlaceholder}"
+                         TextAlignment="Right" views:NumericInput.Enabled="True">
+                  <TextBox.KeyBindings>
+                    <KeyBinding Gesture="Enter" Command="{Binding SaveCommand}" />
+                  </TextBox.KeyBindings>
+                </TextBox>
+                <Button Grid.Column="4" Classes="primary" Content="{loc:T Alert_Save}" Command="{Binding SaveCommand}" />
+              </Grid>
+              <TextBlock Grid.Row="2" Grid.ColumnSpan="4" Text="{Binding Error}" Classes="warn" FontSize="11" TextWrapping="Wrap"
+                         Margin="2,4,0,0" IsVisible="{Binding HasError}" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,0" VerticalAlignment="Center"
+                          ToolTip.Tip="{loc:T Alert_RepeatTip}">
+                <TextBlock Text="{loc:T Alert_Repeat}" FontSize="11" VerticalAlignment="Center" />
+                <CheckBox IsChecked="{Binding Repeat}" MinWidth="0" VerticalAlignment="Center"
+                          AutomationProperties.Name="{loc:T Alert_Repeat}" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Text="{loc:T Alert_Enabled}" FontSize="11" VerticalAlignment="Center" />
+                <ToggleSwitch IsChecked="{Binding Enabled}" VerticalAlignment="Center"
+                              AutomationProperties.Name="{loc:T Alert_Toggle}" />
+              </StackPanel>
+              <Button Grid.Column="3" Classes="icon" Command="{Binding DeleteCommand}" Margin="4,0,0,0"
+                      AutomationProperties.Name="{loc:T Alert_Delete}" ToolTip.Tip="{loc:T Alert_Delete}">
+                <Path Data="M3 3l8 8M11 3l-8 8" />
+              </Button>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </StackPanel>
+</UserControl>

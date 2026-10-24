@@ -949,7 +949,9 @@ public sealed class MarketDataService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts a background history load for every instrument whose sparkline is still empty.
+    /// Starts a background history load for every instrument whose sparkline was not seeded from history yet. A sparkline
+    /// that is not empty is no reason to skip it: a source that sends its first price right away has put a live point in
+    /// before this runs.
     /// </summary>
     private void SeedEmptySeries()
     {
@@ -958,7 +960,7 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             foreach (var state in _assets.Values)
             {
-                if (state.Series.Count == 0
+                if (!state.Seeded
                     && !state.Seeding
                     && _slots.TryGetValue(state.Asset.ProviderId, out var slot)
                     && slot.Provider is IHistoryProvider history)
@@ -998,6 +1000,7 @@ public sealed class MarketDataService : IAsyncDisposable
                 if (points.Count > 0 && _assets.ContainsKey(state.Asset.Id))
                 {
                     var latest = state.Latest;
+                    state.Seeded = true;
                     state.Series.Seed(points);
                     if (latest is not null)
                     {
@@ -1313,6 +1316,11 @@ public sealed class MarketDataService : IAsyncDisposable
         /// Gets or sets a value indicating whether a history load is in flight.
         /// </summary>
         public bool Seeding { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the sparkline was seeded from history.
+        /// </summary>
+        public bool Seeded { get; set; }
     }
 
     /// <summary>

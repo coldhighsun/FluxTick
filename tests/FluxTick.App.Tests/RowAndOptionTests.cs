@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -51,27 +52,112 @@ public class RowAndOptionTests
     }
 
     /// <summary>
+    /// Verifies the figures of the large card: the reference price, the change in amount and the range of the chart.
+    /// </summary>
+    [Fact]
+    public void Update_WithQuote_FormatsTheFiguresOfTheLargeCard()
+    {
+        var row = new AssetRowViewModel(Btc, "Crypto Co");
+        var snapshot = new AssetSnapshot(Btc, new Quote(Btc.Id, 110m, 100m, DateTimeOffset.UnixEpoch), [95m, 120m, 110m], AssetHealth.Live);
+
+        row.Update(snapshot);
+
+        row.ReferenceText.Should().Be("100.00");
+        row.ChangeAmountText.Should().Be("+10.00");
+        row.LowText.Should().Be("95.00");
+        row.HighText.Should().Be("120.00");
+    }
+
+    /// <summary>
+    /// Verifies the figures of the large card show a placeholder where the data is missing.
+    /// </summary>
+    [Fact]
+    public void Update_WithoutReferenceAndHistory_ShowsPlaceholders()
+    {
+        var row = new AssetRowViewModel(Btc, "Crypto Co");
+        var snapshot = new AssetSnapshot(Btc, new Quote(Btc.Id, 110m, null, DateTimeOffset.UnixEpoch), [], AssetHealth.Live);
+
+        row.Update(snapshot);
+
+        row.ReferenceText.Should().Be(PriceFormatter.Unavailable);
+        row.ChangeAmountText.Should().BeEmpty();
+        row.LowText.Should().Be(PriceFormatter.Unavailable);
+        row.HighText.Should().Be(PriceFormatter.Unavailable);
+    }
+
+    /// <summary>
+    /// Verifies a small card moves what it does not show into the tooltip, and the usual card keeps its short tooltip.
+    /// </summary>
+    [Fact]
+    public void Tooltip_SmallCard_TellsWhatTheCardLeavesOut()
+    {
+        var row = new AssetRowViewModel(Btc, "Crypto Co");
+        row.Update(Snapshot(110m, 100m, AssetHealth.Stale));
+        var usual = row.Tooltip;
+
+        row.CardSize = CardSize.Small;
+        row.AlertAbove = 150m;
+        row.AlertBelow = 90m;
+
+        usual.Should().NotContain("BTC").And.NotContain("150");
+        row.Tooltip.Should().Contain("Bitcoin (BTC)")
+            .And.Contain("Crypto Co")
+            .And.Contain("+10.00%")
+            .And.Contain("150.00")
+            .And.Contain("90.00")
+            .And.Contain(row.StatusText);
+
+        row.CardSize = CardSize.Medium;
+        row.Tooltip.Should().Be(usual);
+    }
+
+    /// <summary>
     /// Verifies the flash counter only advances when the price actually changes, with the right direction.
     /// </summary>
     [Fact]
     public void Update_FlashVersion_AdvancesOnlyOnPriceChange()
     {
-        var row = new AssetRowViewModel(Btc, "p") { FlashEnabled = true };
+        var row = new AssetRowViewModel(Btc, "p") { RollEnabled = true };
 
         row.Update(Snapshot(100m, 100m));
-        row.FlashVersion.Should().Be(0, "the first quote has nothing to compare with");
+        row.RollVersion.Should().Be(0, "the first quote has nothing to compare with");
 
         row.Update(Snapshot(101m, 100m));
-        row.FlashVersion.Should().Be(1);
-        row.FlashUp.Should().BeTrue();
+        row.RollVersion.Should().Be(1);
+        row.RollUp.Should().BeTrue();
 
         row.Update(Snapshot(101m, 100m));
-        row.FlashVersion.Should().Be(1);
+        row.RollVersion.Should().Be(1);
 
         row.Update(Snapshot(99m, 100m));
-        row.FlashVersion.Should().Be(2);
-        row.FlashUp.Should().BeFalse();
+        row.RollVersion.Should().Be(2);
+        row.RollUp.Should().BeFalse();
         row.IsDown.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies the price that rolls out is the one that was shown before, set when the version moves on, and that a
+    /// change which does not show in the text because of the rounding does not roll.
+    /// </summary>
+    [Fact]
+    public void Update_PriceChange_KeepsTheOldPriceForTheRoll()
+    {
+        var row = new AssetRowViewModel(Btc, "p") { RollEnabled = true };
+        row.Update(Snapshot(100m, 100m));
+        var seen = new List<(int Version, string Old, string Now)>();
+        row.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AssetRowViewModel.RollVersion))
+            {
+                seen.Add((row.RollVersion, row.PreviousPriceText, row.PriceText));
+            }
+        };
+
+        row.Update(Snapshot(101m, 100m));
+        row.Update(Snapshot(99m, 100m));
+        row.Update(Snapshot(99.001m, 100m));
+
+        seen.Should().Equal([(1, "100.00", "101.00"), (2, "101.00", "99.00")]);
     }
 
     /// <summary>
@@ -81,21 +167,21 @@ public class RowAndOptionTests
     public void Update_FlashDisabled_DoesNotAdvanceFlashVersion()
     {
         var row = new AssetRowViewModel(Btc, "p");
-        row.FlashEnabled.Should().BeFalse("the flash is off unless the setting turns it on");
+        row.RollEnabled.Should().BeFalse("the flash is off unless the setting turns it on");
 
         row.Update(Snapshot(100m, 100m));
         row.Update(Snapshot(101m, 100m));
 
-        row.FlashVersion.Should().Be(0);
+        row.RollVersion.Should().Be(0);
         row.PriceText.Should().Be("101.00");
 
-        row.FlashEnabled = true;
+        row.RollEnabled = true;
         row.Update(Snapshot(101m, 100m));
-        row.FlashVersion.Should().Be(0, "the price did not change since the last quote");
+        row.RollVersion.Should().Be(0, "the price did not change since the last quote");
 
         row.Update(Snapshot(102m, 100m));
-        row.FlashVersion.Should().Be(1);
-        row.FlashUp.Should().BeTrue();
+        row.RollVersion.Should().Be(1);
+        row.RollUp.Should().BeTrue();
     }
 
     /// <summary>
@@ -187,9 +273,9 @@ public class RowAndOptionTests
         List<string?> changes = [];
         row.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
 
-        row.FlashEnabled = true;
-        row.FlashEnabled = false;
+        row.RollEnabled = true;
+        row.RollEnabled = false;
 
-        changes.Should().Equal(nameof(AssetRowViewModel.FlashEnabled), nameof(AssetRowViewModel.FlashEnabled));
+        changes.Should().Equal(nameof(AssetRowViewModel.RollEnabled), nameof(AssetRowViewModel.RollEnabled));
     }
 }

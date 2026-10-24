@@ -121,9 +121,17 @@
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Groupings}" SelectedItem="{Binding SelectedGrouping}" Width="140" />
                 </Grid>
+                <!-- The size only exists in the card layout, like the grouping. -->
+                <Grid ColumnDefinitions="*,Auto" Classes="dependent" IsEnabled="{Binding IsCardLayoutSelected}">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_CardSize}" />
+                    <TextBlock Text="{loc:T Settings_CardSizeHint}" Classes="muted" FontSize="11" />
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding CardSizes}" SelectedItem="{Binding SelectedCardSize}" Width="140" />
+                </Grid>
                 <Grid ColumnDefinitions="*,Auto">
-                  <TextBlock Text="{loc:T Settings_Flash}" VerticalAlignment="Center" />
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding FlashOnUpdate}" />
+                  <TextBlock Text="{loc:T Settings_Roll}" VerticalAlignment="Center" />
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding RollPriceOnUpdate}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
@@ -174,6 +182,17 @@
             </ItemsControl>
             <!-- The same dashed placeholder as below the groups in the card layout; it asks for the name next to it. -->
             <views:NewGroupPlaceholder Name="NewGroupButton" Margin="0,6,0,6" Click="OnNewGroupClicked" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="{loc:T Settings_TabAlerts}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="14,10,14,4">
+            <Border Classes="card">
+              <TextBlock Text="{loc:T Settings_AlertsHelp}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+            </Border>
+            <views:AlertRuleListView DataContext="{Binding Alerts}" />
           </StackPanel>
         </ScrollViewer>
       </TabItem>

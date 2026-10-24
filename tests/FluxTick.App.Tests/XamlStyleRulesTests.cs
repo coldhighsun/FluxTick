@@ -89,6 +89,36 @@ public class XamlStyleRulesTests
     }
 
     /// <summary>
+    /// Verifies the two numbers of the roll of the price, in a row and in a card, carry a real translate transform, and
+    /// that they share a clipped box. The roll animates the translation; a transform written as a string, such as
+    /// "translate(0,0)", is another kind of transform, which the animation cannot change: it never ends and nothing
+    /// moves. Without the clipping the numbers would drift out over their neighbours.
+    /// </summary>
+    /// <param name="view">
+    /// The view file.
+    /// </param>
+    [Theory]
+    [InlineData("AssetRowView.axaml")]
+    [InlineData("AssetCardView.axaml")]
+    public void PriceNumbers_HaveATranslateTransformElementAndAClippedBox(string view)
+    {
+        var document = Load(view);
+        foreach (var name in new[] { "PriceText", "PriceOld" })
+        {
+            var price = document.Descendants()
+                .Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Name") == name);
+
+            price.Attribute("RenderTransform").Should().BeNull();
+            price.Elements().Should().Contain(e => e.Name.LocalName == "TextBlock.RenderTransform"
+                && e.Elements().Any(t => t.Name.LocalName == "TranslateTransform"));
+        }
+
+        var old = document.Descendants().Single(e => (string?)e.Attribute("Name") == "PriceOld");
+        old.Parent!.Attribute("ClipToBounds")!.Value.Should().Be("True");
+        old.Attribute("IsVisible")!.Value.Should().Be("False", "the old price takes no room while it is not rolling");
+    }
+
+    /// <summary>
     /// Verifies the window leaves its widths to WindowWidthRules, so that there is one place to change them.
     /// </summary>
     [Fact]

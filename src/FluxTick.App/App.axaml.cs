@@ -212,6 +212,20 @@ public sealed partial class App : Application
             _updates.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyUpdateTray);
             StartUpdateCheck();
 
+            // The alerts watch the prices whether or not a window shows them, so the notifications are not tied to one.
+            var toasts = new AlertToastPresenter(ActivateWindow);
+            var alerts = _services.GetRequiredService<AlertService>();
+            alerts.AlertTriggered += (_, e) => Dispatcher.UIThread.Post(() =>
+            {
+                viewModel.FlashAlert(e);
+                toasts.Show(e);
+            });
+            alerts.Start();
+
+            // The alerts of an instrument go along when its data source is changed, with the price levels they had.
+            viewModel.AddAsset.AlertsMoved += (_, e) => Dispatcher.UIThread.Post(() =>
+                toasts.Show(Loc.Get("Alert_MovedTitle", e.ProviderName), Loc.Get("Alert_MovedBody", e.Count, e.Symbol)));
+
             _ = StartAsync(viewModel, desktop.Args ?? []);
         }
 

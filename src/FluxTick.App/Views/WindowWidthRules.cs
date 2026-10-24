@@ -26,14 +26,15 @@ internal static class WindowWidthRules
 
     /// <summary>
     /// The width of the list layout in compact mode, where the sparkline column is hidden. The name column keeps
-    /// the width it has in <see cref="ListWidthWithChart"/>: the 80 pixels of the sparkline column are gone.
+    /// the width it has in <see cref="ListWidthWithChart"/>, less the 80 pixels of the sparkline column, and 20 pixels
+    /// more than that keep the title and all the header buttons from crowding each other.
     /// </summary>
-    public const double ListWidthCompact = 260;
+    public const double ListWidthCompact = 280;
 
     /// <summary>
     /// The smallest width of the card layout.
     /// </summary>
-    public const double CardsMinWidth = 300;
+    public const double CardsMinWidth = 330;
 
     /// <summary>
     /// How long the window takes to change its width.

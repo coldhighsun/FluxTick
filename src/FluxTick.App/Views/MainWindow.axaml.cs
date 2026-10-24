@@ -225,6 +225,8 @@ public sealed partial class MainWindow : Window
             _observed.SettingsRequested -= OnSettingsRequested;
             _observed.AddAssetRequested -= OnAddAssetRequested;
             _observed.AboutRequested -= OnAboutRequested;
+            _observed.AlertsRequested -= OnAlertsRequested;
+            _observed.FullScreenExitRequested -= OnFullScreenExitRequested;
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged -= OnLayoutPropertyChanged;
         }
@@ -235,6 +237,8 @@ public sealed partial class MainWindow : Window
             _observed.SettingsRequested += OnSettingsRequested;
             _observed.AddAssetRequested += OnAddAssetRequested;
             _observed.AboutRequested += OnAboutRequested;
+            _observed.AlertsRequested += OnAlertsRequested;
+            _observed.FullScreenExitRequested += OnFullScreenExitRequested;
             _observed.PropertyChanged += OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged += OnLayoutPropertyChanged;
         }
@@ -257,6 +261,67 @@ public sealed partial class MainWindow : Window
         {
             _toolWindow?.Close();
         }
+        else if (change.Property == WindowStateProperty)
+        {
+            OnWindowStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Leaves full screen with the Escape key, unless something inside the window used the key.
+    /// </summary>
+    /// <param name="e">
+    /// The key event data.
+    /// </param>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (!e.Handled && e.Key == Key.Escape && WindowState == WindowState.FullScreen)
+        {
+            e.Handled = true;
+            WindowState = WindowState.Normal;
+        }
+    }
+
+    /// <summary>
+    /// Makes room for the window to fill the screen and shows the cards there, and takes the width rules, the layout and
+    /// the edge hiding up again when it is back to its normal size. Nothing of the full screen window is remembered: the size and the position that are saved
+    /// stay those of the normal window.
+    /// </summary>
+    private void OnWindowStateChanged()
+    {
+        // Minimizing or maximizing is not full screen: the layout stays, and whatever is running keeps running.
+        if (WindowState is WindowState.Minimized or WindowState.Maximized)
+        {
+            return;
+        }
+
+        _widthAnimation.Stop();
+        CancelDockSettle();
+        CancelDockLeave();
+        if (WindowState == WindowState.FullScreen)
+        {
+            // The list layout has a fixed width, which would keep the window from filling the screen.
+            MinWidth = 0;
+            MaxWidth = double.PositiveInfinity;
+            (DataContext as MainViewModel)?.SetFullScreen(true);
+            return;
+        }
+
+        (DataContext as MainViewModel)?.SetFullScreen(false);
+        var (layout, compact) = CurrentLayout();
+        if (_appliedRule != default && WindowWidthRules.For(layout, compact) == _appliedRule)
+        {
+            FinishWidthChange(_appliedRule);
+        }
+        else
+        {
+            // The layout was changed while the window filled the screen.
+            _appliedRule = default;
+            ApplyWidthRule();
+        }
+
+        ResumeDockLeave();
     }
 
     /// <summary>
@@ -297,6 +362,12 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void ApplyWidthRule()
     {
+        // A window that fills the screen has no width of its own; the rule is applied when it is back to normal.
+        if (WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
         var (layout, compact) = CurrentLayout();
         var rule = WindowWidthRules.For(layout, compact);
 
@@ -393,7 +464,7 @@ public sealed partial class MainWindow : Window
     {
         // Every resize the application did not ask for counts: the user dragging the grip, but also the system
         // snapping the window or a change of screen scaling. The ones this class asks for are its own width rule.
-        if (e.Reason != WindowResizeReason.Application && CurrentLayout().Layout == WatchlistLayout.Cards)
+        if (e.Reason != WindowResizeReason.Application && WindowState == WindowState.Normal && CurrentLayout().Layout == WatchlistLayout.Cards)
         {
             _cardsWidth = Math.Max(e.ClientSize.Width, WindowWidthRules.CardsMinWidth);
         }
@@ -437,6 +508,25 @@ public sealed partial class MainWindow : Window
         }
 
         await ShowToolWindowAsync(viewModel, ToolWindowKind.About, new AboutWindow { DataContext = new AboutViewModel(viewModel.Settings.Updates) });
+    }
+
+    /// <summary>
+    /// Opens the price alerts window of an instrument modally.
+    /// </summary>
+    /// <param name="sender">
+    /// The view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private async void OnAlertsRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        await ShowToolWindowAsync(viewModel, ToolWindowKind.Alerts, new AlertEditorWindow { DataContext = viewModel.AlertEditor });
     }
 
     /// <summary>
@@ -546,7 +636,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Toggles the compact setting when the header is double-clicked.
+    /// Switches between full screen and the normal window when the header is double-clicked.
     /// </summary>
     /// <param name="sender">
     /// The header.
@@ -554,13 +644,35 @@ public sealed partial class MainWindow : Window
     /// <param name="e">
     /// The tap event data.
     /// </param>
-    private void OnHeaderDoubleTapped(object? sender, TappedEventArgs e)
-    {
-        if (DataContext is MainViewModel viewModel)
-        {
-            viewModel.Settings.Compact = !viewModel.Settings.Compact;
-        }
-    }
+    private void OnHeaderDoubleTapped(object? sender, TappedEventArgs e) => ToggleFullScreen();
+
+    /// <summary>
+    /// Leaves full screen when the view model asks for it, because the list layout was chosen.
+    /// </summary>
+    /// <param name="sender">
+    /// The view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnFullScreenExitRequested(object? sender, EventArgs e) => WindowState = WindowState.Normal;
+
+    /// <summary>
+    /// Switches between full screen and the normal window when the full screen button is clicked.
+    /// </summary>
+    /// <param name="sender">
+    /// The button.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnFullScreenClicked(object? sender, RoutedEventArgs e) => ToggleFullScreen();
+
+    /// <summary>
+    /// Fills the screen with the window, or brings it back to its normal size.
+    /// </summary>
+    private void ToggleFullScreen() =>
+        WindowState = WindowState == WindowState.Normal ? WindowState.FullScreen : WindowState.Normal;
 
     /// <summary>
     /// Starts resizing from the bottom-right grip.
@@ -614,7 +726,7 @@ public sealed partial class MainWindow : Window
     {
         // A window that slides or rests beyond its edge would be saved off the screen; the position it is shown at
         // is the one that is remembered.
-        if (_dock.SuppressesGeometry)
+        if (_dock.SuppressesGeometry || WindowState != WindowState.Normal)
         {
             return;
         }

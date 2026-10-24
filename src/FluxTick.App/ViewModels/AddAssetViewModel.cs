@@ -10,6 +10,20 @@ using Microsoft.Extensions.Logging;
 namespace FluxTick.App.ViewModels;
 
 /// <summary>
+/// Event data for alerts that were moved to another data source along with their instrument.
+/// </summary>
+/// <param name="Symbol">
+/// The symbol of the instrument at the new data source.
+/// </param>
+/// <param name="ProviderName">
+/// The name of the new data source.
+/// </param>
+/// <param name="Count">
+/// How many alerts were moved.
+/// </param>
+public sealed record AlertsMovedEventArgs(string Symbol, string ProviderName, int Count);
+
+/// <summary>
 /// The "add instrument" page. The user picks an asset class, a data source and searches for a symbol.
 /// The same page re-targets an existing instrument to another data source.
 /// </summary>
@@ -120,6 +134,12 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
     /// Raised when the page is finished (added, replaced or cancelled) and its window should be closed.
     /// </summary>
     public event EventHandler? Completed;
+
+    /// <summary>
+    /// Raised when the alerts of an instrument were moved to another data source along with it, so that the user can be
+    /// told that their price levels are those of the old source.
+    /// </summary>
+    public event EventHandler<AlertsMovedEventArgs>? AlertsMoved;
 
     /// <summary>
     /// Gets the selectable asset classes.
@@ -255,10 +275,21 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
             return;
         }
 
+        // An instrument has at most one alert per condition: alerts that would clash with those of the new source are not
+        // merged or dropped on their own, the user deletes the ones to give up.
+        if (replacing is not null
+            && AlertMigration.ConditionsInConflict(_settings.Current.Alerts, replacing.Id, asset.Id) is { Count: > 0 } clash)
+        {
+            ShowMessage(() => Loc.Get("Add_AlertsConflict", asset.Symbol, ProviderNameOf(replacing.ProviderId), ProviderNameOf(asset.ProviderId), string.Join(", ", clash.Select(c => EnumLabel.Of(c)))));
+            return;
+        }
+
         if (replacing is null || replacing.Id != asset.Id)
         {
+            var moved = 0;
             await _settings.UpdateAsync(s =>
             {
+                moved = 0;
                 var entry = WatchlistEntry.From(asset);
                 s.Watchlist.RemoveAll(e => e.ProviderId == asset.ProviderId && e.Symbol == asset.Symbol);
                 var index = replacing is null
@@ -270,15 +301,33 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
                 }
                 else
                 {
-                    // Changing the data source keeps the instrument where the user put it, group included.
+                    // Changing the data source keeps the instrument where the user put it, group included, and its alerts.
                     entry.GroupId = s.Watchlist[index].GroupId;
                     s.Watchlist[index] = entry;
+                    moved = AlertMigration.Move(s.Alerts, replacing!.Id, asset.Id);
                 }
             });
+
+            if (moved > 0)
+            {
+                AlertsMoved?.Invoke(this, new AlertsMovedEventArgs(asset.Symbol, ProviderNameOf(asset.ProviderId), moved));
+            }
         }
 
         Completed?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Gets the name of a data source in the language of the interface.
+    /// </summary>
+    /// <param name="providerId">
+    /// The id of the data source.
+    /// </param>
+    /// <returns>
+    /// The name, or the id when the data source is not known.
+    /// </returns>
+    private string ProviderNameOf(string providerId) =>
+        AvailableProviders.FirstOrDefault(d => d.Id == providerId) is { } source ? ProviderText.Name(source) : providerId;
 
     /// <summary>
     /// Adds the typed text as a symbol for data sources that cannot search.

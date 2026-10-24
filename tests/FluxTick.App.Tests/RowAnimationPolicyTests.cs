@@ -3,9 +3,9 @@ using FluxTick.App.Views;
 namespace FluxTick.App.Tests;
 
 /// <summary>
-/// Tests for <see cref="FlashPolicy"/>.
+/// Tests for <see cref="RowAnimationPolicy"/>.
 /// </summary>
-public class FlashPolicyTests
+public class RowAnimationPolicyTests
 {
     /// <summary>
     /// Verifies a flash starts only when it is turned on, the view can be seen and no flash of the view is playing.
@@ -30,6 +30,21 @@ public class FlashPolicyTests
     [InlineData(false, false, true, false)]
     public void ShouldPlay_Combinations(bool enabled, bool visible, bool playing, bool expected)
     {
-        FlashPolicy.ShouldPlay(enabled, visible, playing).Should().Be(expected);
+        RowAnimationPolicy.ShouldPlay(enabled, visible, playing).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the flash of an alert only needs a view that can be seen: it does not depend on the setting of the flash
+    /// on price changes, and a new alert starts over while an earlier one is still playing.
+    /// </summary>
+    /// <param name="visible">
+    /// Whether the view can be seen.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ShouldPlayAlert_FollowsVisibility(bool visible)
+    {
+        RowAnimationPolicy.ShouldPlayAlert(visible).Should().Be(visible);
     }
 }

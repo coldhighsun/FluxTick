@@ -72,6 +72,8 @@
 
   <Style Selector="controls|SparklineControl">
     <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
+    <Setter Property="AboveStroke" Value="{DynamicResource UpBrush}" />
+    <Setter Property="BelowStroke" Value="{DynamicResource DownBrush}" />
   </Style>
   <Style Selector="controls|SparklineControl.up">
     <Setter Property="Stroke" Value="{DynamicResource UpBrush}" />
@@ -245,7 +247,9 @@
     <Setter Property="Opacity" Value="0.55" />
   </Style>
 
-  <!-- Cards of the card layout. The size is fixed: one with the chart, a smaller one without it (compact). -->
+  <!-- Cards of the card layout. The size is fixed and set by the card size setting: small (the symbol and the price only),
+       medium (the base style) and large (a taller chart and more figures). What the small card leaves out has the class
+       "detail" and what only the large card shows has "largeonly"; the visibility is set here, never on the elements. -->
   <Style Selector="Border.tile">
     <Setter Property="Width" Value="176" />
     <Setter Property="Height" Value="96" />
@@ -256,9 +260,61 @@
     <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
     <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
   </Style>
-  <Style Selector="Border.tile.compact">
-    <Setter Property="Width" Value="140" />
-    <Setter Property="Height" Value="84" />
+  <Style Selector="Border.tile.small">
+    <Setter Property="Width" Value="128" />
+    <Setter Property="Height" Value="54" />
+    <Setter Property="Padding" Value="10,7" />
+  </Style>
+  <Style Selector="Border.tile.large">
+    <Setter Property="Width" Value="264" />
+    <Setter Property="Height" Value="176" />
+    <Setter Property="Padding" Value="12,10" />
+  </Style>
+  <Style Selector="Border.tile Border.flash">
+    <Setter Property="Margin" Value="-10,-8" />
+  </Style>
+  <Style Selector="Border.tile.small Border.flash">
+    <Setter Property="Margin" Value="-10,-7" />
+  </Style>
+  <Style Selector="Border.tile.large Border.flash">
+    <Setter Property="Margin" Value="-12,-10" />
+  </Style>
+  <Style Selector="Border.tile TextBlock.symbol">
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+  <Style Selector="Border.tile.large TextBlock.symbol">
+    <Setter Property="FontSize" Value="15" />
+  </Style>
+  <Style Selector="Border.tile TextBlock.name">
+    <Setter Property="FontSize" Value="10" />
+  </Style>
+  <Style Selector="Border.tile.large TextBlock.name">
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="Border.tile TextBlock.price">
+    <Setter Property="FontSize" Value="14" />
+  </Style>
+  <Style Selector="Border.tile.large TextBlock.price">
+    <Setter Property="FontSize" Value="22" />
+  </Style>
+  <Style Selector="Border.tile TextBlock.change">
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="Border.tile.large TextBlock.change">
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+  <!-- The price takes the color of the move where the change is not shown beside it. -->
+  <Style Selector="Border.tile.small TextBlock.price.tickup, Border.tile.large TextBlock.price.tickup">
+    <Setter Property="Foreground" Value="{DynamicResource UpBrush}" />
+  </Style>
+  <Style Selector="Border.tile.small TextBlock.price.tickdown, Border.tile.large TextBlock.price.tickdown">
+    <Setter Property="Foreground" Value="{DynamicResource DownBrush}" />
+  </Style>
+  <Style Selector="Border.tile controls|SparklineControl.chart">
+    <Setter Property="MinHeight" Value="16" />
+  </Style>
+  <Style Selector="Border.tile.large controls|SparklineControl.chart">
+    <Setter Property="MinHeight" Value="44" />
   </Style>
   <Style Selector="Border.tile:pointerover">
     <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
@@ -266,10 +322,10 @@
   <Style Selector="Border.tile.dimmed > Grid">
     <Setter Property="Opacity" Value="0.55" />
   </Style>
-  <Style Selector="Border.tile.compact StackPanel.inline">
+  <Style Selector="Border.tile.small :is(Control).detail">
     <Setter Property="IsVisible" Value="False" />
   </Style>
-  <Style Selector="Border.tile:not(.compact) StackPanel.stacked">
+  <Style Selector="Border.tile:not(.large) :is(Control).largeonly">
     <Setter Property="IsVisible" Value="False" />
   </Style>
   <Style Selector="UserControl.dragging Border.tile">

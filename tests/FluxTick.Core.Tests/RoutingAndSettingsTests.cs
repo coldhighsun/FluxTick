@@ -135,7 +135,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.ThemeMode = ThemeMode.Dark;
         settings.Appearance.Language = LanguageMode.ZhCN;
-        settings.Appearance.FlashOnUpdate = true;
+        settings.Appearance.RollPriceOnUpdate = true;
         settings.Appearance.AutoHideAtEdge = false;
         settings.Appearance.Layout = WatchlistLayout.Cards;
         settings.Appearance.Grouping = CardGrouping.Custom;
@@ -154,7 +154,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
         loaded.Appearance.Language.Should().Be(LanguageMode.ZhCN);
-        loaded.Appearance.FlashOnUpdate.Should().BeTrue();
+        loaded.Appearance.RollPriceOnUpdate.Should().BeTrue();
         loaded.Appearance.AutoHideAtEdge.Should().BeFalse();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
         loaded.Appearance.Grouping.Should().Be(CardGrouping.Custom);
@@ -201,10 +201,10 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies the flash defaults to off, including for a settings file written before the option existed.
+    /// Verifies the rolling of the price defaults to off, including for a settings file written before the option existed.
     /// </summary>
     [Fact]
-    public async Task LoadAsync_WithoutFlashKey_DefaultsToFlashOff()
+    public async Task LoadAsync_WithoutRollKey_DefaultsToRollOff()
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "settings.json");
@@ -213,9 +213,9 @@ public sealed class RoutingAndSettingsTests : IDisposable
 
         var loaded = await store.LoadAsync();
 
-        new AppSettings().Appearance.FlashOnUpdate.Should().BeFalse();
+        new AppSettings().Appearance.RollPriceOnUpdate.Should().BeFalse();
         loaded!.Appearance.Opacity.Should().Be(0.8);
-        loaded.Appearance.FlashOnUpdate.Should().BeFalse();
+        loaded.Appearance.RollPriceOnUpdate.Should().BeFalse();
     }
 
     /// <summary>
@@ -342,6 +342,50 @@ public sealed class RoutingAndSettingsTests : IDisposable
         changed.Should().BeTrue();
         settings.Watchlist.Select(e => e.GroupId).Should().Equal("a", "a", "b");
         settings.Groups.Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Verifies an instrument keeps at most one alert per condition, the first one, and the other conditions and
+    /// instruments are not touched.
+    /// </summary>
+    [Fact]
+    public void Normalize_RepeatedAlertCondition_KeepsTheFirst()
+    {
+        var settings = new AppSettings();
+        settings.Watchlist.AddRange(
+        [
+            new WatchlistEntry { ProviderId = "p", Symbol = "X" },
+            new WatchlistEntry { ProviderId = "q", Symbol = "X" },
+        ]);
+        settings.Alerts.AddRange(
+        [
+            new AlertRule { Id = "1", ProviderId = "p", Symbol = "X", Condition = AlertCondition.PriceAbove, Threshold = 10 },
+            new AlertRule { Id = "2", ProviderId = "p", Symbol = "X", Condition = AlertCondition.PriceAbove, Threshold = 20 },
+            new AlertRule { Id = "3", ProviderId = "p", Symbol = "X", Condition = AlertCondition.PriceBelow, Threshold = 5 },
+            new AlertRule { Id = "4", ProviderId = "q", Symbol = "X", Condition = AlertCondition.PriceAbove, Threshold = 30 },
+        ]);
+
+        var changed = settings.Normalize();
+
+        changed.Should().BeTrue();
+        settings.Alerts.Select(a => a.Id).Should().Equal("1", "3", "4");
+    }
+
+    /// <summary>
+    /// Verifies the cards are of the usual size by default, also for a settings file from before there was a size, and a
+    /// chosen size survives a copy of the settings.
+    /// </summary>
+    [Fact]
+    public void CardSize_DefaultsToMediumAndSurvivesCloning()
+    {
+        new AppSettings().Appearance.CardSize.Should().Be(CardSize.Medium);
+
+        var legacy = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"appearance\":{\"opacity\":0.5}}", AppSettings.JsonOptions)!;
+        legacy.Appearance.CardSize.Should().Be(CardSize.Medium);
+
+        var settings = new AppSettings();
+        settings.Appearance.CardSize = CardSize.Large;
+        settings.Clone().Appearance.CardSize.Should().Be(CardSize.Large);
     }
 
     /// <summary>

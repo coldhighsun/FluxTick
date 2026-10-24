@@ -102,6 +102,13 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string ChangeText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the price that was shown before the last change of the price, which the view rolls out of the way
+    /// when the new price rolls in. It is set when <see cref="RollVersion"/> moves on.
+    /// </summary>
+    [ObservableProperty]
+    public partial string PreviousPriceText { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the tooltip with details.
     /// </summary>
     [ObservableProperty]
@@ -135,13 +142,38 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// Gets or sets a counter incremented on every price change; the view plays a flash animation when it changes.
     /// </summary>
     [ObservableProperty]
-    public partial int FlashVersion { get; set; }
+    public partial int RollVersion { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the last tick moved the price up.
     /// </summary>
     [ObservableProperty]
-    public partial bool FlashUp { get; set; }
+    public partial bool RollUp { get; set; }
+
+    /// <summary>
+    /// Gets or sets a counter incremented every time an alert of the instrument fires; the view flashes the whole row or
+    /// card for a few seconds when it changes. It does not depend on <see cref="RollEnabled"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial int AlertFlashVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the alert that fired last was the one for a price that rises.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool AlertFlashUp { get; set; }
+
+    /// <summary>
+    /// Makes the row or card flash because an alert of the instrument fired.
+    /// </summary>
+    /// <param name="up">
+    /// Whether the alert is the one for a price that rises to its level, which flashes in the color of a gain.
+    /// </param>
+    public void FlashAlert(bool up)
+    {
+        AlertFlashUp = up;
+        AlertFlashVersion++;
+    }
 
     /// <summary>
     /// Gets or sets a value indicating whether the sparkline is displayed.
@@ -150,11 +182,112 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial bool ShowSparkline { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether a price change advances <see cref="FlashVersion" />. The view stops a
+    /// Gets or sets a value indicating whether a price change advances <see cref="RollVersion" />. The view stops a
     /// flash that is playing when this turns off.
     /// </summary>
     [ObservableProperty]
-    public partial bool FlashEnabled { get; set; }
+    public partial bool RollEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether an enabled price alert watches the instrument.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasAlert { get; set; }
+
+    /// <summary>
+    /// Gets or sets the price of the enabled alert that fires when the price rises to it, or <see langword="null"/> for
+    /// none. The sparkline draws it.
+    /// </summary>
+    [ObservableProperty]
+    public partial decimal? AlertAbove { get; set; }
+
+    /// <summary>
+    /// Gets or sets how large the card of the instrument is. A small card shows only the name and the price, so the rest
+    /// goes into the tooltip.
+    /// </summary>
+    [ObservableProperty]
+    public partial CardSize CardSize { get; set; } = CardSize.Medium;
+
+    /// <summary>
+    /// Gets or sets the reference price (previous close or 24h open) the change is measured against, for the large card.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ReferenceText { get; set; } = PriceFormatter.Unavailable;
+
+    /// <summary>
+    /// Gets or sets the signed change in price, for the large card.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ChangeAmountText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the lowest price of the chart, for the large card.
+    /// </summary>
+    [ObservableProperty]
+    public partial string LowText { get; set; } = PriceFormatter.Unavailable;
+
+    /// <summary>
+    /// Gets or sets the highest price of the chart, for the large card.
+    /// </summary>
+    [ObservableProperty]
+    public partial string HighText { get; set; } = PriceFormatter.Unavailable;
+
+    /// <summary>
+    /// Gets a value indicating whether the card is small.
+    /// </summary>
+    public bool IsSmallCard => CardSize == CardSize.Small;
+
+    /// <summary>
+    /// Gets a value indicating whether the card is large.
+    /// </summary>
+    public bool IsLargeCard => CardSize == CardSize.Large;
+
+    /// <summary>
+    /// Rebuilds the tooltip, which tells more on a small card, after the size changed.
+    /// </summary>
+    /// <param name="value">
+    /// The new size.
+    /// </param>
+    partial void OnCardSizeChanged(CardSize value)
+    {
+        OnPropertyChanged(nameof(IsSmallCard));
+        OnPropertyChanged(nameof(IsLargeCard));
+        RefreshTooltip();
+    }
+
+    /// <summary>
+    /// Rebuilds the tooltip, which names the alert levels of a small card.
+    /// </summary>
+    /// <param name="value">
+    /// The new level.
+    /// </param>
+    partial void OnAlertAboveChanged(decimal? value) => RefreshTooltip();
+
+    /// <summary>
+    /// Rebuilds the tooltip, which names the alert levels of a small card.
+    /// </summary>
+    /// <param name="value">
+    /// The new level.
+    /// </param>
+    partial void OnAlertBelowChanged(decimal? value) => RefreshTooltip();
+
+    /// <summary>
+    /// Builds the tooltip again from the last snapshot.
+    /// </summary>
+    private void RefreshTooltip()
+    {
+        if (_lastSnapshot is { Quote: { } quote } snapshot)
+        {
+            Tooltip = BuildTooltip(snapshot, quote);
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the price of the enabled alert that fires when the price falls to it, or <see langword="null"/> for
+    /// none. The sparkline draws it.
+    /// </summary>
+    [ObservableProperty]
+    public partial decimal? AlertBelow { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the change is positive.
@@ -191,8 +324,15 @@ public sealed partial class AssetRowViewModel : ObservableObject
 
         if (snapshot.Quote is { } quote)
         {
+            var shownBefore = PriceText;
             PriceText = PriceFormatter.FormatPrice(quote.Price, Asset.AssetClass);
             ChangeText = PriceFormatter.FormatPercent(quote.ChangePercent);
+            ReferenceText = quote.Reference is { } reference ? PriceFormatter.FormatPrice(reference, Asset.AssetClass) : PriceFormatter.Unavailable;
+            ChangeAmountText = quote.Change is { } amount
+                ? (amount > 0m ? "+" : string.Empty) + PriceFormatter.FormatPrice(amount, Asset.AssetClass)
+                : string.Empty;
+            LowText = snapshot.Sparkline.Count > 0 ? PriceFormatter.FormatPrice(snapshot.Sparkline.Min(), Asset.AssetClass) : PriceFormatter.Unavailable;
+            HighText = snapshot.Sparkline.Count > 0 ? PriceFormatter.FormatPrice(snapshot.Sparkline.Max(), Asset.AssetClass) : PriceFormatter.Unavailable;
             Direction = quote.Change switch
             {
                 > 0m => PriceDirection.Up,
@@ -201,10 +341,13 @@ public sealed partial class AssetRowViewModel : ObservableObject
             };
             Tooltip = BuildTooltip(snapshot, quote);
 
-            if (FlashEnabled && _lastPrice is { } previous && previous != quote.Price)
+            // A change that does not show in the text, because of the rounding, has nothing to roll.
+            if (RollEnabled && _lastPrice is { } previous && previous != quote.Price && shownBefore != PriceText)
             {
-                FlashUp = quote.Price > previous;
-                FlashVersion++;
+                // The old price is set before the version moves on: the view reads it when the version changes.
+                PreviousPriceText = shownBefore;
+                RollUp = quote.Price > previous;
+                RollVersion++;
             }
 
             _lastPrice = quote.Price;
@@ -294,19 +437,41 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </returns>
     private string BuildTooltip(AssetSnapshot snapshot, Quote quote)
     {
+        var small = CardSize == CardSize.Small;
         var lines = new List<string>
         {
-            Asset.DisplayName,
-            $"{ProviderName} · {quote.Timestamp.ToLocalTime():HH:mm:ss}",
+            // A small card shows only the symbol and the price, so the tooltip tells the rest.
+            small ? $"{Asset.DisplayName} ({Asset.Symbol})" : Asset.DisplayName,
+            small
+                ? $"{ClassLabel} · {ProviderName} · {quote.Timestamp.ToLocalTime():HH:mm:ss}"
+                : $"{ProviderName} · {quote.Timestamp.ToLocalTime():HH:mm:ss}",
         };
         if (quote.Change is { } change)
         {
             lines.Add(Loc.Get("Row_Change", PriceFormatter.FormatPrice(change, Asset.AssetClass), PriceFormatter.FormatPercent(quote.ChangePercent)));
         }
 
+        if (small && snapshot.Health != AssetHealth.Live && StatusOf(snapshot) is { Length: > 0 } status)
+        {
+            lines.Add(status);
+        }
+
         if (!string.IsNullOrEmpty(snapshot.HealthDetail))
         {
             lines.Add(snapshot.HealthDetail);
+        }
+
+        if (small)
+        {
+            if (AlertAbove is { } above)
+            {
+                lines.Add(Loc.Get("Row_AlertAbove", PriceFormatter.FormatPrice(above, Asset.AssetClass)));
+            }
+
+            if (AlertBelow is { } below)
+            {
+                lines.Add(Loc.Get("Row_AlertBelow", PriceFormatter.FormatPrice(below, Asset.AssetClass)));
+            }
         }
 
         return string.Join('\n', lines);
