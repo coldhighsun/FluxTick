@@ -50,8 +50,8 @@
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedRight">
                   <!-- The grouping entries are added in code just before the flyout opens (see GroupingMenu). -->
-                  <Separator />
-                  <MenuItem Header="{loc:T Main_NewGroup}" Click="OnNewGroupClicked" />
+                  <Separator IsVisible="{Binding IsCustomCardGrouping}" />
+                  <MenuItem Header="{loc:T Main_NewGroup}" IsVisible="{Binding IsCustomCardGrouping}" Click="OnNewGroupClicked" />
                 </MenuFlyout>
               </Button.Flyout>
             </Button>

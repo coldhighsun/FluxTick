@@ -34,7 +34,7 @@
         </MenuItem>
         <!-- The entries are added in code just before the menu opens (see GroupingMenu), so they exist only once. -->
         <MenuItem Name="GroupCardsMenu" Header="{loc:T Main_GroupCards}" IsVisible="{Binding IsCardLayout}" />
-        <MenuItem Header="{loc:T Main_NewGroup}" IsVisible="{Binding IsCardLayout}" Click="OnNewGroupFromBlankClicked" />
+        <MenuItem Header="{loc:T Main_NewGroup}" IsVisible="{Binding IsCustomCardGrouping}" Click="OnNewGroupFromBlankClicked" />
         <Separator />
         <!-- The check mark is drawn inside an icon of fixed size instead of using ToggleType: the built-in check only
              takes room while it is checked, which moved the entries of the whole menu sideways. -->
@@ -160,7 +160,7 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
       <!-- With custom groups, a card dropped here starts a new group; clicking it asks for a name the same way. -->
-      <views:NewGroupPlaceholder Name="NewGroupSlot" Grid.Row="1" IsVisible="{Binding ShowNewGroupSlot}"
+      <views:NewGroupPlaceholder Name="NewGroupSlot" Grid.Row="1" IsVisible="{Binding IsCustomCardGrouping}"
                                  Margin="9,6,9,10" Click="OnNewGroupSlotClicked" />
       <Canvas Grid.RowSpan="2" IsHitTestVisible="False">
         <Border Name="DropIndicator" IsVisible="False" IsHitTestVisible="False" CornerRadius="8" Opacity="0.45"

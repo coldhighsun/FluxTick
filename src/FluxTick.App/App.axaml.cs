@@ -108,6 +108,11 @@ public sealed partial class App : Application
     private bool _trayHoverRetryQueued;
 
     /// <summary>
+    /// How many times the desktop was asked for a tray while there was none; the tray host may start after the app.
+    /// </summary>
+    private int _taskbarAttempts;
+
+    /// <summary>
     /// The language setting that was applied last, so that settings changes that leave it alone cost nothing.
     /// </summary>
     private LanguageMode? _appliedLanguage;
@@ -121,6 +126,16 @@ public sealed partial class App : Application
     /// How many times starting the hover watcher is tried before giving up.
     /// </summary>
     private const int TrayHoverMaxAttempts = 5;
+
+    /// <summary>
+    /// How many times the desktop is asked for a tray, a while apart, before the taskbar button stays for good.
+    /// </summary>
+    private const int TaskbarMaxAttempts = 10;
+
+    /// <summary>
+    /// How long to wait before asking the desktop for a tray again.
+    /// </summary>
+    private static readonly TimeSpan TaskbarRetryInterval = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Gets a value indicating whether the application is shutting down, so closing the window really closes it.
@@ -153,6 +168,7 @@ public sealed partial class App : Application
             var viewModel = _services.GetRequiredService<MainViewModel>();
             _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
             _window.RestoreGeometry(_settings.Current.Window);
+            ApplyTaskbarButton();
             _window.GeometryChanged += OnGeometryChanged;
             _window.Closed += OnWindowClosed;
 
@@ -241,7 +257,12 @@ public sealed partial class App : Application
     /// <summary>
     /// Gets a value indicating whether the tray icon exists and the desktop shows it.
     /// </summary>
-    private bool HasTrayIcon => TrayIcon.GetIcons(this)?.Count > 0 && TrayAvailability.Detect();
+    private bool HasTrayIcon => IsTrayIconDefined && TrayAvailability.Detect();
+
+    /// <summary>
+    /// Gets a value indicating whether the application defines a tray icon, whether or not the desktop shows it.
+    /// </summary>
+    private bool IsTrayIconDefined => TrayIcon.GetIcons(this) is { Count: > 0 };
 
     /// <summary>
     /// Starts without showing the window: the app runs without a main window until the window is first shown from the
@@ -592,6 +613,60 @@ public sealed partial class App : Application
     private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowAbout(), replaceToolWindow: true);
 
     /// <summary>
+    /// Gives the main window a taskbar button only where there is a tray icon to bring it back with. The window keeps
+    /// its button until the desktop has answered, and the desktop is asked off the UI thread because one without a tray
+    /// takes a moment to say so. While there is none the question is repeated a few times, since the tray host may
+    /// start after the app.
+    /// </summary>
+    private void ApplyTaskbarButton()
+    {
+        if (_window is null || !IsTrayIconDefined)
+        {
+            return;
+        }
+
+        if (!OperatingSystem.IsLinux())
+        {
+            // Windows and macOS always have a tray and say so at once, so the button is right before the window opens.
+            OnTrayProbed(TrayAvailability.Detect());
+            return;
+        }
+
+        Task.Run(TrayAvailability.Detect).ContinueWith(
+            probe =>
+            {
+                if (probe.IsFaulted)
+                {
+                    _services?.GetService<ILogger<App>>()?.LogWarning(probe.Exception, "Could not find out whether the desktop shows a tray");
+                }
+
+                Dispatcher.UIThread.Post(() => OnTrayProbed(probe.IsCompletedSuccessfully && probe.Result));
+            },
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Matches the taskbar button of the main window to the answer of the desktop, and asks again later when there is
+    /// no tray yet.
+    /// </summary>
+    /// <param name="hasTray">
+    /// Whether the desktop shows tray icons.
+    /// </param>
+    private void OnTrayProbed(bool hasTray)
+    {
+        if (_window is null || IsExiting)
+        {
+            return;
+        }
+
+        _window.ShowInTaskbar = !hasTray;
+        if (!hasTray && ++_taskbarAttempts < TaskbarMaxAttempts)
+        {
+            DispatcherTimer.RunOnce(ApplyTaskbarButton, TaskbarRetryInterval);
+        }
+    }
+
+    /// <summary>
     /// Brings the main window forward when another copy of the app was started, showing it first when it is hidden.
     /// </summary>
     private void ActivateWindow()
@@ -620,6 +695,10 @@ public sealed partial class App : Application
         if (!_window.IsVisible)
         {
             _window.ToggleVisibility();
+        }
+        else
+        {
+            _window.RestoreIfMinimized();
         }
 
         var viewModel = _services.GetRequiredService<MainViewModel>();

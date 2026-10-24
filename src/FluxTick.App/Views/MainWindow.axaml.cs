@@ -66,6 +66,11 @@ public sealed partial class MainWindow : Window
     private double _cardsWidth = WindowWidthRules.ListWidthWithChart;
 
     /// <summary>
+    /// The state the window was in when it was minimized, which is the one a restore returns to.
+    /// </summary>
+    private WindowState _stateBeforeMinimize = WindowState.Normal;
+
+    /// <summary>
     /// Raised when the window moved to, or came back from, its hidden position at a screen edge.
     /// </summary>
     public event EventHandler? DockedAwayChanged;
@@ -165,6 +170,14 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public void ToggleVisibility()
     {
+        // A minimized window is visible to the shell but out of sight, and may have no taskbar button to restore it
+        // from: the tray click brings it back instead of hiding it.
+        if (RestoreIfMinimized())
+        {
+            RevealDocked();
+            return;
+        }
+
         switch (_dock.ToggleFromTray(IsVisible))
         {
             case TrayToggle.Show:
@@ -187,6 +200,24 @@ public sealed partial class MainWindow : Window
                 SlideDock(hide: true, explicitRequest: true);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Brings a minimized window back in the state it had before it was minimized, and activates it.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the window was minimized and is restored; <see langword="false"/> when it was not.
+    /// </returns>
+    public bool RestoreIfMinimized()
+    {
+        if (!IsVisible || WindowState != WindowState.Minimized)
+        {
+            return false;
+        }
+
+        WindowState = _stateBeforeMinimize;
+        Activate();
+        return true;
     }
 
     /// <summary>
@@ -263,6 +294,11 @@ public sealed partial class MainWindow : Window
         }
         else if (change.Property == WindowStateProperty)
         {
+            if (change.NewValue is WindowState.Minimized && change.OldValue is WindowState before && before != WindowState.Minimized)
+            {
+                _stateBeforeMinimize = before;
+            }
+
             OnWindowStateChanged();
         }
     }

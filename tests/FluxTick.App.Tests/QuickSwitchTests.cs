@@ -269,20 +269,20 @@ public class QuickSwitchTests
     /// Verifies the new group placeholder is offered only for cards with the custom grouping.
     /// </summary>
     [Fact]
-    public async Task ShowNewGroupSlot_OnlyForCardsWithCustomGrouping()
+    public async Task IsCustomCardGrouping_OnlyForCardsWithCustomGrouping()
     {
         await using var h = new Harness(Harness.WatchlistOf(Btc));
         await h.Main.InitializeAsync();
-        h.Main.ShowNewGroupSlot.Should().BeFalse();
+        h.Main.IsCustomCardGrouping.Should().BeFalse();
 
         await h.Main.SetLayoutAsync(WatchlistLayout.Cards);
-        h.Main.ShowNewGroupSlot.Should().BeFalse();
+        h.Main.IsCustomCardGrouping.Should().BeFalse();
 
         await h.Main.SetGroupingAsync(CardGrouping.Custom);
-        h.Main.ShowNewGroupSlot.Should().BeTrue();
+        h.Main.IsCustomCardGrouping.Should().BeTrue();
 
         await h.Main.SetLayoutAsync(WatchlistLayout.List);
-        h.Main.ShowNewGroupSlot.Should().BeFalse();
+        h.Main.IsCustomCardGrouping.Should().BeFalse();
     }
 
     /// <summary>
