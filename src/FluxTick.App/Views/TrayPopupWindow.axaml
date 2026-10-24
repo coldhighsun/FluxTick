@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:FluxTick.App.Localization"
+        xmlns:vm="using:FluxTick.App.ViewModels"
+        x:Class="FluxTick.App.Views.TrayPopupWindow"
+        x:DataType="vm:TrayPopupViewModel"
+        Width="280"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        Title="FluxTick">
+
+  <Border Margin="6" Padding="10,8" CornerRadius="10" BorderThickness="1"
+          Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+          BoxShadow="0 4 16 0 #55000000">
+    <StackPanel Spacing="2">
+      <TextBlock Text="{loc:T TrayPopup_Empty}" Classes="muted" IsVisible="{Binding IsEmpty}" Margin="0,4" />
+      <ItemsControl ItemsSource="{Binding Items}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:AssetRowViewModel">
+            <Grid ColumnDefinitions="*,Auto,64" Margin="0,3">
+              <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Symbol}" Classes="muted mono" FontSize="10" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Text="{Binding PriceText}" Classes="mono" VerticalAlignment="Center"
+                         Margin="8,0" Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+              <TextBlock Grid.Column="2" Text="{Binding ChangeText}" Classes="mono" FontSize="11"
+                         HorizontalAlignment="Right" VerticalAlignment="Center"
+                         Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Text="{Binding MoreText}" Classes="muted" FontSize="11" IsVisible="{Binding HasMore}"
+                 HorizontalAlignment="Center" Margin="0,4,0,0" />
+    </StackPanel>
+  </Border>
+</Window>

@@ -19,6 +19,12 @@ public static class TrayAvailability
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// Whether the desktop was found to show tray icons. Only a positive answer is kept: at sign-in the tray host may start
+    /// after this app, so a negative answer is asked again the next time it matters.
+    /// </summary>
+    private static volatile bool s_shown;
+
+    /// <summary>
     /// Asks the desktop whether a tray is available. Windows and macOS always have one; on Linux the session bus is asked
     /// whether a status notifier host runs.
     /// </summary>
@@ -27,6 +33,24 @@ public static class TrayAvailability
     /// be found out, so that the window is never hidden to a tray that may not be there.
     /// </returns>
     public static bool Detect()
+    {
+        if (s_shown)
+        {
+            return true;
+        }
+
+        var shown = Probe();
+        s_shown = shown;
+        return shown;
+    }
+
+    /// <summary>
+    /// Asks the desktop, without looking at what was found before.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when tray icons are shown.
+    /// </returns>
+    private static bool Probe()
     {
         if (!OperatingSystem.IsLinux())
         {

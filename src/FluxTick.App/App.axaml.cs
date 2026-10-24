@@ -63,6 +63,11 @@ public sealed partial class App : Application
     private NativeMenuItem? _trayExit;
 
     /// <summary>
+    /// The tray menu entry that opens the settings.
+    /// </summary>
+    private NativeMenuItem? _traySettings;
+
+    /// <summary>
     /// The tray menu entry that opens the about window.
     /// </summary>
     private NativeMenuItem? _trayAbout;
@@ -78,9 +83,39 @@ public sealed partial class App : Application
     private UpdateService? _updates;
 
     /// <summary>
+    /// The popup that lists the watched instruments while the pointer rests on the tray icon.
+    /// </summary>
+    private TrayPopupWindow? _trayPopup;
+
+    /// <summary>
+    /// The watcher of the pointer on the tray icon, or <see langword="null"/> where hovering is not available.
+    /// </summary>
+    private WindowsTrayHover? _trayHover;
+
+    /// <summary>
+    /// Whether the shell has reported the tray icon, which is when the popup replaces the plain tooltip.
+    /// </summary>
+    private bool _trayHoverActive;
+
+    /// <summary>
+    /// How many times the hover watcher was tried to start; the tray may not exist yet when the app starts.
+    /// </summary>
+    private int _trayHoverAttempts;
+
+    /// <summary>
+    /// Whether a retry of starting the hover watcher is waiting.
+    /// </summary>
+    private bool _trayHoverRetryQueued;
+
+    /// <summary>
     /// The language setting that was applied last, so that settings changes that leave it alone cost nothing.
     /// </summary>
     private LanguageMode? _appliedLanguage;
+
+    /// <summary>
+    /// How many times starting the hover watcher is tried before giving up.
+    /// </summary>
+    private const int TrayHoverMaxAttempts = 5;
 
     /// <summary>
     /// Gets a value indicating whether the application is shutting down, so closing the window really closes it.
@@ -114,6 +149,7 @@ public sealed partial class App : Application
             _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
             _window.RestoreGeometry(_settings.Current.Window);
             _window.GeometryChanged += OnGeometryChanged;
+            _window.Closed += OnWindowClosed;
             if (TrayPolicy.StartHidden(_settings.Current.General, desktop.Args ?? [], () => HasTrayIcon))
             {
                 ShowFromTrayLater(desktop, _window);
@@ -129,12 +165,18 @@ public sealed partial class App : Application
                 ApplyLanguage();
                 ApplyTheme();
                 ApplyPalette();
+                ApplyTrayHover();
             });
             ApplyPalette();
+            Dispatcher.UIThread.Post(ApplyTrayHover, DispatcherPriority.Background);
 
             desktop.Exit += (_, _) =>
             {
                 IsExiting = true;
+                if (OperatingSystem.IsWindows())
+                {
+                    _trayHover?.Dispose();
+                }
 
                 // A move or resize in the last moments is still waiting for its quiet period; save it now.
                 try
@@ -173,15 +215,9 @@ public sealed partial class App : Application
     public bool CloseToTray => _settings is null || TrayPolicy.CloseHidesWindow(_settings.Current.General, () => HasTrayIcon);
 
     /// <summary>
-    /// Whether the desktop was found to show tray icons. Only a positive answer is kept: at sign-in the tray host may
-    /// start after this app, so a negative answer is asked again the next time it matters.
-    /// </summary>
-    private bool _trayShown;
-
-    /// <summary>
     /// Gets a value indicating whether the tray icon exists and the desktop shows it.
     /// </summary>
-    private bool HasTrayIcon => TrayIcon.GetIcons(this)?.Count > 0 && (_trayShown || (_trayShown = TrayAvailability.Detect()));
+    private bool HasTrayIcon => TrayIcon.GetIcons(this)?.Count > 0 && TrayAvailability.Detect();
 
     /// <summary>
     /// Starts without showing the window: the app runs without a main window until the window is first shown from the
@@ -292,24 +328,126 @@ public sealed partial class App : Application
         Loc.Instance.Apply(language);
         if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
         {
-            tray.ToolTipText = $"FluxTick — {Loc.Get("Tagline")}";
-            if (_trayToggle is null || _trayAbout is null || _trayExit is null)
+            tray.ToolTipText = TrayTooltip();
+            if (_trayToggle is null || _traySettings is null || _trayAbout is null || _trayExit is null)
             {
                 _trayToggle = new NativeMenuItem();
+                _traySettings = new NativeMenuItem();
                 _trayAbout = new NativeMenuItem();
                 _trayExit = new NativeMenuItem();
                 _trayToggle.Click += OnToggleWindow;
+                _traySettings.Click += OnTraySettingsClicked;
                 _trayAbout.Click += OnTrayAboutClicked;
                 _trayExit.Click += OnExit;
-                tray.Menu = [_trayToggle, _trayAbout, new NativeMenuItemSeparator(), _trayExit];
+                tray.Menu = [_trayToggle, _traySettings, _trayAbout, new NativeMenuItemSeparator(), _trayExit];
             }
 
             _trayToggle.Header = Loc.Get("Tray_ShowHide");
+            _traySettings.Header = Loc.Get("Tray_Settings");
             _trayAbout.Header = Loc.Get("Tray_About");
             _trayExit.Header = Loc.Get("Tray_Exit");
             ApplyUpdateTray();
         }
     }
+
+    /// <summary>
+    /// Ends the tray popup with the main window: it is a window too, and the app only ends when the last window is closed,
+    /// and the watcher must not open it again once it is closed.
+    /// </summary>
+    /// <param name="sender">
+    /// The main window.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            _trayHover?.Dispose();
+        }
+
+        _trayPopup?.Close();
+    }
+
+    /// <summary>
+    /// Starts or stops listing the instruments when the pointer rests on the tray icon, according to the setting.
+    /// Only Windows can tell where the tray icon is; elsewhere the tray keeps its plain tooltip.
+    /// </summary>
+    private void ApplyTrayHover()
+    {
+        if (!OperatingSystem.IsWindows() || _settings is null || _services is null || TrayIcon.GetIcons(this)?.FirstOrDefault() is not { } tray)
+        {
+            return;
+        }
+
+        if (!_settings.Current.General.TrayHoverList)
+        {
+            _trayHoverAttempts = 0;
+            if (_trayHover is not null)
+            {
+                _trayHover.Dispose();
+                _trayHover = null;
+                _trayHoverActive = false;
+                _trayPopup?.Hide();
+                tray.ToolTipText = TrayTooltip();
+            }
+
+            return;
+        }
+
+        if (_trayHover is not null)
+        {
+            return;
+        }
+
+        var popup = _trayPopup ??= new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services.GetRequiredService<MainViewModel>().Rows) };
+        var hover = WindowsTrayHover.TryCreate(tray, () => popup.IsPointerOver, () => popup.IsVisible);
+        if (hover is null)
+        {
+            // Avalonia may not have created the tray icon yet, or the shell starts after the app; try again a few times.
+            // Settings changes call this too, so only one retry is waiting at a time.
+            if (!_trayHoverRetryQueued && _trayHoverAttempts < TrayHoverMaxAttempts)
+            {
+                _trayHoverAttempts++;
+                _trayHoverRetryQueued = true;
+                DispatcherTimer.RunOnce(
+                    () =>
+                    {
+                        _trayHoverRetryQueued = false;
+                        ApplyTrayHover();
+                    },
+                    TimeSpan.FromSeconds(3));
+            }
+            else if (!_trayHoverRetryQueued)
+            {
+                TrayHoverAvailability.ReportFailure();
+            }
+
+            return;
+        }
+
+        hover.Entered += (_, icon) => popup.ShowAt(icon);
+        hover.Left += (_, _) => popup.Hide();
+
+        // The tooltip stays until the shell reports the icon, so a desktop that cannot place it keeps the plain tooltip.
+        hover.Located += (_, _) =>
+        {
+            _trayHoverActive = true;
+            tray.ToolTipText = TrayTooltip();
+        };
+        _trayHover = hover;
+        _trayHoverAttempts = 0;
+        TrayHoverAvailability.ReportSuccess();
+    }
+
+    /// <summary>
+    /// Gets the tooltip of the tray icon. It is empty while the popup takes its place, as both at once would overlap.
+    /// </summary>
+    /// <returns>
+    /// The tooltip text, or <see langword="null"/> for none.
+    /// </returns>
+    private string? TrayTooltip() => _trayHoverActive ? null : $"FluxTick — {Loc.Get("Tagline")}";
 
     /// <summary>
     /// Looks for a newer release once the app is up, unless the user turned that off or this is a development build.
@@ -366,7 +504,18 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings());
+    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true);
+
+    /// <summary>
+    /// Opens the settings window.
+    /// </summary>
+    /// <param name="sender">
+    /// The menu item.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnTraySettingsClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true);
 
     /// <summary>
     /// Opens the about window.
@@ -377,7 +526,7 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowAbout());
+    private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowAbout(), replaceToolWindow: true);
 
     /// <summary>
     /// Brings the main window forward when another copy of the app was started, showing it first when it is hidden.
@@ -394,7 +543,11 @@ public sealed partial class App : Application
     /// <param name="open">
     /// Opens the tool window.
     /// </param>
-    private void ShowFromTray(Action<MainViewModel> open)
+    /// <param name="replaceToolWindow">
+    /// Whether a tool window that is already open is closed first. The view model ignores a request while one is open, so
+    /// without this a choice from the tray menu would do nothing; a plain activation must leave the open window alone.
+    /// </param>
+    private void ShowFromTray(Action<MainViewModel> open, bool replaceToolWindow = false)
     {
         if (_window is null || _services is null)
         {
@@ -406,7 +559,16 @@ public sealed partial class App : Application
             _window.ToggleVisibility();
         }
 
-        open(_services.GetRequiredService<MainViewModel>());
+        var viewModel = _services.GetRequiredService<MainViewModel>();
+        if (replaceToolWindow && viewModel.IsToolWindowOpen)
+        {
+            // The old window is gone once its close has been handled, so the new one is opened after that.
+            _window.CloseToolWindow();
+            Dispatcher.UIThread.Post(() => open(viewModel), DispatcherPriority.Background);
+            return;
+        }
+
+        open(viewModel);
     }
 
     /// <summary>
@@ -480,7 +642,15 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayClicked(object? sender, EventArgs e) => _window?.ToggleVisibility();
+    private void OnTrayClicked(object? sender, EventArgs e)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            _trayHover?.Dismiss();
+        }
+
+        _window?.ToggleVisibility();
+    }
 
     /// <summary>
     /// Toggles the window from the tray menu.

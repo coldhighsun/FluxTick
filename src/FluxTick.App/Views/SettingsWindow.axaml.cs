@@ -9,7 +9,7 @@ public sealed partial class SettingsWindow : ToolWindow
     /// The height the window opens with, taller than the other tool windows because the Appearance page is long. On a
     /// small screen the tool window limits it to its share of the screen.
     /// </summary>
-    private const double InitialHeight = 680;
+    private const double InitialHeight = 560;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsWindow"/> class.
