@@ -185,6 +185,47 @@ public class RowAndOptionTests
     }
 
     /// <summary>
+    /// Verifies data that is not coming in is dimmed, which the sparkline shows as stopped, and the latest price is
+    /// kept for the alert lines.
+    /// </summary>
+    [Fact]
+    public void Update_WithDataNotComingIn_DimsTheRowAndKeepsThePrice()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Reconnecting));
+
+        row.IsStopped.Should().BeTrue();
+        row.IsDimmed.Should().BeTrue();
+        row.CurrentPrice.Should().Be(110m);
+
+        row.Update(Snapshot(111m, 100m, AssetHealth.Live));
+
+        row.IsStopped.Should().BeFalse();
+        row.IsDimmed.Should().BeFalse();
+        row.CurrentPrice.Should().Be(111m);
+    }
+
+    /// <summary>
+    /// Verifies the row passes on when the sparkline prices were traded, and clears it when the snapshot has no times.
+    /// </summary>
+    [Fact]
+    public void Update_WithTimeline_PassesItToTheSparkline()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+        var asOf = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var timeline = new SparklineTimeline([asOf.AddMinutes(-2), asOf.AddMinutes(-1)], asOf, TimeSpan.FromMinutes(60));
+
+        row.Update(Snapshot(110m, 100m) with { Timeline = timeline });
+
+        row.SparklineTimeline.Should().BeSameAs(timeline);
+
+        row.Update(Snapshot(111m, 100m));
+
+        row.SparklineTimeline.Should().BeNull();
+    }
+
+    /// <summary>
     /// Verifies unhealthy data is dimmed and labelled.
     /// </summary>
     [Theory]

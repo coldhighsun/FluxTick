@@ -32,6 +32,7 @@ public static class DefaultSettings
             Add(settings, new Asset(sim, "SIM-BTC", "Simulated Bitcoin", AssetClass.Crypto));
             Add(settings, new Asset(sim, "SIM-ETH", "Simulated Ether", AssetClass.Crypto));
             Add(settings, new Asset(sim, "SIM-AAPL", "Simulated Apple", AssetClass.Equity));
+            Add(settings, new Asset(sim, SimulatedProvider.MarketHoursSymbol, "Simulated Market Hours", AssetClass.Equity));
             Add(settings, new Asset(sim, "SIM-SPX", "Simulated S&P 500", AssetClass.Index));
             Add(settings, new Asset(sim, "SIM-EURUSD", "Simulated EUR/USD", AssetClass.Forex));
             Add(settings, new Asset(sim, "SIM-GOLD", "Simulated Gold", AssetClass.Commodity));

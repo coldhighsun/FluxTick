@@ -1063,6 +1063,24 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies an instrument is stale when quotes keep arriving but carry a time older than the threshold, and live
+    /// again once a quote with a fresh time arrives.
+    /// </summary>
+    [Fact]
+    public async Task Health_WithFreshlyReceivedButOldQuote_IsStaleUntilTimeAdvances()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow().AddMinutes(-5)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+
+        provider.Emit(new Quote(Btc.Id, 2m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+    }
+
+    /// <summary>
     /// Verifies a provider failure is reflected in the health of its instruments.
     /// </summary>
     [Fact]
@@ -1099,6 +1117,93 @@ public class MarketDataServiceTests
         await seeded.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         service.GetSnapshots().Single().Sparkline.Should().Equal(1m, 2m);
+    }
+
+    /// <summary>
+    /// Verifies the sparkline only shows the last hour: once the seeded history is older than that it is gone, and the
+    /// change is published without a new quote.
+    /// </summary>
+    [Fact]
+    public async Task Sparkline_WhenHistoryAgesOutOfTheLastHour_BecomesEmptyAndIsPublished()
+    {
+        var factory = new HistoryFactory(_time.GetUtcNow());
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+        var emptied = new TaskCompletionSource();
+        service.SnapshotChanged += (_, s) =>
+        {
+            if (s.Sparkline.Count == 0)
+            {
+                emptied.TrySetResult();
+            }
+        };
+
+        _time.Advance(TimeSpan.FromMinutes(30));
+        service.GetSnapshots().Single().Sparkline.Should().Equal(1m, 2m);
+        _time.Advance(TimeSpan.FromMinutes(32));
+
+        await emptied.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        service.GetSnapshots().Single().Sparkline.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies a snapshot says when the prices were traded and where the window ends, and that it is raised again when
+    /// the time moves into a new minute although nothing else changed.
+    /// </summary>
+    [Fact]
+    public async Task Snapshot_HasTimelineAndIsRaisedAgainInANewBucket()
+    {
+        var factory = new HistoryFactory(_time.GetUtcNow());
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+        var first = service.GetSnapshots().Single().Timeline;
+        first.Should().NotBeNull();
+        first!.Times.Should().HaveCount(2);
+        first.AsOf.Should().Be(_time.GetUtcNow());
+        first.Window.Should().Be(TimeSpan.FromMinutes(60));
+        var raised = new TaskCompletionSource<AssetSnapshot>();
+        service.SnapshotChanged += (_, s) =>
+        {
+            if (s.Timeline!.AsOf > first.AsOf)
+            {
+                raised.TrySetResult(s);
+            }
+        };
+
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        var later = await raised.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        later.Timeline!.Times.Should().Equal(first.Times,"the points did not move, only the window did");
+    }
+
+    /// <summary>
+    /// Verifies the time moving into a new minute raises nothing for an instrument whose sparkline is empty and so cannot
+    /// change, and the move that empties a sparkline is still raised.
+    /// </summary>
+    [Fact]
+    public async Task Snapshot_NewBucketWithEmptySparkline_RaisesNothing()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var start = _time.GetUtcNow();
+        var healths = new System.Collections.Concurrent.ConcurrentQueue<AssetHealth>();
+        service.SnapshotChanged += (_, s) =>
+        {
+            // What was raised before the time moved on is of no interest.
+            if (s.Timeline!.AsOf > start)
+            {
+                healths.Enqueue(s.Health);
+            }
+        };
+
+        _time.Advance(TimeSpan.FromMinutes(3));
+
+        // A status change raises a snapshot that is known to come: when it has, whatever the new minute raised has too.
+        _crypto.Created.Single().ChangeStatus(ProviderConnectionState.Reconnecting, "offline");
+        await WaitUntilAsync(() => healths.Contains(AssetHealth.Reconnecting));
+        healths.Should().OnlyContain(h => h == AssetHealth.Reconnecting, "nothing was received, so there is no chart that could slide");
     }
 
     /// <summary>

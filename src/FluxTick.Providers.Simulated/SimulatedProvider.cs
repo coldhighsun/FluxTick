@@ -30,7 +30,25 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
         new(SimulatedProviderFactory.ProviderId, "SIM-SPX", "Simulated S&P 500", AssetClass.Index),
         new(SimulatedProviderFactory.ProviderId, "SIM-EURUSD", "Simulated EUR/USD", AssetClass.Forex),
         new(SimulatedProviderFactory.ProviderId, "SIM-GOLD", "Simulated Gold", AssetClass.Commodity),
+        new(SimulatedProviderFactory.ProviderId, MarketHoursSymbol, "Simulated Market Hours (5 min open, 5 min closed)", AssetClass.Equity),
     ];
+
+    /// <summary>
+    /// The symbol that imitates a market with trading hours: it trades for <see cref="OpenFor"/>, then stays closed for
+    /// <see cref="ClosedFor"/>, and repeats. While closed it keeps repeating its last price with the time it was
+    /// traded, the way a polled source does after the close.
+    /// </summary>
+    public const string MarketHoursSymbol = "SIM-HOURS";
+
+    /// <summary>
+    /// How long <see cref="MarketHoursSymbol"/> trades in each cycle.
+    /// </summary>
+    public static readonly TimeSpan OpenFor = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How long <see cref="MarketHoursSymbol"/> stays closed in each cycle.
+    /// </summary>
+    public static readonly TimeSpan ClosedFor = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Guards <see cref="_walks"/> and <see cref="_timer"/>.
@@ -50,8 +68,14 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
     /// <inheritdoc />
     public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
     {
-        var walk = new Walk(asset.Symbol);
         var now = TimeProvider.GetUtcNow();
+        if (asset.Symbol == MarketHoursSymbol)
+        {
+            // Without trading hours of its own there is no past to show; the sparkline builds up from the live prices.
+            return Task.FromResult<IReadOnlyList<PricePoint>>([]);
+        }
+
+        var walk = new Walk(asset.Symbol, now);
         var prices = new decimal[60];
         for (var i = prices.Length - 1; i >= 0; i--)
         {
@@ -90,9 +114,10 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
                 _walks.Remove(asset.Id);
             }
 
+            var now = TimeProvider.GetUtcNow();
             foreach (var asset in added)
             {
-                _walks[asset.Id] = new Walk(asset.Symbol);
+                _walks[asset.Id] = new Walk(asset.Symbol, now);
             }
 
             if (_walks.Count == 0)
@@ -133,7 +158,18 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
         {
             foreach (var (id, walk) in _walks)
             {
+                if (walk.IsClosed(now))
+                {
+                    if (walk.LastTradedAt is { } tradedAt)
+                    {
+                        Publish(new Quote(id, walk.Price, walk.Reference, tradedAt));
+                    }
+
+                    continue;
+                }
+
                 walk.Step();
+                walk.LastTradedAt = now;
                 Publish(new Quote(id, walk.Price, walk.Reference, now));
             }
         }
@@ -150,17 +186,58 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
         private readonly Random _random;
 
         /// <summary>
+        /// Whether the symbol imitates a market with trading hours.
+        /// </summary>
+        private readonly bool _hasTradingHours;
+
+        /// <summary>
+        /// When the walk started, which is where the open phase of the first cycle begins.
+        /// </summary>
+        private readonly DateTimeOffset _startedAt;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="Walk"/> class.
         /// </summary>
         /// <param name="symbol">
         /// The symbol that seeds the walk.
         /// </param>
-        public Walk(string symbol)
+        /// <param name="startedAt">
+        /// When the walk starts.
+        /// </param>
+        public Walk(string symbol, DateTimeOffset startedAt)
         {
             var seed = StableHash(symbol);
             _random = new Random(seed);
+            _hasTradingHours = symbol == MarketHoursSymbol;
+            _startedAt = startedAt;
             Reference = Round(10m + (seed & 0xFFFF) / 10m);
             Price = Reference;
+        }
+
+        /// <summary>
+        /// Gets or sets when the last price was traded; <see langword="null"/> before the first one.
+        /// </summary>
+        public DateTimeOffset? LastTradedAt { get; set; }
+
+        /// <summary>
+        /// Determines whether the market of this walk is closed at the given time.
+        /// </summary>
+        /// <param name="now">
+        /// The time to check.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> in the closed phase of a symbol with trading hours; otherwise, <see langword="false"/>.
+        /// </returns>
+        public bool IsClosed(DateTimeOffset now)
+        {
+            if (!_hasTradingHours)
+            {
+                return false;
+            }
+
+            var cycle = OpenFor + ClosedFor;
+            var elapsed = now - _startedAt;
+            return TimeSpan.FromTicks(elapsed.Ticks % cycle.Ticks) >= OpenFor;
         }
 
         /// <summary>

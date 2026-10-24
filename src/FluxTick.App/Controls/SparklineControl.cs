@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using FluxTick.Core.Application;
 
 namespace FluxTick.App.Controls;
 
@@ -20,6 +21,30 @@ public sealed class SparklineControl : Control
     /// </summary>
     public static readonly StyledProperty<IBrush?> StrokeProperty =
         AvaloniaProperty.Register<SparklineControl, IBrush?>(nameof(Stroke), Brushes.Gray);
+
+    /// <summary>
+    /// Identifies the <see cref="Timeline"/> property.
+    /// </summary>
+    public static readonly StyledProperty<SparklineTimeline?> TimelineProperty =
+        AvaloniaProperty.Register<SparklineControl, SparklineTimeline?>(nameof(Timeline));
+
+    /// <summary>
+    /// Identifies the <see cref="Price"/> property.
+    /// </summary>
+    public static readonly StyledProperty<decimal?> PriceProperty =
+        AvaloniaProperty.Register<SparklineControl, decimal?>(nameof(Price));
+
+    /// <summary>
+    /// Identifies the <see cref="IsStopped"/> property.
+    /// </summary>
+    public static readonly StyledProperty<bool> IsStoppedProperty =
+        AvaloniaProperty.Register<SparklineControl, bool>(nameof(IsStopped));
+
+    /// <summary>
+    /// Identifies the <see cref="StoppedStroke"/> property.
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> StoppedStrokeProperty =
+        AvaloniaProperty.Register<SparklineControl, IBrush?>(nameof(StoppedStroke), Brushes.Gray);
 
     /// <summary>
     /// Identifies the <see cref="AboveLevel"/> property.
@@ -50,7 +75,49 @@ public sealed class SparklineControl : Control
     /// </summary>
     static SparklineControl()
     {
-        AffectsRender<SparklineControl>(PointsProperty, StrokeProperty, AboveLevelProperty, BelowLevelProperty, AboveStrokeProperty, BelowStrokeProperty);
+        AffectsRender<SparklineControl>(PointsProperty, TimelineProperty, IsStoppedProperty, StoppedStrokeProperty, StrokeProperty, AboveLevelProperty, BelowLevelProperty, AboveStrokeProperty, BelowStrokeProperty);
+    }
+
+    /// <summary>
+    /// Gets or sets when each of the <see cref="Points"/> was traded and what time span the chart shows. It lays the
+    /// prices out along the time: stretches without prices are drawn as gray dashes. Without it, or when it has not as
+    /// many times as there are prices, the prices are spread evenly over the width.
+    /// </summary>
+    public SparklineTimeline? Timeline
+    {
+        get => GetValue(TimelineProperty);
+        set => SetValue(TimelineProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the latest price, which places the alert lines when there are fewer than two prices to draw, or
+    /// <see langword="null"/> when it is not known. A change draws the chart again only while there are fewer than two
+    /// prices; with more, the prices change with it.
+    /// </summary>
+    public decimal? Price
+    {
+        get => GetValue(PriceProperty);
+        set => SetValue(PriceProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the prices are not coming in, whatever the reason (stale, reconnecting,
+    /// failed, switched off), which carries the last price on to the right edge as a dashed line in
+    /// <see cref="StoppedStroke"/>.
+    /// </summary>
+    public bool IsStopped
+    {
+        get => GetValue(IsStoppedProperty);
+        set => SetValue(IsStoppedProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the brush of the dashed lines drawn where there are no prices.
+    /// </summary>
+    public IBrush? StoppedStroke
+    {
+        get => GetValue(StoppedStrokeProperty);
+        set => SetValue(StoppedStrokeProperty, value);
     }
 
     /// <summary>
@@ -110,6 +177,19 @@ public sealed class SparklineControl : Control
     }
 
     /// <inheritdoc />
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        // The price places the line only while there are too few prices to draw one; with more, a new price comes with
+        // new prices, which draw the chart again.
+        if (change.Property == PriceProperty && (Points?.Count ?? 0) < 2)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -123,14 +203,13 @@ public sealed class SparklineControl : Control
         const double pad = 3;
         var width = bounds.Width - pad * 2;
         var height = bounds.Height - pad * 2;
-        var points = Points;
-
-        if (points is null || points.Count < 2)
-        {
-            var y = bounds.Height / 2;
-            context.DrawLine(new Pen(stroke, 1, new DashStyle([2, 3], 0)) { LineCap = PenLineCap.Round }, new Point(pad, y), new Point(bounds.Width - pad, y));
-            return;
-        }
+        var points = Points ?? [];
+        var timeline = Timeline;
+        var timed = points.Count > 0 && timeline is not null && timeline.Times.Count == points.Count;
+        var times = timeline?.Times;
+        var gapBrush = StoppedStroke ?? stroke;
+        Pen? gapPen = null;
+        Pen GapPen() => gapPen ??= new Pen(gapBrush, 1.5, new DashStyle([2, 2], 0), PenLineCap.Flat, PenLineJoin.Round);
 
         var levels = new List<(double Price, IBrush? Brush)>();
         if (AboveLevel is { } above)
@@ -143,29 +222,115 @@ public sealed class SparklineControl : Control
             levels.Add(((double)below, BelowStroke));
         }
 
-        var (min, max) = SparklineScale.Range((double)points.Min(), (double)points.Max(), levels.Select(l => l.Price));
+        if (!timed && points.Count < 2)
+        {
+            // Too little to draw a line: a flat dashed one at the price, or in the middle when even that is unknown, with
+            // the alert lines around it.
+            var known = points.Count == 1 ? points[0] : Price;
+            if (known is not { } flat)
+            {
+                var middle = bounds.Height / 2;
+                context.DrawLine(new Pen(gapBrush, 1, new DashStyle([2, 3], 0)) { LineCap = PenLineCap.Round }, new Point(pad, middle), new Point(bounds.Width - pad, middle));
+                return;
+            }
+
+            var (flatBottom, flatTop) = SparklineScale.Range((double)flat, (double)flat, levels.Select(l => l.Price));
+            DrawLevels(context, levels, flatBottom, flatTop, bounds.Width, pad, height);
+            var (flatPosition, _) = SparklineScale.Place((double)flat, flatBottom, flatTop);
+            var flatY = pad + height * (1 - flatPosition);
+            context.DrawLine(new Pen(gapBrush, 1, new DashStyle([2, 3], 0)) { LineCap = PenLineCap.Round }, new Point(pad, flatY), new Point(bounds.Width - pad, flatY));
+            return;
+        }
+
+        var lowest = points[0];
+        var highest = points[0];
+        foreach (var price in points)
+        {
+            lowest = Math.Min(lowest, price);
+            highest = Math.Max(highest, price);
+        }
+
+        var (min, max) = SparklineScale.Range((double)lowest, (double)highest, levels.Select(l => l.Price));
         var coordinates = new Point[points.Count];
         for (var i = 0; i < points.Count; i++)
         {
-            var x = pad + width * i / (points.Count - 1);
+            var x = timed
+                ? pad + width * SparklineScale.TimeX(times![i], timeline!.AsOf, timeline.Window)
+                : pad + width * i / (points.Count - 1);
             var (normalized, _) = SparklineScale.Place((double)points[i], min, max);
             coordinates[i] = new Point(x, pad + height * (1 - normalized));
         }
 
-        // The alert levels go under the prices. A level too far away for the chart to grow to it sits at the edge, fainter.
-        foreach (var (price, brush) in levels)
+        // The alert levels go under the prices.
+        DrawLevels(context, levels, min, max, bounds.Width, pad, height);
+
+        // After the last price of a source that stopped, however it shows (stale, reconnecting, failed), the last price is
+        // carried on to the edge; the same when the last price is simply long ago.
+        var trailing = timed && (IsStopped || timeline!.IsGap(times![^1], timeline.AsOf));
+        if (timed)
         {
-            if (brush is null)
+            // Before the first price nothing is known, so the first price is carried back to the edge.
+            if (coordinates[0].X > pad + 0.5)
+            {
+                context.DrawLine(GapPen(), new Point(pad, coordinates[0].Y), coordinates[0]);
+            }
+
+            if (trailing && coordinates[^1].X < bounds.Width - pad - 0.5)
+            {
+                context.DrawLine(GapPen(), coordinates[^1], new Point(bounds.Width - pad, coordinates[^1].Y));
+            }
+        }
+
+        // The prices are drawn in runs; a stretch between two prices that are too far apart is a dashed gap instead.
+        var runStart = 0;
+        for (var i = 1; i <= coordinates.Length; i++)
+        {
+            var endsRun = i == coordinates.Length || (timed && timeline!.IsGap(times![i - 1], times[i]));
+            if (!endsRun)
             {
                 continue;
             }
 
-            var (position, clamped) = SparklineScale.Place(price, min, max);
-            var y = pad + height * (1 - position);
-            using (context.PushOpacity(clamped ? 0.35 : 0.9))
+            DrawRun(context, coordinates, runStart, i - 1, stroke, bounds.Height);
+            if (i < coordinates.Length)
             {
-                context.DrawLine(new Pen(brush, 1, new DashStyle([3, 3], 0)), new Point(pad, y), new Point(bounds.Width - pad, y));
+                context.DrawLine(GapPen(), coordinates[i - 1], coordinates[i]);
             }
+
+            runStart = i;
+        }
+
+        context.DrawEllipse(trailing ? gapBrush : stroke, null, coordinates[^1], 2.2, 2.2);
+    }
+
+    /// <summary>
+    /// Draws a run of prices that follow each other closely: a soft area under the line, and the line.
+    /// </summary>
+    /// <param name="context">
+    /// The drawing context.
+    /// </param>
+    /// <param name="coordinates">
+    /// The places of all the prices.
+    /// </param>
+    /// <param name="first">
+    /// The index of the first price of the run.
+    /// </param>
+    /// <param name="last">
+    /// The index of the last price of the run.
+    /// </param>
+    /// <param name="stroke">
+    /// The brush of the line.
+    /// </param>
+    /// <param name="bottom">
+    /// The y of the bottom edge, which the area reaches down to.
+    /// </param>
+    private static void DrawRun(DrawingContext context, Point[] coordinates, int first, int last, IBrush stroke, double bottom)
+    {
+        if (first == last)
+        {
+            // A single price has no line; a small dot shows it.
+            context.DrawEllipse(stroke, null, coordinates[first], 1.5, 1.5);
+            return;
         }
 
         if (stroke is ISolidColorBrush solid)
@@ -173,13 +338,13 @@ public sealed class SparklineControl : Control
             var area = new StreamGeometry();
             using (var ctx = area.Open())
             {
-                ctx.BeginFigure(new Point(coordinates[0].X, bounds.Height), true);
-                foreach (var point in coordinates)
+                ctx.BeginFigure(new Point(coordinates[first].X, bottom), true);
+                for (var i = first; i <= last; i++)
                 {
-                    ctx.LineTo(point);
+                    ctx.LineTo(coordinates[i]);
                 }
 
-                ctx.LineTo(new Point(coordinates[^1].X, bounds.Height));
+                ctx.LineTo(new Point(coordinates[last].X, bottom));
                 ctx.EndFigure(true);
             }
 
@@ -199,8 +364,8 @@ public sealed class SparklineControl : Control
         var line = new StreamGeometry();
         using (var ctx = line.Open())
         {
-            ctx.BeginFigure(coordinates[0], false);
-            for (var i = 1; i < coordinates.Length; i++)
+            ctx.BeginFigure(coordinates[first], false);
+            for (var i = first + 1; i <= last; i++)
             {
                 ctx.LineTo(coordinates[i]);
             }
@@ -209,6 +374,48 @@ public sealed class SparklineControl : Control
         }
 
         context.DrawGeometry(null, new Pen(stroke, 1.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), line);
-        context.DrawEllipse(stroke, null, coordinates[^1], 2.2, 2.2);
+    }
+
+    /// <summary>
+    /// Draws the dashed lines of the alert levels. A level too far away for the chart to grow to it sits at the edge,
+    /// fainter.
+    /// </summary>
+    /// <param name="context">
+    /// The drawing context.
+    /// </param>
+    /// <param name="levels">
+    /// The levels with their brushes.
+    /// </param>
+    /// <param name="bottom">
+    /// The price at the bottom of the chart.
+    /// </param>
+    /// <param name="top">
+    /// The price at the top of the chart.
+    /// </param>
+    /// <param name="totalWidth">
+    /// The width of the control.
+    /// </param>
+    /// <param name="pad">
+    /// The space kept free around the chart.
+    /// </param>
+    /// <param name="height">
+    /// The height of the chart without the space around it.
+    /// </param>
+    private static void DrawLevels(DrawingContext context, List<(double Price, IBrush? Brush)> levels, double bottom, double top, double totalWidth, double pad, double height)
+    {
+        foreach (var (price, brush) in levels)
+        {
+            if (brush is null)
+            {
+                continue;
+            }
+
+            var (position, clamped) = SparklineScale.Place(price, bottom, top);
+            var y = pad + height * (1 - position);
+            using (context.PushOpacity(clamped ? 0.35 : 0.9))
+            {
+                context.DrawLine(new Pen(brush, 1, new DashStyle([3, 3], 0)), new Point(pad, y), new Point(totalWidth - pad, y));
+            }
+        }
     }
 }

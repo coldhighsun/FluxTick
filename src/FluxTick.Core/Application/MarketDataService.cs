@@ -940,7 +940,11 @@ public sealed class MarketDataService : IAsyncDisposable
                 }
                 else
                 {
-                    _assets[asset.Id] = new AssetState(asset, new SparklineSeries(_options.SparklineCapacity, _options.SparklineBucket));
+                    _assets[asset.Id] = new AssetState(asset, new SparklineSeries(_options.SparklineCapacity, _options.SparklineBucket))
+                    {
+                        // Nothing was raised yet, so the bucket of now is not a change.
+                        LastSparklineBucket = _timeProvider.GetUtcNow().UtcTicks / _options.SparklineBucket.Ticks,
+                    };
                 }
             }
 
@@ -1008,6 +1012,7 @@ public sealed class MarketDataService : IAsyncDisposable
                     }
 
                     snapshot = BuildSnapshot(state);
+                    MarkPublished(state, snapshot);
                 }
             }
         }
@@ -1077,7 +1082,7 @@ public sealed class MarketDataService : IAsyncDisposable
             state.LastReceivedAt = _timeProvider.GetUtcNow();
             state.Series.Add(quote.Price, quote.Timestamp);
             snapshot = BuildSnapshot(state);
-            state.LastHealth = snapshot.Health;
+            MarkPublished(state, snapshot);
         }
 
         RaiseSnapshot(snapshot);
@@ -1107,9 +1112,17 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             foreach (var state in _assets.Values)
             {
-                // Only the health is needed here; the snapshot is built when the event is raised.
+                // Only the health and the sparkline bucket are needed here; the snapshot is built when the event is
+                // raised. The sparkline slides along with the time, so a new bucket alone also changes the snapshot.
                 var (health, _) = ComputeHealth(state);
-                if (forceRaise || health != state.LastHealth)
+                var now = _timeProvider.GetUtcNow();
+                var bucket = BucketOf(state, now);
+
+                // A new bucket moves the window on, which changes the chart only when it has points to move or just lost
+                // its last ones; an empty one stays as it is.
+                var slid = bucket != state.LastSparklineBucket && (state.LastSparklineCount > 0 || state.Series.AnyWithin(now));
+                state.LastSparklineBucket = bucket;
+                if (forceRaise || health != state.LastHealth || slid)
                 {
                     state.LastHealth = health;
                     changed.Add(state.Asset.Id);
@@ -1137,7 +1150,7 @@ public sealed class MarketDataService : IAsyncDisposable
                 if (_assets.TryGetValue(id, out var state))
                 {
                     snapshot = BuildSnapshot(state);
-                    state.LastHealth = snapshot.Health;
+                    MarkPublished(state, snapshot);
                 }
             }
 
@@ -1168,8 +1181,47 @@ public sealed class MarketDataService : IAsyncDisposable
     private AssetSnapshot BuildSnapshot(AssetState state)
     {
         var (health, detail) = ComputeHealth(state);
-        return new AssetSnapshot(state.Asset, state.Latest, state.Series.Snapshot(), health, detail);
+        var now = _timeProvider.GetUtcNow();
+        var sparkline = state.Series.Snapshot(now);
+        var timeline = new SparklineTimeline(state.Series.Times(now), now, state.Series.Window);
+        return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline);
     }
+
+    /// <summary>
+    /// Records what a snapshot that is about to be raised showed, so that only a change from it is raised next. Building
+    /// a snapshot for a caller that asks for one does not count, as nobody listening to the event gets it. Must be
+    /// called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="snapshot">
+    /// The snapshot that is raised.
+    /// </param>
+    private static void MarkPublished(AssetState state, AssetSnapshot snapshot)
+    {
+        state.LastHealth = snapshot.Health;
+        state.LastSparklineCount = snapshot.Sparkline.Count;
+        if (snapshot.Timeline is { } timeline)
+        {
+            state.LastSparklineBucket = BucketOf(state, timeline.AsOf);
+        }
+    }
+
+    /// <summary>
+    /// Finds the bucket of the sparkline a time falls into; the sparkline slides along with the time, so a snapshot is
+    /// due when the time moves into a new bucket.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="time">
+    /// The time.
+    /// </param>
+    /// <returns>
+    /// The number of the bucket.
+    /// </returns>
+    private static long BucketOf(AssetState state, DateTimeOffset time) => time.UtcTicks / state.Series.Bucket.Ticks;
 
     /// <summary>
     /// Derives the health of an instrument. Must be called while holding the lock.
@@ -1205,7 +1257,11 @@ public sealed class MarketDataService : IAsyncDisposable
             return (AssetHealth.Waiting, null);
         }
 
-        return _timeProvider.GetUtcNow() - state.LastReceivedAt.Value > _options.StaleAfter
+        // Stale when nothing was received lately, or when what keeps arriving is an old price (a polled source repeats
+        // the last price of a closed market with the time it was traded, which the receive time alone would not show).
+        var now = _timeProvider.GetUtcNow();
+        var quoteTime = state.Latest?.Timestamp ?? state.LastReceivedAt.Value;
+        return now - state.LastReceivedAt.Value > _options.StaleAfter || now - quoteTime > _options.StaleAfter
             ? (AssetHealth.Stale, null)
             : (AssetHealth.Live, null);
     }
@@ -1311,6 +1367,16 @@ public sealed class MarketDataService : IAsyncDisposable
         /// Gets or sets the last health that was published.
         /// </summary>
         public AssetHealth? LastHealth { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of sparkline points in the last snapshot that was raised.
+        /// </summary>
+        public int LastSparklineCount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the sparkline bucket of the time of the last snapshot that was raised.
+        /// </summary>
+        public long LastSparklineBucket { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether a history load is in flight.

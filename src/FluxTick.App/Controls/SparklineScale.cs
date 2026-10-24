@@ -54,6 +54,24 @@ public static class SparklineScale
     }
 
     /// <summary>
+    /// Computes where a time lies along the width of the chart, which shows the window that ends at <paramref name="asOf"/>.
+    /// </summary>
+    /// <param name="time">
+    /// The time.
+    /// </param>
+    /// <param name="asOf">
+    /// The end of the window.
+    /// </param>
+    /// <param name="window">
+    /// The length of the window.
+    /// </param>
+    /// <returns>
+    /// The position between 0 (the start of the window) and 1 (its end); a time outside the window is moved to the edge.
+    /// </returns>
+    public static double TimeX(DateTimeOffset time, DateTimeOffset asOf, TimeSpan window) =>
+        window <= TimeSpan.Zero ? 1 : Math.Clamp(1 - (asOf - time) / window, 0, 1);
+
+    /// <summary>
     /// Computes where a price lies in the chart.
     /// </summary>
     /// <param name="price">
