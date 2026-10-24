@@ -244,7 +244,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LayoutToggleTip))]
-    [NotifyPropertyChangedFor(nameof(ShowNewGroupSlot))]
+    [NotifyPropertyChangedFor(nameof(IsCustomCardGrouping))]
     [NotifyPropertyChangedFor(nameof(ListItems))]
     public partial bool IsCardLayout { get; private set; }
 
@@ -255,10 +255,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public IReadOnlyList<AssetRowViewModel> ListItems => IsCardLayout ? [] : Rows;
 
     /// <summary>
-    /// Gets a value indicating whether the card layout shows the placeholder that creates a new group: only with
-    /// the custom grouping, where the groups are visible.
+    /// Gets a value indicating whether the cards are shown in the custom groups: the card layout with the custom
+    /// grouping, and not just the custom grouping, which stays selected in the list layout. Only then are the groups
+    /// visible, so this is when the new group placeholder and the New group menu entries are offered.
     /// </summary>
-    public bool ShowNewGroupSlot => IsCardLayout && Grouping == CardGrouping.Custom;
+    public bool IsCustomCardGrouping => IsCardLayout && Grouping == CardGrouping.Custom;
 
     /// <summary>
     /// Gets the tooltip of the layout button, which says what the next click switches to.
@@ -269,7 +270,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// Gets how the cards are grouped.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowNewGroupSlot))]
+    [NotifyPropertyChangedFor(nameof(IsCustomCardGrouping))]
     public partial CardGrouping Grouping { get; private set; }
 
     /// <summary>
