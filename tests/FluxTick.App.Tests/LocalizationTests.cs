@@ -161,7 +161,7 @@ public class LocalizationTests
         harness.AddAsset.BeginAdd();
         harness.AddAsset.Title.Should().Be("Add instrument");
 
-        InChinese(() => harness.AddAsset.Title.Should().Be("添加品种"));
+        InChinese(() => harness.AddAsset.Title.Should().Be("添加资产"));
 
         harness.AddAsset.Title.Should().Be("Add instrument");
     }

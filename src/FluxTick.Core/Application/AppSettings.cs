@@ -333,6 +333,11 @@ public sealed class GeneralSettings
     /// Gets or sets a value indicating whether closing the window hides it to the tray; otherwise it exits the app.
     /// </summary>
     public bool CloseToTray { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether hovering the tray icon lists the watched instruments.
+    /// </summary>
+    public bool TrayHoverList { get; set; } = true;
 }
 
 /// <summary>

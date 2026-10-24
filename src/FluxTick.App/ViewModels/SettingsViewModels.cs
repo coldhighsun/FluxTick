@@ -687,6 +687,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     private bool _loading;
 
     /// <summary>
+    /// Whether the desktop shows tray icons. It is assumed until the desktop has answered, which can take a moment on
+    /// Linux and is done in the background.
+    /// </summary>
+    private volatile bool _hasTray = true;
+
+    /// <summary>
     /// The start at sign-in registration, or <see langword="null"/> when the platform has none.
     /// </summary>
     private readonly IAutoStartService? _autoStart;
@@ -718,6 +724,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="autoStart">
     /// The start at sign-in registration, or <see langword="null"/> when the platform has none.
     /// </param>
+    /// <param name="trayProbe">
+    /// Tells whether the desktop shows tray icons; by default the desktop is asked, which can take a moment.
+    /// </param>
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
@@ -726,7 +735,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         IUiDispatcher ui,
         TimeProvider timeProvider,
         UpdateViewModel? updates = null,
-        IAutoStartService? autoStart = null)
+        IAutoStartService? autoStart = null,
+        Func<bool>? trayProbe = null)
         : base(ui)
     {
         _settings = settings;
@@ -742,6 +752,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             Enum.GetValues<AssetClass>().Select(c => new RoutingRowViewModel(c, r => _ = SaveRoutingAsync(r))));
         market.ProviderStatusChanged += OnProviderStatusChanged;
         Reload();
+        StartTrayProbe(trayProbe ?? TrayAvailability.Detect);
     }
 
     /// <inheritdoc />
@@ -814,6 +825,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public bool IsAutoStartSupported => _autoStart?.IsSupported == true;
 
     /// <summary>
+    /// Gets a value indicating whether the platform can tell when the pointer rests on the tray icon.
+    /// </summary>
+    public bool IsTrayHoverSupported => TrayHoverAvailability.IsSupported;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the app starts when the user signs in.
     /// </summary>
     [ObservableProperty]
@@ -830,6 +846,41 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// </summary>
     [ObservableProperty]
     public partial bool CloseToTray { get; set; } = true;
+
+    /// <summary>
+    /// Gets the tooltip of the window's close button, which says what it does under the current setting.
+    /// </summary>
+    public string CloseButtonTip => Loc.Get(CloseToTray && HasTray ? "Main_HideToTray" : "Common_Close");
+
+    /// <summary>
+    /// Gets a value indicating whether the desktop shows tray icons: without a tray the window is never hidden to it,
+    /// whatever the setting says.
+    /// </summary>
+    private bool HasTray => _hasTray;
+
+    /// <summary>
+    /// Asks the desktop whether it shows tray icons, in the background, and updates the close button tip when it does not.
+    /// </summary>
+    /// <param name="probe">
+    /// Tells whether the desktop shows tray icons.
+    /// </param>
+    private void StartTrayProbe(Func<bool> probe) =>
+        _ = Task.Run(probe).ContinueWith(
+            task =>
+            {
+                if (task is { IsCompletedSuccessfully: true, Result: false })
+                {
+                    _hasTray = false;
+                    Ui.Post(() => OnPropertyChanged(nameof(CloseButtonTip)));
+                }
+            },
+            TaskScheduler.Default);
+
+    /// <summary>
+    /// Gets or sets a value indicating whether hovering the tray icon lists the watched instruments.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool TrayHoverList { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the background opacity between 0.3 and 1.
@@ -925,6 +976,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             LaunchAtLogin = IsAutoStartSupported && _autoStart!.IsEnabled();
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
+            TrayHoverList = current.General.TrayHoverList;
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Compact = current.Appearance.Compact;
@@ -1011,7 +1063,13 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnCloseToTrayChanged(bool value) => SaveSetting(s => s.General.CloseToTray = value);
+    partial void OnCloseToTrayChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CloseButtonTip));
+        SaveSetting(s => s.General.CloseToTray = value);
+    }
+
+    partial void OnTrayHoverListChanged(bool value) => SaveSetting(s => s.General.TrayHoverList = value);
 
     /// <summary>
     /// Saves the always-on-top flag.
@@ -1080,6 +1138,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <inheritdoc />
     protected override void OnLanguageChanged()
     {
+        OnPropertyChanged(nameof(CloseButtonTip));
         foreach (var provider in Providers)
         {
             provider.RefreshLanguage();

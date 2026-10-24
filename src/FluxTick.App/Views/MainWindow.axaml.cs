@@ -178,6 +178,11 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Closes the tool window that is open, if any.
+    /// </summary>
+    public void CloseToolWindow() => _toolWindow?.Close();
+
+    /// <summary>
     /// Hides the window to the tray instead of closing it, unless the application is exiting or the user chose that
     /// closing the window exits.
     /// </summary>
@@ -563,7 +568,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Hides the window to the tray.
+    /// Closes the window, which hides it to the tray or exits the app according to the setting; see <see cref="OnClosing"/>.
     /// </summary>
     /// <param name="sender">
     /// The button.
@@ -571,7 +576,7 @@ public sealed partial class MainWindow : Window
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnHideClicked(object? sender, RoutedEventArgs e) => Hide();
+    private void OnCloseClicked(object? sender, RoutedEventArgs e) => Close();
 
     /// <summary>
     /// Asks for the name of a new group next to the grouping button.

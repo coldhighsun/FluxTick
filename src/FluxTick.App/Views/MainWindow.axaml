@@ -74,7 +74,7 @@
                 <Path Data="M5 6.5V5a2 2 0 0 1 4 0v1.5" />
               </Canvas>
             </Button>
-            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_HideToTray}" Click="OnHideClicked">
+            <Button Classes="icon" Width="24" ToolTip.Tip="{Binding Settings.CloseButtonTip}" Click="OnCloseClicked">
               <Path Data="M3 3l8 8M11 3l-8 8" />
             </Button>
           </StackPanel>
