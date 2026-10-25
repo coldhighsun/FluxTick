@@ -224,7 +224,7 @@ public sealed class SingleInstance : IDisposable
         {
             try
             {
-                await using var server = new NamedPipeServerStream(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                await using var server = new NamedPipeServerStream(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await server.WaitForConnectionAsync(_stop.Token);
                 Activated?.Invoke(this, EventArgs.Empty);
                 await AcknowledgeAsync(server);

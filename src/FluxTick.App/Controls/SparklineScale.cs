@@ -32,14 +32,15 @@ public static class SparklineScale
     /// The prices of the bottom and the top of the chart: the range of the prices, grown to include each level that is
     /// within <see cref="Reach"/> of it.
     /// </returns>
-    public static (double Bottom, double Top) Range(double min, double max, IEnumerable<double> levels)
+    public static (double Bottom, double Top) Range(double min, double max, IReadOnlyList<double> levels)
     {
         var span = max - min;
         var reach = (span > 0 ? span : Math.Abs(max) * FlatReach) * Reach;
         var bottom = min;
         var top = max;
-        foreach (var level in levels)
+        for (var i = 0; i < levels.Count; i++)
         {
+            var level = levels[i];
             if (level > max && level - max <= reach)
             {
                 top = Math.Max(top, level);

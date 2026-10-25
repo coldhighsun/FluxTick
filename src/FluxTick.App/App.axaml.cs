@@ -145,6 +145,29 @@ public sealed partial class App : Application
     /// <inheritdoc />
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
+    /// <summary>
+    /// Writes exceptions that nothing handled to the log, so a crash or a lost background failure leaves a trace.
+    /// </summary>
+    /// <param name="services">
+    /// The service provider that holds the logger.
+    /// </param>
+    private static void LogUnhandledExceptions(IServiceProvider services)
+    {
+        var logger = services.GetRequiredService<ILogger<App>>();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            logger.LogCritical(e.ExceptionObject as Exception, "Unhandled exception (terminating: {Terminating})", e.IsTerminating);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            e.SetObserved();
+
+            // A background task that ended because its owner was disposed is expected, not an error.
+            if (!e.Exception.Flatten().InnerExceptions.All(inner => inner is OperationCanceledException))
+            {
+                logger.LogError(e.Exception, "A task failed and nobody observed it");
+            }
+        };
+    }
+
     /// <inheritdoc />
     public override void OnFrameworkInitializationCompleted()
     {
@@ -154,6 +177,7 @@ public sealed partial class App : Application
             _services = AppHost.Build(demo);
             TrayHoverAvailability.ListenerFailed = ex =>
                 _services.GetService<ILogger<App>>()?.LogWarning(ex, "A listener of the tray list availability failed");
+            LogUnhandledExceptions(_services);
             _settings = _services.GetRequiredService<SettingsManager>();
             _geometrySave = new Debouncer(TimeSpan.FromMilliseconds(600), TimeProvider.System);
 
@@ -172,6 +196,7 @@ public sealed partial class App : Application
             _window.RestoreGeometry(_settings.Current.Window);
             ApplyTaskbarButton();
             _window.GeometryChanged += OnGeometryChanged;
+            _window.FullScreenChanged += OnFullScreenChanged;
             _window.Closed += OnWindowClosed;
 
             // A window that is about to open counts as shown from the start, so the data sources are not told to stay
@@ -241,6 +266,13 @@ public sealed partial class App : Application
                 toasts.Show(e);
             });
             alerts.Start();
+
+            // The defaults are in use and nothing is saved, which the user would otherwise only find out by losing changes.
+            if (_settings.StoredSettingsUnreadable)
+            {
+                Dispatcher.UIThread.Post(() =>
+                    toasts.Show(Loc.Get("Settings_ReadFailedTitle"), Loc.Get("Settings_ReadFailedBody")));
+            }
 
             // The alerts of an instrument go along when its data source is changed, with the price levels they had.
             viewModel.AddAsset.AlertsMoved += (_, e) => Dispatcher.UIThread.Post(() =>
@@ -785,6 +817,37 @@ public sealed partial class App : Application
             s.Window.Width = geometry.Width;
             s.Window.Height = geometry.Height;
         }));
+
+    /// <summary>
+    /// Remembers whether the window is full screen, so that it opens the same way next time.
+    /// </summary>
+    /// <param name="sender">
+    /// The window.
+    /// </param>
+    /// <param name="fullScreen">
+    /// Whether the window is full screen now.
+    /// </param>
+    private async void OnFullScreenChanged(object? sender, bool fullScreen)
+    {
+        try
+        {
+            await _settings!.TryUpdateAsync(s =>
+            {
+                if (s.Window.FullScreen == fullScreen)
+                {
+                    return false;
+                }
+
+                s.Window.FullScreen = fullScreen;
+                return true;
+            });
+        }
+        catch (Exception ex)
+        {
+            // Called from an event handler, where an escaping exception would end the application.
+            _services?.GetService<ILogger<App>>()?.LogWarning(ex, "Could not save the full screen state");
+        }
+    }
 
     /// <summary>
     /// Toggles the window when the tray icon is clicked.

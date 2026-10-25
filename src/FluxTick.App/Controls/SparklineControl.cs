@@ -71,6 +71,41 @@ public sealed class SparklineControl : Control
         AvaloniaProperty.Register<SparklineControl, IBrush?>(nameof(BelowStroke), Brushes.Gray);
 
     /// <summary>
+    /// The dash pattern of the stretches without prices.
+    /// </summary>
+    private static readonly DashStyle GapDash = new([2, 2], 0);
+
+    /// <summary>
+    /// The dash pattern of the flat line drawn when there are too few prices.
+    /// </summary>
+    private static readonly DashStyle FlatDash = new([2, 3], 0);
+
+    /// <summary>
+    /// The dash pattern of the alert levels.
+    /// </summary>
+    private static readonly DashStyle LevelDash = new([3, 3], 0);
+
+    /// <summary>
+    /// The gradient under the line, kept while the color of <see cref="_fillColor"/> stays the same.
+    /// </summary>
+    private LinearGradientBrush? _fill;
+
+    /// <summary>
+    /// The color the gradient was made for.
+    /// </summary>
+    private Color _fillColor;
+
+    /// <summary>
+    /// The pen of the line, kept while the brush stays the same.
+    /// </summary>
+    private Pen? _linePen;
+
+    /// <summary>
+    /// The brush the pen was made for.
+    /// </summary>
+    private IBrush? _linePenBrush;
+
+    /// <summary>
     /// Initializes static members of the <see cref="SparklineControl"/> class.
     /// </summary>
     static SparklineControl()
@@ -209,18 +244,11 @@ public sealed class SparklineControl : Control
         var times = timeline?.Times;
         var gapBrush = StoppedStroke ?? stroke;
         Pen? gapPen = null;
-        Pen GapPen() => gapPen ??= new Pen(gapBrush, 1.5, new DashStyle([2, 2], 0), PenLineCap.Flat, PenLineJoin.Round);
+        Pen GapPen() => gapPen ??= new Pen(gapBrush, 1.5, GapDash, PenLineCap.Flat, PenLineJoin.Round);
 
-        var levels = new List<(double Price, IBrush? Brush)>();
-        if (AboveLevel is { } above)
-        {
-            levels.Add(((double)above, AboveStroke));
-        }
-
-        if (BelowLevel is { } below)
-        {
-            levels.Add(((double)below, BelowStroke));
-        }
+        // Most rows have no alert; they then allocate nothing for the levels.
+        var levelPrices = LevelPrices(AboveLevel, BelowLevel);
+        var hasAbove = AboveLevel is not null;
 
         if (!timed && points.Count < 2)
         {
@@ -230,15 +258,15 @@ public sealed class SparklineControl : Control
             if (known is not { } flat)
             {
                 var middle = bounds.Height / 2;
-                context.DrawLine(new Pen(gapBrush, 1, new DashStyle([2, 3], 0)) { LineCap = PenLineCap.Round }, new Point(pad, middle), new Point(bounds.Width - pad, middle));
+                context.DrawLine(new Pen(gapBrush, 1, FlatDash) { LineCap = PenLineCap.Round }, new Point(pad, middle), new Point(bounds.Width - pad, middle));
                 return;
             }
 
-            var (flatBottom, flatTop) = SparklineScale.Range((double)flat, (double)flat, levels.Select(l => l.Price));
-            DrawLevels(context, levels, flatBottom, flatTop, bounds.Width, pad, height);
+            var (flatBottom, flatTop) = SparklineScale.Range((double)flat, (double)flat, levelPrices);
+            DrawLevels(context, levelPrices, hasAbove, AboveStroke, BelowStroke, flatBottom, flatTop, bounds.Width, pad, height);
             var (flatPosition, _) = SparklineScale.Place((double)flat, flatBottom, flatTop);
             var flatY = pad + height * (1 - flatPosition);
-            context.DrawLine(new Pen(gapBrush, 1, new DashStyle([2, 3], 0)) { LineCap = PenLineCap.Round }, new Point(pad, flatY), new Point(bounds.Width - pad, flatY));
+            context.DrawLine(new Pen(gapBrush, 1, FlatDash) { LineCap = PenLineCap.Round }, new Point(pad, flatY), new Point(bounds.Width - pad, flatY));
             return;
         }
 
@@ -250,7 +278,7 @@ public sealed class SparklineControl : Control
             highest = Math.Max(highest, price);
         }
 
-        var (min, max) = SparklineScale.Range((double)lowest, (double)highest, levels.Select(l => l.Price));
+        var (min, max) = SparklineScale.Range((double)lowest, (double)highest, levelPrices);
         var coordinates = new Point[points.Count];
         for (var i = 0; i < points.Count; i++)
         {
@@ -262,7 +290,7 @@ public sealed class SparklineControl : Control
         }
 
         // The alert levels go under the prices.
-        DrawLevels(context, levels, min, max, bounds.Width, pad, height);
+        DrawLevels(context, levelPrices, hasAbove, AboveStroke, BelowStroke, min, max, bounds.Width, pad, height);
 
         // After the last price of a source that stopped, however it shows (stale, reconnecting, failed), the last price is
         // carried on to the edge; the same when the last price is simply long ago.
@@ -324,7 +352,7 @@ public sealed class SparklineControl : Control
     /// <param name="bottom">
     /// The y of the bottom edge, which the area reaches down to.
     /// </param>
-    private static void DrawRun(DrawingContext context, Point[] coordinates, int first, int last, IBrush stroke, double bottom)
+    private void DrawRun(DrawingContext context, Point[] coordinates, int first, int last, IBrush stroke, double bottom)
     {
         if (first == last)
         {
@@ -348,17 +376,23 @@ public sealed class SparklineControl : Control
                 ctx.EndFigure(true);
             }
 
-            var fill = new LinearGradientBrush
+            // The gradient only depends on the color, which hardly ever changes between two renders.
+            if (_fill is null || _fillColor != solid.Color)
             {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops =
-                [
-                    new GradientStop(Color.FromArgb(70, solid.Color.R, solid.Color.G, solid.Color.B), 0),
-                    new GradientStop(Color.FromArgb(0, solid.Color.R, solid.Color.G, solid.Color.B), 1),
-                ],
-            };
-            context.DrawGeometry(fill, null, area);
+                _fillColor = solid.Color;
+                _fill = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                    GradientStops =
+                    [
+                        new GradientStop(Color.FromArgb(70, solid.Color.R, solid.Color.G, solid.Color.B), 0),
+                        new GradientStop(Color.FromArgb(0, solid.Color.R, solid.Color.G, solid.Color.B), 1),
+                    ],
+                };
+            }
+
+            context.DrawGeometry(_fill, null, area);
         }
 
         var line = new StreamGeometry();
@@ -373,7 +407,48 @@ public sealed class SparklineControl : Control
             ctx.EndFigure(false);
         }
 
-        context.DrawGeometry(null, new Pen(stroke, 1.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), line);
+        if (_linePen is null || !ReferenceEquals(_linePenBrush, stroke))
+        {
+            _linePenBrush = stroke;
+            _linePen = new Pen(stroke, 1.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+        }
+
+        context.DrawGeometry(null, _linePen, line);
+    }
+
+    /// <summary>
+    /// Collects the alert levels to draw.
+    /// </summary>
+    /// <param name="above">
+    /// The level of the alert above, or <see langword="null"/>.
+    /// </param>
+    /// <param name="below">
+    /// The level of the alert below, or <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// The prices of the levels, the one above first; empty when there is none.
+    /// </returns>
+    private static double[] LevelPrices(decimal? above, decimal? below)
+    {
+        var count = (above is null ? 0 : 1) + (below is null ? 0 : 1);
+        if (count == 0)
+        {
+            return [];
+        }
+
+        var prices = new double[count];
+        var next = 0;
+        if (above is { } a)
+        {
+            prices[next++] = (double)a;
+        }
+
+        if (below is { } b)
+        {
+            prices[next] = (double)b;
+        }
+
+        return prices;
     }
 
     /// <summary>
@@ -383,8 +458,17 @@ public sealed class SparklineControl : Control
     /// <param name="context">
     /// The drawing context.
     /// </param>
-    /// <param name="levels">
-    /// The levels with their brushes.
+    /// <param name="prices">
+    /// The prices of the levels, as <see cref="LevelPrices"/> returns them.
+    /// </param>
+    /// <param name="hasAbove">
+    /// Whether the first price is the level above.
+    /// </param>
+    /// <param name="aboveStroke">
+    /// The brush of the level above.
+    /// </param>
+    /// <param name="belowStroke">
+    /// The brush of the level below.
     /// </param>
     /// <param name="bottom">
     /// The price at the bottom of the chart.
@@ -401,10 +485,12 @@ public sealed class SparklineControl : Control
     /// <param name="height">
     /// The height of the chart without the space around it.
     /// </param>
-    private static void DrawLevels(DrawingContext context, List<(double Price, IBrush? Brush)> levels, double bottom, double top, double totalWidth, double pad, double height)
+    private static void DrawLevels(DrawingContext context, double[] prices, bool hasAbove, IBrush? aboveStroke, IBrush? belowStroke, double bottom, double top, double totalWidth, double pad, double height)
     {
-        foreach (var (price, brush) in levels)
+        for (var i = 0; i < prices.Length; i++)
         {
+            var price = prices[i];
+            var brush = hasAbove && i == 0 ? aboveStroke : belowStroke;
             if (brush is null)
             {
                 continue;
@@ -414,7 +500,7 @@ public sealed class SparklineControl : Control
             var y = pad + height * (1 - position);
             using (context.PushOpacity(clamped ? 0.35 : 0.9))
             {
-                context.DrawLine(new Pen(brush, 1, new DashStyle([3, 3], 0)), new Point(pad, y), new Point(totalWidth - pad, y));
+                context.DrawLine(new Pen(brush, 1, LevelDash), new Point(pad, y), new Point(totalWidth - pad, y));
             }
         }
     }

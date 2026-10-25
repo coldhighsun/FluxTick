@@ -376,8 +376,27 @@ public sealed partial class AssetRowViewModel : ObservableObject
             ChangeAmountText = quote.Change is { } amount
                 ? (amount > 0m ? "+" : string.Empty) + PriceFormatter.FormatPrice(amount, Asset.AssetClass)
                 : string.Empty;
-            LowText = snapshot.Sparkline.Count > 0 ? PriceFormatter.FormatPrice(snapshot.Sparkline.Min(), Asset.AssetClass) : PriceFormatter.Unavailable;
-            HighText = snapshot.Sparkline.Count > 0 ? PriceFormatter.FormatPrice(snapshot.Sparkline.Max(), Asset.AssetClass) : PriceFormatter.Unavailable;
+            var sparkline = snapshot.Sparkline;
+            if (sparkline.Count > 0)
+            {
+                // One pass instead of Min() and Max(), which enumerate through an allocated enumerator each.
+                var low = sparkline[0];
+                var high = low;
+                for (var i = 1; i < sparkline.Count; i++)
+                {
+                    low = Math.Min(low, sparkline[i]);
+                    high = Math.Max(high, sparkline[i]);
+                }
+
+                LowText = PriceFormatter.FormatPrice(low, Asset.AssetClass);
+                HighText = PriceFormatter.FormatPrice(high, Asset.AssetClass);
+            }
+            else
+            {
+                LowText = PriceFormatter.Unavailable;
+                HighText = PriceFormatter.Unavailable;
+            }
+
             Direction = quote.Change switch
             {
                 > 0m => PriceDirection.Up,

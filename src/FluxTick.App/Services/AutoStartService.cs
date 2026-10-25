@@ -140,6 +140,11 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     /// <summary>
+    /// The registry key where Windows records whether the user disabled an entry of the <c>Run</c> key.
+    /// </summary>
+    private const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+    /// <summary>
     /// The name of the value that starts this app.
     /// </summary>
     private const string ValueName = "FluxTick";
@@ -155,7 +160,31 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
             return false;
         }
 
-        return ReadCommand() is not null;
+        return ReadCommand() is not null && !IsDisabledInStartupSettings();
+    }
+
+    /// <summary>
+    /// Determines whether the user turned the entry off in the Startup page of Windows Settings or Task Manager, which
+    /// leaves the <c>Run</c> value in place and records the choice under <c>StartupApproved</c>.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when Windows will not start the entry.
+    /// </returns>
+    private bool IsDisabledInStartupSettings()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(ApprovedKey);
+
+            // The data starts with a flag byte whose lowest bit is set for a disabled entry (03, 07), and clear for an
+            // enabled one (02, 06).
+            return key?.GetValue(ValueName) is byte[] { Length: > 0 } data && (data[0] & 1) != 0;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            logger.LogWarning(ex, "Could not read the start at sign-in approval");
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -171,11 +200,14 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
         {
             try
             {
-                SetEnabled(true);
+                // Only the path is repaired: an entry the user turned off in Windows must stay off.
+                using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+                key.SetValue(ValueName, AutoStartCommand.Build(Environment.ProcessPath!));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // SetEnabled has logged the reason; starting the app does not depend on it.
+                // Starting the app does not depend on the repair.
+                logger.LogWarning(ex, "Could not repair the start at sign-in entry");
             }
         }
     }
@@ -215,6 +247,10 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
             if (enabled)
             {
                 key.SetValue(ValueName, AutoStartCommand.Build(Environment.ProcessPath!));
+
+                // Turning the setting on again must also clear a choice made in Windows, or it would have no effect.
+                using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true);
+                approved?.DeleteValue(ValueName, throwOnMissingValue: false);
             }
             else
             {

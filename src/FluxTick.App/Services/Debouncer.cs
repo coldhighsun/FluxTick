@@ -40,16 +40,20 @@ public sealed class Debouncer(TimeSpan delay, TimeProvider timeProvider)
     /// </param>
     public void Run(Func<Task> action)
     {
-        CancellationTokenSource cts;
+        CancellationToken token;
         lock (_gate)
         {
             _pending?.Cancel();
-            cts = new CancellationTokenSource();
+            _pending?.Dispose();
+            var cts = new CancellationTokenSource();
             _pending = cts;
             _scheduled = action;
+
+            // Read inside the lock: once it is released, another call may already have disposed this source.
+            token = cts.Token;
         }
 
-        _ = RunAfterDelayAsync(action, cts.Token);
+        _ = RunAfterDelayAsync(action, token);
     }
 
     /// <summary>
@@ -66,6 +70,8 @@ public sealed class Debouncer(TimeSpan delay, TimeProvider timeProvider)
         lock (_gate)
         {
             _pending?.Cancel();
+            _pending?.Dispose();
+            _pending = null;
             action = _scheduled;
             _scheduled = null;
             running = _running;
@@ -74,12 +80,12 @@ public sealed class Debouncer(TimeSpan delay, TimeProvider timeProvider)
         // An action that already started must finish too, or the app could end in the middle of it.
         if (running is not null)
         {
-            await running;
+            await running.ConfigureAwait(false);
         }
 
         if (action is not null)
         {
-            await action();
+            await action().ConfigureAwait(false);
         }
     }
 
