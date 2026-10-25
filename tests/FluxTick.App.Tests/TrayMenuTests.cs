@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using FluxTick.Abstractions;
 using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
@@ -15,9 +16,9 @@ public class TrayMenuTests
     /// must close the open one first, and honored once it is gone.
     /// </summary>
     [Fact]
-    public void ShowAbout_IsIgnoredWhileAToolWindowIsOpen()
+    public async Task ShowAbout_IsIgnoredWhileAToolWindowIsOpen()
     {
-        var harness = new Harness();
+        await using var harness = new Harness();
         var requests = 0;
         harness.Main.AboutRequested += (_, _) => requests++;
 
@@ -34,9 +35,9 @@ public class TrayMenuTests
     /// Verifies the close button says what it does under the setting, and follows the setting.
     /// </summary>
     [Fact]
-    public void CloseButtonTip_FollowsTheSetting()
+    public async Task CloseButtonTip_FollowsTheSetting()
     {
-        var harness = new Harness();
+        await using var harness = new Harness();
         var changes = new ConcurrentQueue<string?>();
         harness.SettingsPage.PropertyChanged += (_, e) => changes.Enqueue(e.PropertyName);
 
@@ -56,7 +57,7 @@ public class TrayMenuTests
     public async Task CloseButtonTip_WithoutATray_SaysClose()
     {
         using var answer = new ManualResetEventSlim();
-        var harness = new Harness(trayProbe: () =>
+        await using var harness = new Harness(trayProbe: () =>
         {
             answer.Wait();
             return false;
@@ -105,6 +106,163 @@ public class TrayMenuTests
 
             TrayHoverAvailability.ReportFailure();
             TrayHoverAvailability.IsSupported.Should().BeFalse();
+        }
+        finally
+        {
+            TrayHoverAvailability.ReportSuccess();
+        }
+    }
+
+    /// <summary>
+    /// Verifies the availability announces a change once, and only when the state really changes.
+    /// </summary>
+    [Fact]
+    public void TrayHoverAvailability_AnnouncesOnlyRealChanges()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows can tell where the tray icon is.");
+
+        var changes = 0;
+        void OnChanged(object? sender, EventArgs e) => Interlocked.Increment(ref changes);
+
+        TrayHoverAvailability.ReportSuccess();
+        TrayHoverAvailability.Changed += OnChanged;
+        try
+        {
+            TrayHoverAvailability.ReportSuccess();
+            changes.Should().Be(0);
+
+            TrayHoverAvailability.ReportFailure();
+            TrayHoverAvailability.ReportFailure();
+            changes.Should().Be(1);
+
+            TrayHoverAvailability.ReportSuccess();
+            changes.Should().Be(2);
+        }
+        finally
+        {
+            TrayHoverAvailability.Changed -= OnChanged;
+            TrayHoverAvailability.ReportSuccess();
+        }
+    }
+
+    /// <summary>
+    /// Verifies a listener that throws neither reaches the caller nor keeps the other listeners from hearing of the change.
+    /// </summary>
+    [Fact]
+    public void TrayHoverAvailability_ThrowingListener_DoesNotStopTheOthers()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows can tell where the tray icon is.");
+
+        var heard = 0;
+        var reported = new ConcurrentQueue<Exception>();
+        void Throws(object? sender, EventArgs e) => throw new InvalidOperationException("broken listener");
+        void Hears(object? sender, EventArgs e) => Interlocked.Increment(ref heard);
+
+        TrayHoverAvailability.ReportSuccess();
+        var before = TrayHoverAvailability.ListenerFailed;
+        TrayHoverAvailability.ListenerFailed = reported.Enqueue;
+        TrayHoverAvailability.Changed += Throws;
+        TrayHoverAvailability.Changed += Hears;
+        try
+        {
+            TrayHoverAvailability.ReportFailure();
+
+            heard.Should().Be(1);
+            reported.Should().ContainSingle().Which.Message.Should().Be("broken listener");
+        }
+        finally
+        {
+            TrayHoverAvailability.Changed -= Throws;
+            TrayHoverAvailability.Changed -= Hears;
+            TrayHoverAvailability.ListenerFailed = before;
+            TrayHoverAvailability.ReportSuccess();
+        }
+    }
+
+    /// <summary>
+    /// Verifies a hook that reports failures and throws itself does not break the announcement.
+    /// </summary>
+    [Fact]
+    public void TrayHoverAvailability_ThrowingHook_DoesNotBreakTheAnnouncement()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows can tell where the tray icon is.");
+
+        var heard = 0;
+        void Throws(object? sender, EventArgs e) => throw new InvalidOperationException("broken listener");
+        void Hears(object? sender, EventArgs e) => Interlocked.Increment(ref heard);
+
+        TrayHoverAvailability.ReportSuccess();
+        var before = TrayHoverAvailability.ListenerFailed;
+        TrayHoverAvailability.ListenerFailed = _ => throw new InvalidOperationException("broken hook");
+        TrayHoverAvailability.Changed += Throws;
+        TrayHoverAvailability.Changed += Hears;
+        try
+        {
+            var announce = TrayHoverAvailability.ReportFailure;
+
+            announce.Should().NotThrow();
+            heard.Should().Be(1);
+        }
+        finally
+        {
+            TrayHoverAvailability.Changed -= Throws;
+            TrayHoverAvailability.Changed -= Hears;
+            TrayHoverAvailability.ListenerFailed = before;
+            TrayHoverAvailability.ReportSuccess();
+        }
+    }
+
+    /// <summary>
+    /// Verifies the main window and the settings page follow the availability, so the menus and the tray tab appear and
+    /// disappear without being rebuilt.
+    /// </summary>
+    [Fact]
+    public async Task ViewModels_FollowTheAvailability()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows can tell where the tray icon is.");
+
+        TrayHoverAvailability.ReportSuccess();
+        await using var harness = new Harness(Harness.WatchlistOf(new Asset(Harness.Crypto, "BTC", "Bitcoin", AssetClass.Crypto)));
+        await harness.Main.InitializeAsync();
+        var changes = new ConcurrentQueue<string?>();
+        harness.Main.Rows.Single().PropertyChanged += (_, e) => changes.Enqueue(e.PropertyName);
+        harness.SettingsPage.PropertyChanged += (_, e) => changes.Enqueue(e.PropertyName);
+        harness.Main.Rows.Single().CanAddToTray.Should().BeTrue();
+        try
+        {
+            TrayHoverAvailability.ReportFailure();
+
+            changes.Should().Contain(nameof(AssetRowViewModel.CanAddToTray));
+            changes.Should().Contain(nameof(SettingsViewModel.IsTrayHoverSupported));
+            harness.SettingsPage.IsTrayHoverSupported.Should().BeFalse();
+            harness.Main.Rows.Should().OnlyContain(r => !r.CanAddToTray && !r.CanRemoveFromTray);
+        }
+        finally
+        {
+            TrayHoverAvailability.ReportSuccess();
+        }
+    }
+
+    /// <summary>
+    /// Verifies a view model that was disposed stops following the availability.
+    /// </summary>
+    [Fact]
+    public async Task ViewModels_AfterDispose_StopFollowingTheAvailability()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows can tell where the tray icon is.");
+
+        TrayHoverAvailability.ReportSuccess();
+        var harness = new Harness(Harness.WatchlistOf(new Asset(Harness.Crypto, "BTC", "Bitcoin", AssetClass.Crypto)));
+        await harness.Main.InitializeAsync();
+        var changes = new ConcurrentQueue<string?>();
+        harness.Main.Rows.Single().PropertyChanged += (_, e) => changes.Enqueue(e.PropertyName);
+        harness.SettingsPage.PropertyChanged += (_, e) => changes.Enqueue(e.PropertyName);
+        await harness.DisposeAsync();
+        try
+        {
+            TrayHoverAvailability.ReportFailure();
+
+            changes.Should().BeEmpty();
         }
         finally
         {

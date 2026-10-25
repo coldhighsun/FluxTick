@@ -181,6 +181,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         AddAsset = addAsset;
         Settings = settingsPage;
         AlertEditor = alerts;
+        Tray = new TrayListViewModel(settings, Rows, ui);
 
         // The window sizes itself after the layout, so the layout must be right before the first rows exist.
         IsCardLayout = settings.Current.Appearance.Layout == WatchlistLayout.Cards;
@@ -195,6 +196,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// Gets the watchlist rows in display order.
     /// </summary>
     public ObservableCollection<AssetRowViewModel> Rows { get; } = [];
+
+    /// <summary>
+    /// Gets the tray list as the menus of the rows see it.
+    /// </summary>
+    public TrayListViewModel Tray { get; }
 
     /// <summary>
     /// Gets a value indicating whether the window fills the screen, which shows the cards whatever the layout setting
@@ -371,6 +377,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         _market.SnapshotChanged -= OnMarketSnapshotChanged;
         _market.ProviderStatusChanged -= OnProviderStatusChanged;
         _settings.Changed -= OnSettingsChanged;
+        Tray.Dispose();
     }
 
     /// <summary>
@@ -1121,6 +1128,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
             }
         }
 
+        Tray.Refresh();
         RebuildSections();
         OnPropertyChanged(nameof(IsEmpty));
     }
@@ -1444,6 +1452,5 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <returns>
     /// The display name, or the id when the provider is unknown.
     /// </returns>
-    private string ProviderName(string providerId) =>
-        _registry.GetDescriptor(providerId) is { } descriptor ? ProviderText.Name(descriptor) : providerId;
+    private string ProviderName(string providerId) => ProviderText.Name(_registry, providerId);
 }

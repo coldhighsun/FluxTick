@@ -367,6 +367,12 @@ public sealed class GeneralSettings
     public bool TrayHoverList { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the instruments the tray list shows, as keys made by <see cref="TrayAssetSelection.Key(string, string)"/>
+    /// in the order they are listed. It is empty until the user adds instruments.
+    /// </summary>
+    public List<string> TrayAssets { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets a value indicating whether the data sources connect only while the window or the tray list is shown.
     /// </summary>
     public bool ConnectOnDemand { get; set; } = true;
@@ -502,6 +508,15 @@ public sealed class AppSettings
             || Watchlist.TrueForAll(e => e.ProviderId != rule.ProviderId || e.Symbol != rule.Symbol)
             || !ids.Add(rule.Id)
             || !conditions.Add((rule.ProviderId, rule.Symbol, rule.Condition))) > 0;
+
+        // The tray list forgets instruments that left the watchlist and keys that repeat.
+        if (General.TrayAssets is null)
+        {
+            General.TrayAssets = [];
+            changed = true;
+        }
+
+        changed |= TrayAssetSelection.Sanitize(General.TrayAssets, Watchlist);
 
         return changed;
     }

@@ -1,34 +1,35 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FluxTick.App.Localization;
+using FluxTick.Core.Application;
 
 namespace FluxTick.App.ViewModels;
 
 /// <summary>
-/// The list the tray popup shows: the first watched instruments, with a note for the ones that did not fit.
+/// The list the tray popup shows: the instruments the user put on the tray list, in the order they chose.
 /// </summary>
 public sealed partial class TrayPopupViewModel : ObservableObject
 {
-    /// <summary>
-    /// The most instruments the popup lists.
-    /// </summary>
-    public const int MaxItems = 10;
-
     /// <summary>
     /// The rows of the watchlist.
     /// </summary>
     private readonly ObservableCollection<AssetRowViewModel> _rows;
 
     /// <summary>
+    /// The keys of the chosen instruments in display order.
+    /// </summary>
+    private List<string> _selection;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TrayPopupViewModel"/> class.
     /// </summary>
     /// <param name="rows">
-    /// The rows of the watchlist, in the order the user arranged them.
+    /// The rows of the watchlist. Nothing is listed until <see cref="SetSelection"/> says which instruments.
     /// </param>
     public TrayPopupViewModel(ObservableCollection<AssetRowViewModel> rows)
     {
         _rows = rows;
+        _selection = [];
         _rows.CollectionChanged += OnRowsChanged;
         Refresh();
     }
@@ -39,46 +40,51 @@ public sealed partial class TrayPopupViewModel : ObservableObject
     public ObservableCollection<AssetRowViewModel> Items { get; } = [];
 
     /// <summary>
-    /// Gets the note about the instruments that are not listed, or an empty text when all are.
-    /// </summary>
-    [ObservableProperty]
-    public partial string MoreText { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets a value indicating whether the watchlist is empty.
+    /// Gets a value indicating whether the tray list is empty.
     /// </summary>
     [ObservableProperty]
     public partial bool IsEmpty { get; set; }
 
     /// <summary>
-    /// Gets a value indicating whether there are instruments that are not listed.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool HasMore { get; set; }
-
-    /// <summary>
-    /// Rebuilds the list and the texts, which also picks up a changed language.
+    /// Rebuilds the list. The settings keep the selection within <see cref="TrayAssetSelection.MaxAssets"/> instruments.
     /// </summary>
     public void Refresh()
     {
-        var wanted = _rows.Take(MaxItems).ToList();
-        if (!Items.SequenceEqual(wanted))
+        var picked = TrayAssetSelection.Resolve(_rows, row => TrayAssetSelection.Key(row.Asset), _selection);
+        if (!Items.SequenceEqual(picked))
         {
             Items.Clear();
-            foreach (var row in wanted)
+            foreach (var row in picked)
             {
                 Items.Add(row);
             }
         }
 
-        var more = _rows.Count - wanted.Count;
-        HasMore = more > 0;
-        MoreText = more > 0 ? Loc.Get("TrayPopup_More", more) : string.Empty;
-        IsEmpty = _rows.Count == 0;
+        IsEmpty = picked.Count == 0;
     }
 
     /// <summary>
-    /// Follows the watchlist.
+    /// Sets which instruments are listed and in which order, then rebuilds the list.
+    /// </summary>
+    /// <param name="selection">
+    /// The chosen keys in display order.
+    /// </param>
+    public void SetSelection(IReadOnlyList<string> selection)
+    {
+        // Every settings change brings the selection again, so only a real change rebuilds the list.
+        if (_selection.SequenceEqual(selection))
+        {
+            return;
+        }
+
+        _selection = [.. selection];
+        Refresh();
+    }
+
+    /// <summary>
+    /// Follows the watchlist. Only rows that are, or may become, on the tray list matter: the list is in the order of
+    /// the selection, so moving rows changes nothing, and the watchlist is rebuilt row by row at startup, so a change
+    /// that no chosen instrument is part of must not cost a pass over all rows.
     /// </summary>
     /// <param name="sender">
     /// The rows.
@@ -86,5 +92,31 @@ public sealed partial class TrayPopupViewModel : ObservableObject
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Refresh();
+    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        var irrelevant = e.Action switch
+        {
+            NotifyCollectionChangedAction.Move => true,
+            NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Remove =>
+                !IsChosen(e.NewItems) && !IsChosen(e.OldItems),
+            _ => false,
+        };
+
+        if (!irrelevant)
+        {
+            Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Tells whether any of the rows is on the tray list.
+    /// </summary>
+    /// <param name="items">
+    /// The rows of a collection change, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when one of them is chosen.
+    /// </returns>
+    private bool IsChosen(System.Collections.IList? items) =>
+        _selection.Count > 0 && items is not null && items.OfType<AssetRowViewModel>().Any(row => _selection.Contains(TrayAssetSelection.Key(row.Asset)));
 }

@@ -747,12 +747,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
         Groups = new GroupsSettingsViewModel(settings);
+        TrayAssets = new TrayAssetsSettingsViewModel(settings, registry);
         Alerts = new AlertsViewModel(settings, registry, ui);
         Providers = new ObservableCollection<ProviderSettingsViewModel>(
             registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p))));
         Routing = new ObservableCollection<RoutingRowViewModel>(
             Enum.GetValues<AssetClass>().Select(c => new RoutingRowViewModel(c, r => _ = SaveRoutingAsync(r))));
         market.ProviderStatusChanged += OnProviderStatusChanged;
+        TrayHoverAvailability.Changed += OnTrayAvailabilityChanged;
         Reload();
         StartTrayProbe(trayProbe ?? TrayAvailability.Detect);
     }
@@ -761,8 +763,20 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     protected override void Detach()
     {
         Market.ProviderStatusChanged -= OnProviderStatusChanged;
+        TrayHoverAvailability.Changed -= OnTrayAvailabilityChanged;
         Alerts.Dispose();
     }
+
+    /// <summary>
+    /// Shows or hides the tray settings when the tray list becomes available or unavailable.
+    /// </summary>
+    /// <param name="sender">
+    /// Not used.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnTrayAvailabilityChanged(object? sender, EventArgs e) => Ui.Post(() => OnPropertyChanged(nameof(IsTrayHoverSupported)));
 
     /// <summary>
     /// Shows the new state of the data sources when one changes.
@@ -804,6 +818,16 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the editor of the user-defined groups.
     /// </summary>
     public GroupsSettingsViewModel Groups { get; }
+
+    /// <summary>
+    /// Gets the editor of the instruments the tray list shows.
+    /// </summary>
+    public TrayAssetsSettingsViewModel TrayAssets { get; }
+
+    /// <summary>
+    /// Gets the explanation of the tray list editor, which names how many instruments the list holds.
+    /// </summary>
+    public string TrayAssetsHelp => Loc.Get("Settings_TrayAssetsHelp", TrayAssetSelection.MaxAssets);
 
     /// <summary>
     /// Gets the price alerts of all instruments.
@@ -1029,6 +1053,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         }
 
         Groups.Reload();
+        TrayAssets.Reload();
         Alerts.Reload(discardEdits: true);
         RefreshRouting();
         RefreshStatuses();
@@ -1178,6 +1203,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     protected override void OnLanguageChanged()
     {
         OnPropertyChanged(nameof(CloseButtonTip));
+        OnPropertyChanged(nameof(TrayAssetsHelp));
+        TrayAssets.RefreshLanguage();
         foreach (var provider in Providers)
         {
             provider.RefreshLanguage();

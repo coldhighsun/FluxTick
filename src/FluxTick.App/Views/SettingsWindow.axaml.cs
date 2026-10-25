@@ -12,11 +12,17 @@ public sealed partial class SettingsWindow : ToolWindow
     private const double InitialHeight = 560;
 
     /// <summary>
+    /// The fixed width, wider than the other tool windows so that the lists of the settings have room.
+    /// </summary>
+    private const double SettingsWidth = 540;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SettingsWindow"/> class.
     /// </summary>
     public SettingsWindow()
     {
         InitializeComponent();
         Height = InitialHeight;
+        Width = MinWidth = MaxWidth = SettingsWidth;
     }
 }

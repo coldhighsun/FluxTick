@@ -186,6 +186,44 @@
         </ScrollViewer>
       </TabItem>
 
+      <!-- Only Windows lists instruments when the pointer rests on the tray icon. -->
+      <TabItem Header="{loc:T Settings_TabTray}" IsVisible="{Binding IsTrayHoverSupported}">
+        <ScrollViewer Name="TrayAssetsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="14,10,14,4">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding TrayAssetsHelp}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                <TextBlock Text="{loc:T Settings_TrayAssetsEmpty}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding TrayAssets.IsEmpty}" />
+              </StackPanel>
+            </Border>
+            <!-- Press and drag a row (any part that is not the remove button) to reorder. -->
+            <ItemsControl Name="TrayAssetsList" ItemsSource="{Binding TrayAssets.Items}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TrayAssetItemViewModel">
+                  <Border Classes="card" Padding="8,6" Cursor="SizeAll">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                      <Path Data="M4 3h.01M4 7h.01M4 11h.01M9 3h.01M9 7h.01M9 11h.01" Stroke="{DynamicResource MutedBrush}"
+                            StrokeThickness="2" StrokeLineCap="Round" Margin="2,0,10,0" VerticalAlignment="Center"
+                            ToolTip.Tip="{loc:T Settings_DragToReorder}" />
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding ProviderName}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding Symbol}" Classes="muted mono" FontSize="11" VerticalAlignment="Center" Margin="8,0,6,0" />
+                      <Button Grid.Column="3" Classes="icon" Command="{Binding RemoveCommand}" Cursor="Arrow"
+                              AutomationProperties.Name="{loc:T Watch_RemoveFromTray}" ToolTip.Tip="{loc:T Watch_RemoveFromTray}">
+                        <Path Data="M3 3l8 8M11 3l-8 8" />
+                      </Button>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
       <TabItem Header="{loc:T Settings_TabAlerts}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
