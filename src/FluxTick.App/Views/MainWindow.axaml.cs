@@ -505,6 +505,12 @@ public sealed partial class MainWindow : Window
             _cardsWidth = Math.Max(e.ClientSize.Width, WindowWidthRules.CardsMinWidth);
         }
 
+        // A shown, docked window that the user resized is put flush with its edge once the size stops changing.
+        if (e.Reason == WindowResizeReason.User && _dock.ShouldWaitToHide && !_dock.Sliding)
+        {
+            ScheduleDockSettle(realign: true);
+        }
+
         RaiseGeometryChanged();
     }
 
@@ -656,18 +662,7 @@ public sealed partial class MainWindow : Window
         var locked = (DataContext as MainViewModel)?.Settings.Locked == true;
         if (!locked && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            // Where the system runs the drag inside this call it returns when the button is released; elsewhere it
-            // returns at once, and the wait for the position to settle has to do.
-            _dock.SetMoving(true);
-            try
-            {
-                BeginMoveDrag(e);
-            }
-            finally
-            {
-                _dock.SetMoving(false);
-                ScheduleDockSettle();
-            }
+            RunDockDrag(() => BeginMoveDrag(e), resize: false);
         }
     }
 
@@ -723,7 +718,7 @@ public sealed partial class MainWindow : Window
     {
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            BeginResizeDrag(WindowEdge.SouthEast, e);
+            RunDockDrag(() => BeginResizeDrag(WindowEdge.SouthEast, e), resize: true);
         }
     }
 
