@@ -221,9 +221,9 @@ public sealed class EdgeDockModelTests
         model.SetEnabled(true);
         model.CanSettle.Should().BeTrue();
 
-        model.SetMoving(true);
+        model.SetDragging(true);
         model.CanSettle.Should().BeFalse();
-        model.SetMoving(false);
+        model.SetDragging(false);
 
         model.BeginSlide(new PixelPoint(0, 0));
         model.CanSettle.Should().BeFalse();
@@ -419,5 +419,61 @@ public sealed class EdgeDockModelTests
         model.Settle(new PixelRect(3200 - 340 - 2, 200, 340, 420), second, [], 8, 4);
 
         model.Rebase([new PixelRect(0, 0, 1920, 1000)]).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A docked window that was made smaller keeps its edge and is moved flush with it again.
+    /// </summary>
+    [Fact]
+    public void Realign_SmallerWindowAtTheRightEdge_KeepsTheEdgeAndMovesFlush()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(1920 - 340, 300, 340, 420), Area, [], 8, 4);
+
+        var shown = model.Realign(new PixelRect(1920 - 340, 300, 200, 420), [], 4);
+
+        shown.Should().Be(new PixelPoint(1920 - 200, 300));
+        model.Edge.Should().Be(DockEdge.Right);
+    }
+
+    /// <summary>
+    /// A docked window that was made larger is moved back inside the screen.
+    /// </summary>
+    [Fact]
+    public void Realign_LargerWindowAtTheRightEdge_MovesBackInside()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(1920 - 340, 300, 340, 420), Area, [], 8, 4);
+
+        model.Realign(new PixelRect(1920 - 340, 300, 500, 420), [], 4).Should().Be(new PixelPoint(1920 - 500, 300));
+        model.Edge.Should().Be(DockEdge.Right);
+    }
+
+    /// <summary>
+    /// A window that grew so that it would show on the neighbouring screen when hidden ends its dock.
+    /// </summary>
+    [Fact]
+    public void Realign_WouldShowOnAnotherScreen_EndsTheDock()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        var neighbour = new PixelRect(-300, 0, 300, 1000);
+
+        model.Realign(new PixelRect(0, 300, 500, 420), [neighbour], 4).Should().Be(new PixelPoint(0, 300));
+        model.IsDocked.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A window that is not docked, or is hidden at its edge, is not realigned.
+    /// </summary>
+    [Fact]
+    public void Realign_NotDockedOrHidden_ReturnsNull()
+    {
+        var model = new EdgeDockModel();
+        model.Realign(new PixelRect(800, 300, 340, 420), [], 4).Should().BeNull();
+
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.SetHidden(true);
+        model.Realign(new PixelRect(-336, 300, 340, 420), [], 4).Should().BeNull();
     }
 }

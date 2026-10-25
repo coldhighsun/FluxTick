@@ -62,6 +62,12 @@ public sealed partial class MainWindow
     private IDisposable? _dockSettle;
 
     /// <summary>
+    /// Whether the wait for the position to settle follows a resize: the window then keeps the edge it is docked to and
+    /// is only put flush with it again, because a smaller window is not moved away from its edge by the user.
+    /// </summary>
+    private bool _dockRealign;
+
+    /// <summary>
     /// The wait for the list of screens to stay as it is, or <see langword="null"/> when none is pending.
     /// </summary>
     private IDisposable? _dockScreens;
@@ -304,12 +310,50 @@ public sealed partial class MainWindow
     /// <summary>
     /// Restarts the wait for the position to stop changing.
     /// </summary>
-    private void ScheduleDockSettle()
+    /// <param name="realign">
+    /// Whether the wait follows a resize of a shown, docked window, which keeps its edge instead of looking for one.
+    /// </param>
+    private void ScheduleDockSettle(bool realign = false)
     {
         CancelDockSettle();
         if (_dock.Enabled && IsVisible && WindowState == WindowState.Normal)
         {
+            _dockRealign = realign && _dock.ShouldWaitToHide;
             _dockSettle = DispatcherTimer.RunOnce(OnDockSettled, DockSettleDelay);
+        }
+    }
+
+    /// <summary>
+    /// Runs a drag of the window the system carries out, moving it by its header or resizing it by its grip, and keeps
+    /// the window from sliding to its edge under the pointer meanwhile. Where the system runs the drag inside the call
+    /// it returns when the button is released; elsewhere it returns at once, and the wait for the position or the size
+    /// to settle has to do.
+    /// </summary>
+    /// <param name="drag">
+    /// Starts the drag.
+    /// </param>
+    /// <param name="resize">
+    /// <see langword="true"/> when the drag resizes the window, so that it keeps its edge; <see langword="false"/> when
+    /// it moves the window, so that the edge is looked for again.
+    /// </param>
+    private void RunDockDrag(Action drag, bool resize)
+    {
+        _dock.SetDragging(true);
+        try
+        {
+            drag();
+        }
+        finally
+        {
+            _dock.SetDragging(false);
+            if (!resize)
+            {
+                ScheduleDockSettle();
+            }
+            else if (_dock.ShouldWaitToHide)
+            {
+                ScheduleDockSettle(realign: true);
+            }
         }
     }
 
@@ -329,6 +373,7 @@ public sealed partial class MainWindow
     {
         _dockSettle?.Dispose();
         _dockSettle = null;
+        _dockRealign = false;
     }
 
     /// <summary>
@@ -352,8 +397,12 @@ public sealed partial class MainWindow
         }
 
         var others = Screens.All.Where(s => s.Bounds != screen.Bounds).Select(s => s.Bounds).ToList();
-        var shown = _dock.Settle(
-            CurrentPixelBounds(), screen.WorkingArea, others, ScaledPixels(EdgeDockRules.SnapDistance), ScaledPixels(EdgeDockRules.Sliver));
+        var realign = _dockRealign;
+        _dockRealign = false;
+        var shown = realign
+            ? _dock.Realign(CurrentPixelBounds(), others, ScaledPixels(EdgeDockRules.Sliver))
+            : _dock.Settle(
+                CurrentPixelBounds(), screen.WorkingArea, others, ScaledPixels(EdgeDockRules.SnapDistance), ScaledPixels(EdgeDockRules.Sliver));
         if (shown is null)
         {
             return;
@@ -402,7 +451,7 @@ public sealed partial class MainWindow
         OpenMenus.RemoveWhere(menu => !menu.IsOpen);
         return IsVisible
             && WindowState == WindowState.Normal
-            && !_dock.Moving
+            && !_dock.Dragging
             && _dockSettle is null
             && _toolWindow is null
             && OpenMenus.Count == 0

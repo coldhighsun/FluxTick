@@ -128,9 +128,9 @@ internal sealed class EdgeDockModel
     public bool Sliding { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the user is dragging the window by its header.
+    /// Gets a value indicating whether the user is dragging the window by its header or resizing it by its grip.
     /// </summary>
-    public bool Moving { get; private set; }
+    public bool Dragging { get; private set; }
 
     /// <summary>
     /// Gets the position the window was last sent to. A move that ends there is the window's own, even when the
@@ -141,7 +141,7 @@ internal sealed class EdgeDockModel
     /// <summary>
     /// Gets a value indicating whether a docking decision may be taken now.
     /// </summary>
-    public bool CanSettle => Enabled && !Sliding && !Moving;
+    public bool CanSettle => Enabled && !Sliding && !Dragging;
 
     /// <summary>
     /// Gets a value indicating whether the geometry should not be saved: a window that slides or rests beyond its edge
@@ -168,12 +168,12 @@ internal sealed class EdgeDockModel
     public void SetEnabled(bool on) => _wanted = on;
 
     /// <summary>
-    /// Records that the user started or stopped dragging the window by its header.
+    /// Records that the user started or stopped dragging the window by its header or its grip.
     /// </summary>
-    /// <param name="moving">
+    /// <param name="dragging">
     /// <see langword="true"/> while the drag lasts.
     /// </param>
-    public void SetMoving(bool moving) => Moving = moving;
+    public void SetDragging(bool dragging) => Dragging = dragging;
 
     /// <summary>
     /// Records that the window starts moving by itself to a position.
@@ -378,6 +378,40 @@ internal sealed class EdgeDockModel
         Edge = edge;
         Area = area;
         return edge == DockEdge.None ? null : EdgeDockRules.ShownPosition(window, area, edge);
+    }
+
+    /// <summary>
+    /// Puts a shown, docked window flush with the edge it is docked to again, after the user changed its size. The edge
+    /// is kept, because a smaller window is not moved away from it by the user. When the larger window would show up on
+    /// another screen once hidden, the edge cannot be used any more and the dock ends.
+    /// </summary>
+    /// <param name="window">
+    /// The window bounds in screen pixels.
+    /// </param>
+    /// <param name="otherScreens">
+    /// The bounds of every other screen.
+    /// </param>
+    /// <param name="sliver">
+    /// The width of the strip that stays visible when hidden, in screen pixels.
+    /// </param>
+    /// <returns>
+    /// The position to move the window to, or <see langword="null"/> when the window is not docked or is hidden.
+    /// </returns>
+    public PixelPoint? Realign(PixelRect window, IEnumerable<PixelRect> otherScreens, int sliver)
+    {
+        if (!IsDocked || Hidden)
+        {
+            return null;
+        }
+
+        var shown = ShownPosition(window);
+        var hidden = new PixelRect(HiddenPosition(window, sliver), window.Size);
+        if (!EdgeDockRules.StaysOffOtherScreens(hidden, otherScreens))
+        {
+            Edge = DockEdge.None;
+        }
+
+        return shown;
     }
 
     /// <summary>
