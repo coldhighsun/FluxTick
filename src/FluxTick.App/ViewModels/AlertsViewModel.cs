@@ -357,7 +357,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     /// Gets or sets a value indicating whether the rule to add repeats.
     /// </summary>
     [ObservableProperty]
-    public partial bool NewRepeat { get; set; }
+    public partial bool NewRepeat { get; set; } = true;
 
     /// <summary>
     /// Gets or sets what is wrong with the typed threshold.
@@ -382,7 +382,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
         Subject = asset;
         ThresholdText = string.Empty;
         Message = string.Empty;
-        NewRepeat = false;
+        NewRepeat = true;
 
         // The form starts with a condition the instrument has no alert for yet, so that it is ready to use. When it has
         // both, nothing can be added and the form says so.
@@ -491,8 +491,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     /// <returns>
     /// The display name, or the id when the provider is unknown.
     /// </returns>
-    private string ProviderName(string providerId) =>
-        _registry.GetDescriptor(providerId) is { } descriptor ? ProviderText.Name(descriptor) : providerId;
+    private string ProviderName(string providerId) => ProviderText.Name(_registry, providerId);
 
     /// <summary>
     /// Changes a saved rule.

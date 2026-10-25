@@ -45,6 +45,22 @@ public class AlertsViewModelTests
     }
 
     /// <summary>
+    /// Verifies a new alert repeats unless the user unchecks it, and that opening the editor again restores that.
+    /// </summary>
+    [Fact]
+    public async Task Begin_RepeatIsCheckedByDefault()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl));
+        h.Alerts.NewRepeat.Should().BeTrue();
+
+        h.Alerts.Begin(Btc);
+        h.Alerts.NewRepeat = false;
+        h.Alerts.Begin(Aapl);
+
+        h.Alerts.NewRepeat.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies a threshold that is not a price adds nothing and says why.
     /// </summary>
     /// <param name="text">
