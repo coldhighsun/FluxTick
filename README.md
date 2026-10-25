@@ -20,13 +20,8 @@ commodities side by side, from the data sources *you* choose.
   <img src="docs/images/en/main-cards.png" alt="FluxTick watchlist (card layout, dark theme)" width="300" />
 </p>
 <p align="center">
-  <img src="docs/images/en/group-type.png" alt="Cards grouped by asset type" width="250" />
   <img src="docs/images/en/group-custom.png" alt="Custom groups" width="250" />
-</p>
-<p align="center">
-  <img src="docs/images/en/settings.png" alt="FluxTick settings" width="220" />
-  <img src="docs/images/en/add.png" alt="FluxTick add instrument" width="220" />
-  <img src="docs/images/en/about.png" alt="FluxTick about" width="220" />
+  <img src="docs/images/en/alerts.png" alt="FluxTick price alerts" width="300" />
 </p>
 
 > Screenshots use the built-in simulated data source (`--demo`).
@@ -106,7 +101,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Reorder | Drag a row up or down |
 | Remove, change source | Right-click a row |
 | Move the Settings / Add window | Drag its header; **Esc** closes it |
-| Settings | The sliders icon in the header opens a window with the tabs *General*, *Appearance*, *Groups*, *Data sources*, *Routing* and *Updates*; expand a data source to edit its options |
+| Settings | The sliders icon in the header opens a window with the tabs *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Data sources*, *Routing* and *Updates*; expand a data source to edit its options, and manage your price alerts under *Alerts* |
 | Launch at startup | Windows only, off by default; turn on *Launch at startup* under Settings → General to start FluxTick when you sign in |
 | Start in the tray | Off by default; *Start in the tray* under Settings → General (or the `--minimized` command line option) keeps the window hidden at startup until you click the tray icon |
 | Single instance | Only one copy runs per user; starting FluxTick again brings the running window forward (even when it is hidden in the tray) instead of opening a second one |
@@ -134,7 +129,7 @@ Options that are at their built-in default are not written to `settings.json`. D
 ```
 src/FluxTick.Abstractions        Stable provider contracts (the only thing a data source references)
 src/FluxTick.Core                Provider registry, routing, quote aggregation, sparkline series, settings
-src/FluxTick.Providers.Common    Helpers shared by data sources (WebSocket loop, symbol search)
+src/FluxTick.Providers.Common    Helpers shared by data sources (WebSocket and polling base classes, symbol search)
 src/FluxTick.Providers.Binance   Binance WebSocket source
 src/FluxTick.Providers.Okx       OKX WebSocket source
 src/FluxTick.Providers.Coinbase  Coinbase WebSocket source

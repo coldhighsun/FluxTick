@@ -20,13 +20,8 @@
   <img src="docs/images/zh/main-cards.png" alt="FluxTick 自选列表（卡片布局，深色主题）" width="300" />
 </p>
 <p align="center">
-  <img src="docs/images/zh/group-type.png" alt="按资产类型分组的卡片" width="250" />
   <img src="docs/images/zh/group-custom.png" alt="自定义分组" width="250" />
-</p>
-<p align="center">
-  <img src="docs/images/zh/settings.png" alt="FluxTick 设置" width="220" />
-  <img src="docs/images/zh/add.png" alt="FluxTick 添加资产" width="220" />
-  <img src="docs/images/zh/about.png" alt="FluxTick 关于" width="220" />
+  <img src="docs/images/zh/alerts.png" alt="FluxTick 价格报警" width="300" />
 </p>
 
 > 截图使用内置的模拟数据源（`--demo`）。
@@ -106,7 +101,7 @@ dotnet publish src/FluxTick.App -c Release -r win-x64 -o publish
 | 调整顺序 | 上下拖动某一行 |
 | 删除、更换数据源 | 右键点击某一行 |
 | 移动设置 / 添加窗口 | 拖动其标题栏；按 **Esc** 关闭 |
-| 设置 | 点击标题栏的滑块图标打开窗口，包含*常规*、*外观*、*分组*、*数据源*、*路由*和*更新*标签页；展开某个数据源即可编辑其选项 |
+| 设置 | 点击标题栏的滑块图标打开窗口，包含*常规*、*外观*、*分组*、*托盘*（仅 Windows）、*报警*、*数据源*、*路由*和*更新*标签页；展开某个数据源即可编辑其选项，在*报警*中管理价格提醒 |
 | 开机自启动 | 仅 Windows，默认关闭；在设置 → 常规中开启*开机自启动*，登录时自动启动 FluxTick |
 | 启动时最小化到托盘 | 默认关闭；在设置 → 常规中开启*启动时最小化到托盘*（或使用命令行参数 `--minimized`），启动时不显示窗口，点击托盘图标即可显示 |
 | 单实例 | 每个用户同时只运行一个实例；再次启动 FluxTick 会把正在运行的窗口调到前面（即使它隐藏在托盘中），而不会打开第二个 |
@@ -123,7 +118,7 @@ dotnet publish src/FluxTick.App -c Release -r win-x64 -o publish
 | 卡片分组 | 卡片布局下，点击标题栏的分组按钮（或在空白处右键，或设置 → 外观 → *Card grouping*）可选 *No grouping*（不分组）、*By type*（按类型）、*By data source*（按数据源）或 *Custom groups*（自定义分组）；点击分组标题可折叠 / 展开，按住类型分组或自定义分组的标题拖动可调整分组顺序 |
 | 自定义分组 | 一开始就有一个 *Default* 分组，新添加的资产进入第一个分组。新建分组的入口：分组按钮 → *New group…*、空白处右键菜单、卡片右键菜单（*Move to new group…* 会把这张卡放进新分组）、最后一个分组下方的虚线 *New group* 占位（也可以把卡片拖到它上面）。双击分组标题可就地改名；右键分组标题可选 *Rename…*（重命名）和 *Delete group*（删除分组），只有没有资产、且不是最后一个的分组才能在这里删除（空分组下方也有 *Delete group* 链接）。在其他分组方式下新建分组会自动切到 *Custom groups*，并出现 *Undo*（撤销）提示可切回去。在设置 → Groups 中可以按住分组拖动排序，也可以删除分组（在那里删除分组，其资产会移入剩余的第一个分组）；右键卡片选 *Move to group*，或直接把卡片拖到分组里 |
 | 价格滚动 | 默认关闭；在空白处右键菜单，或设置 → 外观中开启 *价格变动时数字滚动*。只有价格数字会滚动（涨时向上，跌时向下）；整张卡片或整行闪烁几秒表示有报警触发，与这个设置无关 |
-| 贴边自动隐藏 | 默认开启；可在设置 → 常规中关闭 *Auto-hide at screen edge*（需要保持窗口置顶；在系统不让窗口留在屏幕外的环境下不可用）。把窗口拖到屏幕左、右或上边缘后会滑出屏幕，只留一条细边；鼠标靠近细边（或点击托盘图标）时窗口滑出；鼠标进入窗口后移开，窗口会再次隐藏；用托盘图标滑出的窗口会一直留着，直到再次点击托盘图标 |
+| 贴边自动隐藏 | 默认开启；可在设置 → 常规中关闭*贴边自动隐藏*（需要保持窗口置顶；在系统不让窗口留在屏幕外的环境下不可用）。把窗口拖到屏幕左、右或上边缘后会滑出屏幕，只留一条细边；鼠标靠近细边（或点击托盘图标）时窗口滑出；鼠标进入窗口后移开，窗口会再次隐藏；用托盘图标滑出的窗口会一直留着，直到再次点击托盘图标 |
 | 隐藏 / 显示 | 点击 **×** 隐藏到托盘（关闭*关闭按钮隐藏到托盘*后则直接退出）；点击托盘图标重新显示；托盘菜单中的*退出*用于关闭程序 |
 
 设置和日志保存在 Windows 的 `%APPDATA%\FluxTick`，以及 Linux 和 macOS 的 `~/.config/FluxTick`。日志在 `logs` 文件夹中：每天一个文件，单个文件达到 10 MB 时提前拆分，只保留最新的 5 个文件（因此最多是最近 5 天，日志量大的日子会更少），更早的文件会被自动删除。每次价格更新都会重复出现的问题（例如某个处理器一直出错）每分钟最多记录一次，并注明被合并的重复次数。
@@ -134,7 +129,7 @@ dotnet publish src/FluxTick.App -c Release -r win-x64 -o publish
 ```
 src/FluxTick.Abstractions        稳定的数据源契约（数据源只需引用它）
 src/FluxTick.Core                数据源注册、路由、行情聚合、走势序列、设置
-src/FluxTick.Providers.Common    数据源共用的辅助代码（WebSocket 循环、符号搜索）
+src/FluxTick.Providers.Common    数据源共用的辅助代码（WebSocket 与轮询基类、符号搜索）
 src/FluxTick.Providers.Binance   Binance WebSocket 数据源
 src/FluxTick.Providers.Okx       OKX WebSocket 数据源
 src/FluxTick.Providers.Coinbase  Coinbase WebSocket 数据源
