@@ -1,9 +1,10 @@
 # Adding a data source
 
 FluxTick treats every market data source as a plug-in-shaped class library that only depends on
-`FluxTick.Abstractions`. Adding one never requires changes to `FluxTick.Core` or the UI: the app discovers
+`FluxTick.Abstractions`. Adding one never requires changes to `FluxTick.Core` or the UI code: the app discovers
 the provider from its descriptor, lists it under **Settings → Data sources**, and renders its option editors
-from the option definitions you declare.
+from the option definitions you declare. Only the Chinese translation of its texts is optional extra work
+(see [step 5](#5-register-it)).
 
 ## 1. Create the project
 
@@ -137,6 +138,13 @@ public sealed class MySourceProviderFactory : IMarketDataProviderFactory
 }
 ```
 
+Optional descriptor arguments:
+
+- `EnabledByDefault: false` keeps the source off on first run, so the user turns it on in **Settings → Data sources**
+  (Tencent, OKX and Simulated do this). Use it for demo sources and for sources that only suit some users.
+- `RequiresApiKey` says the source needs credentials to work.
+- `Homepage` links to the data source or its terms of use.
+
 Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The settings page generates the right editor
 and validates input from the definition. `ProviderOptions` always returns a valid value, falling back to the default
 for anything missing or malformed.
@@ -164,9 +172,30 @@ services.AddMarketDataProvider<MySourceProviderFactory>();
 
 and add a project reference from `FluxTick.App`. That's the whole integration.
 
+### Translations (optional)
+
+The provider describes itself in English. The interface language setting can show it in Chinese when
+`src/FluxTick.App/Localization/Strings/zh-CN.json` has these keys (`ProviderText` looks them up; anything missing
+falls back to the English text from your descriptor):
+
+| Key | Translates |
+| --- | --- |
+| `Provider_{id}_Name` | `DisplayName` |
+| `Provider_{id}_Desc` | `Description` |
+| `Option_{Key}_Label` | The label of an option |
+| `Option_{id}_{Key}_Desc` | The description of an option |
+
+Option labels are keyed by `Key` only and shared by every provider, so an option that reuses a key such as
+`PollInterval` gets the existing translation. Pick a new key if yours means something different. `en.json` needs no
+entries, and the localization tests only allow keys starting with `Provider_` or `Option_` that exist in `zh-CN.json` alone.
+
 ## 6. Test it
 
-Add a two-line contract test; it checks descriptor sanity, option fallback, idle-without-subscriptions and prompt
+Add a project reference from `tests/FluxTick.Providers.Tests/FluxTick.Providers.Tests.csproj` to your project. If the
+tests need your `internal` parsing functions, also add `<InternalsVisibleTo Include="FluxTick.Providers.Tests" />`
+to your own project file (see `FluxTick.Providers.Yahoo`).
+
+Then add a two-line contract test; it checks descriptor sanity, option fallback, idle-without-subscriptions and prompt
 disposal for free (the restart after an empty set is covered for the shared base classes; test it yourself if you
 implement `IMarketDataProvider` directly):
 
