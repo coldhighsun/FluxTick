@@ -104,7 +104,16 @@ public class ToolWindow : Window
     private void PlaceBeside(Window owner, Screen screen, Size size)
     {
         var scale = screen.Scaling;
+        var pixelSize = PixelSize.FromSize(size, scale);
+
+        // A full screen owner fills the screen, so there is no side to open on: the window goes to the middle instead.
+        if (owner.WindowState == WindowState.FullScreen)
+        {
+            Position = ToolWindowPlacement.Center(pixelSize, screen.Bounds);
+            return;
+        }
+
         var ownerBounds = new PixelRect(owner.Position, PixelSize.FromSize(owner.Bounds.Size, scale));
-        Position = ToolWindowPlacement.Place(ownerBounds, PixelSize.FromSize(size, scale), screen.WorkingArea);
+        Position = ToolWindowPlacement.Place(ownerBounds, pixelSize, screen.WorkingArea);
     }
 }

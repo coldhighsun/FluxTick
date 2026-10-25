@@ -19,6 +19,30 @@ public class ToolWindowPlacementTests
     private static readonly PixelSize Size = new(420, 700);
 
     /// <summary>
+    /// Verifies the tool window of a full screen main window opens in the middle of the screen.
+    /// </summary>
+    [Fact]
+    public void Center_PutsTheWindowInTheMiddleOfTheArea()
+    {
+        var screen = new PixelRect(1920, 0, 2560, 1440);
+
+        var position = ToolWindowPlacement.Center(Size, screen);
+
+        position.Should().Be(new PixelPoint(1920 + (2560 - 420) / 2, (1440 - 700) / 2));
+    }
+
+    /// <summary>
+    /// Verifies a window larger than the area keeps its top-left corner on the area.
+    /// </summary>
+    [Fact]
+    public void Center_WindowLargerThanArea_StaysAtTheCorner()
+    {
+        var small = new PixelRect(0, 0, 300, 500);
+
+        ToolWindowPlacement.Center(Size, small).Should().Be(new PixelPoint(0, 0));
+    }
+
+    /// <summary>
     /// Verifies the tool window opens to the left of the main window when there is room.
     /// </summary>
     [Fact]

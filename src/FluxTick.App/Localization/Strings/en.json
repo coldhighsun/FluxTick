@@ -29,6 +29,8 @@
   "Alert_InvalidThreshold": "Enter a price above 0.",
   "Alert_MovedBody": "The {0} alert(s) on {1} keep their price levels. Check them if the new source quotes in another currency.",
   "Alert_MovedTitle": "Alerts moved to {0}",
+  "Settings_ReadFailedTitle": "Settings could not be read",
+  "Settings_ReadFailedBody": "settings.json is locked or unreadable, so the defaults are in use. Changes are not saved while that lasts; once the file is free, your next change loads the saved settings again.",
   "Alert_Repeat": "Repeat",
   "Alert_RepeatTip": "Alert again each time the condition comes true. Otherwise the alert turns itself off after it fires.",
   "Alert_Save": "Save",

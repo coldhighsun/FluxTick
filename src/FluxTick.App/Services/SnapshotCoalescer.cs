@@ -75,7 +75,8 @@ public sealed class SnapshotCoalescer(IUiDispatcher ui, Action<AssetSnapshot> ap
         Interlocked.Exchange(ref _scheduled, 0);
         try
         {
-            foreach (var id in _pending.Keys)
+            // Enumerating the dictionary is safe while entries are removed, and unlike Keys it copies nothing.
+            foreach (var (id, _) in _pending)
             {
                 if (_pending.TryRemove(id, out var snapshot))
                 {

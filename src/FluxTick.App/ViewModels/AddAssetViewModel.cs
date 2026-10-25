@@ -505,6 +505,9 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
             await Task.Delay(SearchDelay, _time, cancellationToken);
             IsSearching = true;
             var found = await _market.SearchAsync(provider.Id, query, assetClass, cancellationToken);
+
+            // A provider that ignores the token, for example one answering from a cache, must not show stale results.
+            cancellationToken.ThrowIfCancellationRequested();
             Results.Clear();
             foreach (var asset in found)
             {

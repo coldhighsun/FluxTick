@@ -54,6 +54,8 @@
             </Border>
           </MenuItem.Icon>
         </MenuItem>
+        <Separator />
+        <MenuItem Header="{loc:T Main_Settings}" Command="{Binding ShowSettingsCommand}" />
       </ContextMenu>
     </Grid.ContextMenu>
     <ScrollViewer Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0"

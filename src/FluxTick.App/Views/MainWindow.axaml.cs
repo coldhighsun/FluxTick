@@ -40,6 +40,12 @@ public sealed partial class MainWindow : Window
     private const int ScreenMargin = 24;
 
     /// <summary>
+    /// How far the pointer must move from where the header was pressed, in device independent pixels, before it counts
+    /// as a drag out of full screen rather than a click, when the platform gives no distance of its own.
+    /// </summary>
+    private const double DefaultDragDistance = 4;
+
+    /// <summary>
     /// The open tool window (settings or add instrument), if any.
     /// </summary>
     private ToolWindow? _toolWindow;
@@ -69,6 +75,33 @@ public sealed partial class MainWindow : Window
     /// The state the window was in when it was minimized, which is the one a restore returns to.
     /// </summary>
     private WindowState _stateBeforeMinimize = WindowState.Normal;
+
+    /// <summary>
+    /// What the window looked like before it went full screen, which it gets back when it leaves full screen.
+    /// </summary>
+    private readonly FullScreenMemory _fullScreenMemory = new();
+
+    /// <summary>
+    /// How the exit from full screen that is under way happens. Set only by <see cref="LeaveFullScreen"/>, around the
+    /// change of the state, which the platform reports back at once; any other exit (the system's own) is a restore.
+    /// </summary>
+    private FullScreenExit _fullScreenExit = FullScreenExit.Restore;
+
+    /// <summary>
+    /// The width and position a running width animation ends at, or <see langword="null"/> when none runs.
+    /// </summary>
+    private (double Width, PixelPoint Position)? _widthAnimationEnd;
+
+    /// <summary>
+    /// The press on the header while the window is full screen, which turns into a drag once the pointer moved, or
+    /// <see langword="null"/> when there is none.
+    /// </summary>
+    private PointerPressedEventArgs? _fullScreenPress;
+
+    /// <summary>
+    /// Where the header was pressed, in device independent pixels of the window.
+    /// </summary>
+    private Point _fullScreenPressPoint;
 
     /// <summary>
     /// Raised when the window moved to, or came back from, its hidden position at a screen edge.
@@ -117,6 +150,11 @@ public sealed partial class MainWindow : Window
     public event EventHandler<WindowGeometry>? GeometryChanged;
 
     /// <summary>
+    /// Raised when the window entered or left full screen; the argument tells which.
+    /// </summary>
+    public event EventHandler<bool>? FullScreenChanged;
+
+    /// <summary>
     /// Gets the logger used to record failures of the tool windows.
     /// </summary>
     public ILogger<MainWindow>? Logger { get; init; }
@@ -143,10 +181,17 @@ public sealed partial class MainWindow : Window
         if (saved is { X: { } x, Y: { } y } && IsOnAnyScreen(new PixelPoint(x, y)))
         {
             Position = new PixelPoint(x, y);
-            return;
+        }
+        else
+        {
+            Position = DefaultPosition();
         }
 
-        Position = DefaultPosition();
+        // After the normal size and position are set: they are what the window returns to when it leaves full screen.
+        if (saved.FullScreen)
+        {
+            WindowState = WindowState.FullScreen;
+        }
     }
 
     /// <summary>
@@ -234,7 +279,9 @@ public sealed partial class MainWindow : Window
     /// </param>
     protected override void OnClosing(WindowClosingEventArgs e)
     {
-        if (Application.Current is App { IsExiting: false, CloseToTray: true })
+        // Only the user's own close hides the window; a shutdown or logoff must not be vetoed.
+        if (e.CloseReason == WindowCloseReason.WindowClosing
+            && Application.Current is App { IsExiting: false, CloseToTray: true })
         {
             e.Cancel = true;
             Hide();
@@ -287,6 +334,15 @@ public sealed partial class MainWindow : Window
     /// </param>
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
+        // Before the base class hands the new state to the platform, which resizes the window: this is the last moment the
+        // size of the normal window can be read. Whatever state it was in, a window that goes full screen is remembered; one
+        // that only returns from the minimized state keeps the record it has.
+        var entered = false;
+        if (change.Property == WindowStateProperty && change.NewValue is WindowState.FullScreen && change.OldValue is not WindowState.FullScreen)
+        {
+            entered = RememberNormalBounds();
+        }
+
         base.OnPropertyChanged(change);
         if (change.Property == IsVisibleProperty && !IsVisible)
         {
@@ -300,6 +356,12 @@ public sealed partial class MainWindow : Window
             }
 
             OnWindowStateChanged();
+        }
+
+        // After the platform and the layout followed, so a listener sees the window as it is.
+        if (entered)
+        {
+            FullScreenChanged?.Invoke(this, true);
         }
     }
 
@@ -315,20 +377,47 @@ public sealed partial class MainWindow : Window
         if (!e.Handled && e.Key == Key.Escape && WindowState == WindowState.FullScreen)
         {
             e.Handled = true;
+            LeaveFullScreen(FullScreenExit.Restore);
+        }
+    }
+
+    /// <summary>
+    /// Takes the window out of full screen. What it gets back depends on how it leaves: see <see cref="FullScreenExit"/>.
+    /// </summary>
+    /// <param name="exit">
+    /// How the window leaves full screen.
+    /// </param>
+    private void LeaveFullScreen(FullScreenExit exit)
+    {
+        _fullScreenExit = exit;
+        try
+        {
             WindowState = WindowState.Normal;
+        }
+        finally
+        {
+            _fullScreenExit = FullScreenExit.Restore;
         }
     }
 
     /// <summary>
     /// Makes room for the window to fill the screen and shows the cards there, and takes the width rules, the layout and
-    /// the edge hiding up again when it is back to its normal size. Nothing of the full screen window is remembered: the size and the position that are saved
-    /// stay those of the normal window.
+    /// the edge hiding up again when it is back to its normal size. The size and place of the normal window are taken
+    /// down when full screen starts (<see cref="RememberNormalBounds"/>) and put back when it ends, whichever way the
+    /// window leaves it, except for an exit that keeps the size of the layout; the size and the position that are saved
+    /// in the settings stay those of the normal window all along.
     /// </summary>
     private void OnWindowStateChanged()
     {
         // Minimizing or maximizing is not full screen: the layout stays, and whatever is running keeps running.
         if (WindowState is WindowState.Minimized or WindowState.Maximized)
         {
+            // A maximized window is no longer full screen, which the saved state must not claim.
+            if (WindowState == WindowState.Maximized && _fullScreenMemory.Leave(WindowState.Maximized, FullScreenExit.Restore).Left)
+            {
+                FullScreenChanged?.Invoke(this, false);
+            }
+
             return;
         }
 
@@ -345,19 +434,91 @@ public sealed partial class MainWindow : Window
         }
 
         (DataContext as MainViewModel)?.SetFullScreen(false);
-        var (layout, compact) = CurrentLayout();
-        if (_appliedRule != default && WindowWidthRules.For(layout, compact) == _appliedRule)
+        var leave = _fullScreenMemory.Leave(WindowState, _fullScreenExit);
+        try
         {
-            FinishWidthChange(_appliedRule);
+            // Whatever way the user left full screen, the window comes back as it was, not as large as the screen.
+            if (leave.RestoreSize)
+            {
+                var screen = (_fullScreenMemory.Bounds is { } known ? Screens.ScreenFromPoint(known.Position) : null)
+                    ?? Screens.ScreenFromWindow(this)
+                    ?? Screens.Primary;
+                var maxHeight = screen is null ? double.PositiveInfinity : screen.WorkingArea.Height / screen.Scaling;
+                Height = FullScreenRestore.Height(_fullScreenMemory.Bounds, MinHeight, maxHeight);
+            }
+
+            if (leave.RestorePosition && _fullScreenMemory.Bounds is { } record && IsHeaderReachable(record.Position))
+            {
+                Position = record.Position;
+            }
+
+            var (layout, compact) = CurrentLayout();
+            if (_appliedRule != default && WindowWidthRules.For(layout, compact) == _appliedRule)
+            {
+                FinishWidthChange(_appliedRule);
+            }
+            else
+            {
+                // The layout was changed while the window filled the screen. A window that is being dragged out has no time
+                // for an animation, which would move it against the pointer: it gets its width at once.
+                _appliedRule = default;
+                ApplyWidthRule(immediate: _fullScreenExit == FullScreenExit.Dragged);
+            }
+
+            ResumeDockLeave();
         }
-        else
+        finally
         {
-            // The layout was changed while the window filled the screen.
-            _appliedRule = default;
-            ApplyWidthRule();
+            // Last, so a listener sees the window as it is now, not half way out of full screen; and whatever went wrong
+            // above, the saved state must not go on saying that the window is full screen.
+            if (leave.Left)
+            {
+                FullScreenChanged?.Invoke(this, false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a window put at a place can be grabbed by its header, which a remembered place may no longer
+    /// allow after the screens were rearranged.
+    /// </summary>
+    /// <param name="position">
+    /// The top-left position of the window in screen pixels.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when enough of the header is on one screen.
+    /// </returns>
+    private bool IsHeaderReachable(PixelPoint position)
+    {
+        var scale = RenderScaling;
+        var width = double.IsNaN(Width) ? Bounds.Width : Width;
+        var header = new PixelRect(
+            position,
+            new PixelSize((int)Math.Round(width * scale), Math.Max(1, (int)Math.Round(Header.Bounds.Height * scale))));
+        return FullScreenRestore.IsReachable(header, Screens.All.Select(screen => screen.WorkingArea));
+    }
+
+    /// <summary>
+    /// Remembers the position and the height of the normal window, for the way back from full screen.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the window entered full screen, <see langword="false"/> when it was in it already.
+    /// </returns>
+    private bool RememberNormalBounds()
+    {
+        // A width animation that is still running is stopped by going full screen. The window would come back with a width
+        // and a position from the middle of it, so it is taken to where the animation was going.
+        if (_widthAnimationEnd is { } end)
+        {
+            _widthAnimationEnd = null;
+            _widthAnimation.Stop();
+            Width = end.Width;
+            Position = end.Position;
         }
 
-        ResumeDockLeave();
+        // A window that rests beyond its screen edge is at a hidden position; the one it is shown at is the one to return to.
+        var height = double.IsNaN(Height) ? ClientSize.Height : Height;
+        return _fullScreenMemory.Enter(Position, height, _dock.SuppressesGeometry);
     }
 
     /// <summary>
@@ -396,7 +557,10 @@ public sealed partial class MainWindow : Window
     /// Gives the window the width its layout asks for: a fixed one in the list layout, the remembered one in the card
     /// layout. The right edge stays where it is, so the window does not leave the screen it is docked to.
     /// </summary>
-    private void ApplyWidthRule()
+    /// <param name="immediate">
+    /// Whether the width is set at once instead of being animated.
+    /// </param>
+    private void ApplyWidthRule(bool immediate = false)
     {
         // A window that fills the screen has no width of its own; the rule is applied when it is back to normal.
         if (WindowState != WindowState.Normal)
@@ -430,7 +594,7 @@ public sealed partial class MainWindow : Window
         {
             FinishWidthChange(rule);
         }
-        else if (!IsVisible)
+        else if (immediate || !IsVisible)
         {
             Width = target;
             FinishWidthChange(rule);
@@ -465,6 +629,7 @@ public sealed partial class MainWindow : Window
         }
 
         var top = Position.Y;
+        _widthAnimationEnd = (to, new PixelPoint(endLeft, top));
         _widthAnimation.Run(
             WindowWidthRules.AnimationDuration,
             progress =>
@@ -483,6 +648,7 @@ public sealed partial class MainWindow : Window
     /// </param>
     private void FinishWidthChange(WidthRule rule)
     {
+        _widthAnimationEnd = null;
         MinWidth = rule.Min;
         MaxWidth = rule.Max;
     }
@@ -660,9 +826,111 @@ public sealed partial class MainWindow : Window
     private void OnHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var locked = (DataContext as MainViewModel)?.Settings.Locked == true;
-        if (!locked && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (locked || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            RunDockDrag(() => BeginMoveDrag(e), resize: false);
+            return;
+        }
+
+        if (WindowState == WindowState.FullScreen)
+        {
+            // A full screen window has nowhere to be dragged to. Leaving full screen right now would turn a double click
+            // into "leave and enter again", so it waits until the pointer moved: that is the drag.
+            _fullScreenPress = e;
+            _fullScreenPressPoint = e.GetPosition(this);
+            e.Pointer.Capture(Header);
+            return;
+        }
+
+        RunDockDrag(() => BeginMoveDrag(e), resize: false);
+    }
+
+    /// <summary>
+    /// Takes the window out of full screen and carries on dragging it once the pointer moved far enough from where the
+    /// header was pressed.
+    /// </summary>
+    /// <param name="sender">
+    /// The header.
+    /// </param>
+    /// <param name="e">
+    /// The pointer event data.
+    /// </param>
+    private void OnHeaderPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_fullScreenPress is not { } press)
+        {
+            return;
+        }
+
+        if (WindowState != WindowState.FullScreen || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            ClearFullScreenPress(e.Pointer);
+            return;
+        }
+
+        // The system's own distance, which a user can raise, so that a shaky double click is not taken for a drag.
+        var tap = Application.Current?.PlatformSettings?.GetTapSize(e.Pointer.Type) ?? new Size(DefaultDragDistance, DefaultDragDistance);
+        var point = e.GetPosition(this);
+        if (Math.Abs(point.X - _fullScreenPressPoint.X) < tap.Width
+            && Math.Abs(point.Y - _fullScreenPressPoint.Y) < tap.Height)
+        {
+            return;
+        }
+
+        var pointer = this.PointToScreen(point);
+        var scale = RenderScaling;
+        ClearFullScreenPress(e.Pointer);
+        RunDockDrag(
+            () =>
+            {
+                // The way out of full screen puts back the height and the width of the layout, but not the old place: the
+                // window is put with the middle of its header under the pointer, so it follows the pointer from the first
+                // moment, in one move.
+                LeaveFullScreen(FullScreenExit.Dragged);
+                var width = double.IsNaN(Width) ? Bounds.Width : Width;
+                var height = double.IsNaN(Height) ? Bounds.Height : Height;
+                var size = PixelSize.FromSize(new Size(width, height), scale);
+                var workArea = (Screens.ScreenFromPoint(pointer) ?? Screens.Primary)?.WorkingArea ?? new PixelRect(pointer, size);
+                var headerMiddleY = (int)Math.Round(Header.Bounds.Height * scale / 2);
+                Position = FullScreenRestore.Place(pointer, headerMiddleY, size, workArea);
+                BeginMoveDrag(press);
+            },
+            resize: false);
+    }
+
+    /// <summary>
+    /// Forgets the press on the header when the button was released or the pointer was taken away.
+    /// </summary>
+    /// <param name="sender">
+    /// The header.
+    /// </param>
+    /// <param name="e">
+    /// The pointer event data.
+    /// </param>
+    private void OnHeaderPointerReleased(object? sender, PointerReleasedEventArgs e) => ClearFullScreenPress(e.Pointer);
+
+    /// <summary>
+    /// Forgets the press on the header when the pointer was taken away.
+    /// </summary>
+    /// <param name="sender">
+    /// The header.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnHeaderPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e) => _fullScreenPress = null;
+
+    /// <summary>
+    /// Ends the wait for a drag of the header in full screen.
+    /// </summary>
+    /// <param name="pointer">
+    /// The pointer that pressed the header.
+    /// </param>
+    private void ClearFullScreenPress(IPointer pointer)
+    {
+        _fullScreenPress = null;
+        if (pointer.Captured == Header)
+        {
+            pointer.Capture(null);
         }
     }
 
@@ -686,7 +954,7 @@ public sealed partial class MainWindow : Window
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnFullScreenExitRequested(object? sender, EventArgs e) => WindowState = WindowState.Normal;
+    private void OnFullScreenExitRequested(object? sender, EventArgs e) => LeaveFullScreen(FullScreenExit.KeepLayoutSize);
 
     /// <summary>
     /// Switches between full screen and the normal window when the full screen button is clicked.
@@ -702,8 +970,17 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Fills the screen with the window, or brings it back to its normal size.
     /// </summary>
-    private void ToggleFullScreen() =>
-        WindowState = WindowState == WindowState.Normal ? WindowState.FullScreen : WindowState.Normal;
+    private void ToggleFullScreen()
+    {
+        if (WindowState == WindowState.Normal)
+        {
+            WindowState = WindowState.FullScreen;
+        }
+        else
+        {
+            LeaveFullScreen(FullScreenExit.Restore);
+        }
+    }
 
     /// <summary>
     /// Starts resizing from the bottom-right grip.
@@ -766,7 +1043,8 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Determines whether a point lies on any connected screen.
+    /// Determines whether a point lies on the usable area of any connected screen, so a window whose corner is under
+    /// the taskbar does not count as visible.
     /// </summary>
     /// <param name="point">
     /// The point in screen pixels.
@@ -774,5 +1052,5 @@ public sealed partial class MainWindow : Window
     /// <returns>
     /// <see langword="true"/> when the point is on a screen.
     /// </returns>
-    private bool IsOnAnyScreen(PixelPoint point) => Screens.All.Any(s => s.Bounds.Contains(point));
+    private bool IsOnAnyScreen(PixelPoint point) => Screens.All.Any(s => s.WorkingArea.Contains(point));
 }

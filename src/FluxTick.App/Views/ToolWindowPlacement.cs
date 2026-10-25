@@ -50,6 +50,24 @@ public static class ToolWindowPlacement
     }
 
     /// <summary>
+    /// Places a tool window in the middle of an area, for example the screen of a full screen main window, beside
+    /// which there is no room. The window stays inside the area as far as it fits.
+    /// </summary>
+    /// <param name="size">
+    /// The tool window size in screen pixels.
+    /// </param>
+    /// <param name="area">
+    /// The area to center in, in screen pixels.
+    /// </param>
+    /// <returns>
+    /// The top-left position of the tool window.
+    /// </returns>
+    public static PixelPoint Center(PixelSize size, PixelRect area) =>
+        new(
+            Clamp(area.X + (area.Width - size.Width) / 2, area.X, area.Right - size.Width),
+            Clamp(area.Y + (area.Height - size.Height) / 2, area.Y, area.Bottom - size.Height));
+
+    /// <summary>
     /// Clamps a value into a range, favoring the lower bound when the range is empty.
     /// </summary>
     /// <param name="value">
