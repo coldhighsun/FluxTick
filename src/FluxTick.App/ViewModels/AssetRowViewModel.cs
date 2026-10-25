@@ -204,6 +204,34 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial bool HasAlert { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the tray list shows the instrument.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAddToTray))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveFromTray))]
+    public partial bool InTray { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the menu offers to put the instrument on the tray list. The menus only offer the
+    /// tray list where it works, which the platform decides for all rows alike.
+    /// </summary>
+    public bool CanAddToTray => TrayHoverAvailability.IsSupported && !InTray;
+
+    /// <summary>
+    /// Gets a value indicating whether the menu offers to take the instrument off the tray list.
+    /// </summary>
+    public bool CanRemoveFromTray => TrayHoverAvailability.IsSupported && InTray;
+
+    /// <summary>
+    /// Tells the menu that the platform started or stopped supporting the tray list.
+    /// </summary>
+    public void RefreshTrayMenu()
+    {
+        OnPropertyChanged(nameof(CanAddToTray));
+        OnPropertyChanged(nameof(CanRemoveFromTray));
+    }
+
+    /// <summary>
     /// Gets or sets the price of the enabled alert that fires when the price rises to it, or <see langword="null"/> for
     /// none. The sparkline draws it.
     /// </summary>

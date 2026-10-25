@@ -152,6 +152,8 @@ public sealed partial class App : Application
         {
             var demo = desktop.Args?.Contains("--demo", StringComparer.OrdinalIgnoreCase) == true;
             _services = AppHost.Build(demo);
+            TrayHoverAvailability.ListenerFailed = ex =>
+                _services.GetService<ILogger<App>>()?.LogWarning(ex, "A listener of the tray list availability failed");
             _settings = _services.GetRequiredService<SettingsManager>();
             _geometrySave = new Debouncer(TimeSpan.FromMilliseconds(600), TimeProvider.System);
 
@@ -192,6 +194,7 @@ public sealed partial class App : Application
                 ApplyTheme();
                 ApplyPalette();
                 ApplyTrayHover();
+                ApplyTrayAssets();
             });
             ApplyPalette();
             Dispatcher.UIThread.Post(ApplyTrayHover, DispatcherPriority.Background);
@@ -199,6 +202,7 @@ public sealed partial class App : Application
             desktop.Exit += (_, _) =>
             {
                 IsExiting = true;
+                TrayHoverAvailability.ListenerFailed = null;
                 if (OperatingSystem.IsWindows())
                 {
                     _trayHover?.Dispose();
@@ -345,12 +349,7 @@ public sealed partial class App : Application
     /// </param>
     private void CleanUpOptionsAtDefault(IReadOnlyList<ProviderDescriptor> descriptors)
     {
-        if (!ProviderOptionCleanup.DropOptionsAtDefault(_settings!.Current.Clone(), descriptors))
-        {
-            return;
-        }
-
-        Task.Run(() => _settings.UpdateAsync(s => ProviderOptionCleanup.DropOptionsAtDefault(s, descriptors))).GetAwaiter().GetResult();
+        Task.Run(() => _settings!.TryUpdateAsync(s => ProviderOptionCleanup.DropOptionsAtDefault(s, descriptors))).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -483,6 +482,7 @@ public sealed partial class App : Application
         {
             _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services.GetRequiredService<MainViewModel>().Rows) };
             BindUsage(_trayPopup, _services.GetRequiredService<MarketDataService>());
+            ApplyTrayAssets();
         }
 
         var popup = _trayPopup;
@@ -523,6 +523,17 @@ public sealed partial class App : Application
         _trayHover = hover;
         _trayHoverAttempts = 0;
         TrayHoverAvailability.ReportSuccess();
+    }
+
+    /// <summary>
+    /// Gives the tray popup the instruments the user chose for it, in the order they chose.
+    /// </summary>
+    private void ApplyTrayAssets()
+    {
+        if (_settings is not null && _trayPopup?.DataContext is TrayPopupViewModel model)
+        {
+            model.SetSelection(_settings.Current.General.TrayAssets);
+        }
     }
 
     /// <summary>

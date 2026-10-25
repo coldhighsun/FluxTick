@@ -70,6 +70,14 @@
                   <MenuItem Header="{loc:T Watch_Alert}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditAlertsCommand}"
                             CommandParameter="{Binding}" />
+                  <!-- The tray list is only offered where the tray popup can show it. -->
+                  <MenuItem Header="{loc:T Watch_AddToTray}" IsVisible="{Binding CanAddToTray}"
+                            ToolTip.Tip="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.AddTip}" ToolTip.ShowOnDisabled="True"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.ToggleCommand}"
+                            CommandParameter="{Binding}" />
+                  <MenuItem Header="{loc:T Watch_RemoveFromTray}" IsVisible="{Binding CanRemoveFromTray}"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.ToggleCommand}"
+                            CommandParameter="{Binding}" />
                   <Separator />
                   <MenuItem Header="{loc:T Watch_Remove}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveCommand}"
@@ -144,6 +152,13 @@
                                     CommandParameter="{Binding}" />
                           <MenuItem Header="{loc:T Watch_Alert}"
                                     Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditAlertsCommand}"
+                                    CommandParameter="{Binding}" />
+                          <MenuItem Header="{loc:T Watch_AddToTray}" IsVisible="{Binding CanAddToTray}"
+                                    ToolTip.Tip="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.AddTip}" ToolTip.ShowOnDisabled="True"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.ToggleCommand}"
+                                    CommandParameter="{Binding}" />
+                          <MenuItem Header="{loc:T Watch_RemoveFromTray}" IsVisible="{Binding CanRemoveFromTray}"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.ToggleCommand}"
                                     CommandParameter="{Binding}" />
                           <Separator />
                           <MenuItem Header="{loc:T Watch_Remove}"

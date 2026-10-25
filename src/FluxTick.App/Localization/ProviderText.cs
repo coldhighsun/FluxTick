@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 using FluxTick.Abstractions;
+using FluxTick.Core.Application;
 
 namespace FluxTick.App.Localization;
 
@@ -28,6 +29,21 @@ public static class ProviderText
     /// </returns>
     public static string Name(ProviderDescriptor descriptor) =>
         Loc.Instance.Find($"Provider_{descriptor.Id}_Name") ?? descriptor.DisplayName;
+
+    /// <summary>
+    /// Gets the display name of a data source by its id.
+    /// </summary>
+    /// <param name="registry">
+    /// The available providers.
+    /// </param>
+    /// <param name="providerId">
+    /// The provider id.
+    /// </param>
+    /// <returns>
+    /// The display name, or the id when the provider is unknown.
+    /// </returns>
+    public static string Name(ProviderRegistry registry, string providerId) =>
+        registry.GetDescriptor(providerId) is { } descriptor ? Name(descriptor) : providerId;
 
     /// <summary>
     /// Gets the description of a data source.

@@ -439,6 +439,39 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies an update that changes nothing is neither published nor saved, and one that changes something is.
+    /// </summary>
+    [Fact]
+    public async Task TryUpdateAsync_NothingChanged_IsNeitherPublishedNorSaved()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new CountingStore(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance));
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+        await manager.LoadAsync(new AppSettings());
+        var savedBefore = store.Saves;
+        var published = 0;
+        manager.Changed += (_, _) => published++;
+
+        var unchanged = await manager.TryUpdateAsync(_ => false);
+
+        unchanged.Should().BeFalse();
+        published.Should().Be(0);
+        store.Saves.Should().Be(savedBefore, "an update that finds nothing to do must not write the file");
+
+        var changed = await manager.TryUpdateAsync(s =>
+        {
+            s.General.StartMinimized = true;
+            return true;
+        });
+
+        changed.Should().BeTrue();
+        published.Should().Be(1);
+        store.Saves.Should().Be(savedBefore + 1);
+        manager.Current.General.StartMinimized.Should().BeTrue();
+        (await store.LoadAsync())!.General.StartMinimized.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies the collapsed state of a data source or asset class that no instrument uses any more is dropped, and
     /// that the state of the ones still in use is kept.
     /// </summary>
@@ -478,5 +511,34 @@ public sealed class RoutingAndSettingsTests : IDisposable
         await manager.UpdateAsync(s => s.Watchlist.Clear());
 
         manager.Current.Appearance.CollapsedProviders.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A settings store that counts how often it is asked to save.
+    /// </summary>
+    /// <param name="inner">
+    /// The store that does the work.
+    /// </param>
+    private sealed class CountingStore(ISettingsStore inner) : ISettingsStore
+    {
+        /// <summary>
+        /// The number of saves so far.
+        /// </summary>
+        private int _saves;
+
+        /// <summary>
+        /// Gets the number of saves so far.
+        /// </summary>
+        public int Saves => Volatile.Read(ref _saves);
+
+        /// <inheritdoc />
+        public Task<AppSettings?> LoadAsync(CancellationToken cancellationToken = default) => inner.LoadAsync(cancellationToken);
+
+        /// <inheritdoc />
+        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _saves);
+            return inner.SaveAsync(settings, cancellationToken);
+        }
     }
 }

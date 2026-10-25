@@ -100,13 +100,39 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
     /// <returns>
     /// A task that completes once the change is published and saved.
     /// </returns>
-    public async Task UpdateAsync(Action<AppSettings> mutate, CancellationToken cancellationToken = default)
+    public Task UpdateAsync(Action<AppSettings> mutate, CancellationToken cancellationToken = default) =>
+        TryUpdateAsync(
+            next =>
+            {
+                mutate(next);
+                return true;
+            },
+            cancellationToken);
+
+    /// <summary>
+    /// Applies a change to a copy of the settings and, when it changed something, publishes and persists it. A change
+    /// that finds nothing to do costs neither a save nor a notification.
+    /// </summary>
+    /// <param name="mutate">
+    /// The change to apply to the copy; it returns <see langword="false"/> when it left the copy as it was.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token to cancel the operation.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the change is published and saved, with <see langword="true"/> when there was a change.
+    /// </returns>
+    public async Task<bool> TryUpdateAsync(Func<AppSettings, bool> mutate, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var next = Current.Clone();
-            mutate(next);
+            if (!mutate(next))
+            {
+                return false;
+            }
+
             next.Normalize();
             Volatile.Write(ref _current, next);
             Changed?.Invoke(this, EventArgs.Empty);
@@ -118,6 +144,8 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
             {
                 logger.LogError(ex, "Failed to save settings");
             }
+
+            return true;
         }
         finally
         {
