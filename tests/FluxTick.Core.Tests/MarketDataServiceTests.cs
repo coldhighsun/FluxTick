@@ -1120,6 +1120,111 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a source that keeps answering with an empty history is asked a few times and then left alone, instead of
+    /// again with every settings change.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_HistoryStaysEmpty_StopsAskingAfterAFewAnswers()
+    {
+        var factory = new EmptyHistoryFactory();
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+
+        // An apply while a load is still running does not start another, so apply until the third answer arrived.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (factory.Provider?.HistoryRequests is null or < 3)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The history was not asked for three times.");
+            await service.ApplyAsync(SettingsFor(Btc));
+            await Task.Delay(20);
+        }
+
+        // From now on it is left alone, however often the settings are applied.
+        for (var i = 0; i < 5; i++)
+        {
+            await service.ApplyAsync(SettingsFor(Btc));
+            await Task.Delay(50);
+        }
+
+        factory.Provider.HistoryRequests.Should().Be(3);
+    }
+
+    /// <summary>
+    /// Verifies a source that fails with a cancellation, as an HTTP timeout does, does not keep the other sources from
+    /// getting their subscriptions.
+    /// </summary>
+    /// <param name="cryptoFails">
+    /// Whether the crypto source fails; otherwise the stocks source does. Both, because the order the sources are
+    /// routed in is not something the test should depend on.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ApplyAsync_SourceFailsWithCancellation_OtherSourcesStillSubscribe(bool cryptoFails)
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc, Aapl));
+        var crypto = _crypto.Created.Single();
+        var stocks = _stocks.Created.Single();
+        (cryptoFails ? crypto : stocks).SubscribeFailure = new TaskCanceledException("timed out");
+
+        var eth = new Asset("crypto", "ETH", "Ether", AssetClass.Crypto);
+        var msft = new Asset("stocks", "MSFT", "Microsoft", AssetClass.Equity);
+
+        // Both sources get a new instrument; the one that fails must not keep the other from getting its own.
+        var act = () => service.ApplyAsync(SettingsFor(Btc, eth, Aapl, msft));
+
+        await act.Should().ThrowAsync<TaskCanceledException>();
+        var healthy = cryptoFails ? stocks : crypto;
+        healthy.Subscribed.Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Verifies replacing a provider, for example after its options changed, ends the wait that followed the failed
+    /// history load of the old one.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ProviderReplaced_HistoryIsAskedForAtOnce()
+    {
+        _crypto.HistoryFailure = new HttpRequestException("down");
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => _crypto.Created.Single().HistoryRequests == 1);
+        await Task.Delay(100);
+
+        var changed = SettingsFor(Btc);
+        changed.Providers["crypto"] = new ProviderSettings { Options = { ["Endpoint"] = "other" } };
+        await service.ApplyAsync(changed);
+
+        await WaitUntilAsync(() => _crypto.Created.Count == 2 && _crypto.Created[1].HistoryRequests == 1);
+    }
+
+    /// <summary>
+    /// Verifies a source whose history fails is not asked again at once, but after a wait that grows.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_HistoryFails_IsRetriedOnlyAfterAWait()
+    {
+        var factory = new EmptyHistoryFactory(new HttpRequestException("down"));
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => factory.Provider?.HistoryRequests == 1);
+        await Task.Delay(100);
+
+        // The failure is recorded now; applying again, as showing the window does, must not ask again.
+        for (var i = 0; i < 3; i++)
+        {
+            await service.ApplyAsync(SettingsFor(Btc));
+            await Task.Delay(30);
+        }
+
+        factory.Provider!.HistoryRequests.Should().Be(1, "the source is left alone for a while after a failure");
+
+        _time.Advance(TimeSpan.FromSeconds(31));
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => factory.Provider.HistoryRequests == 2);
+    }
+
+    /// <summary>
     /// Verifies the sparkline only shows the last hour: once the seeded history is older than that it is gone, and the
     /// change is published without a new quote.
     /// </summary>
@@ -1436,6 +1541,27 @@ public class MarketDataServiceTests
 
         /// <inheritdoc />
         protected override ValueTask DisposeCoreAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// A factory whose provider has no history or fails to give it, and which keeps the provider it created.
+    /// </summary>
+    /// <param name="failure">
+    /// The exception the history fails with, or <see langword="null"/> for an empty answer.
+    /// </param>
+    private sealed class EmptyHistoryFactory(Exception? failure = null) : IMarketDataProviderFactory
+    {
+        /// <summary>
+        /// Gets the provider that was created, or <see langword="null"/> before there is one.
+        /// </summary>
+        public FakeProvider? Provider { get; private set; }
+
+        /// <inheritdoc />
+        public ProviderDescriptor Descriptor { get; } = new("crypto", "Crypto", "Test", [AssetClass.Crypto], ProviderUpdateMode.Streaming);
+
+        /// <inheritdoc />
+        public IMarketDataProvider Create(ProviderCreationContext context) =>
+            Provider = new FakeProvider(Descriptor, context.Options) { HistoryFailure = failure };
     }
 
     /// <summary>

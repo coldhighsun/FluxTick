@@ -104,6 +104,80 @@ public class CommonHelpersTests
     }
 
     /// <summary>
+    /// Verifies an expired value is still served when the reload fails, and the reload is retried later.
+    /// </summary>
+    [Fact]
+    public async Task ExpiringCache_ReloadFails_ServesStaleValue()
+    {
+        var time = new FakeTimeProvider();
+        var cache = new ExpiringCache<string[]>(TimeSpan.FromMinutes(10), time);
+        var loads = 0;
+        Task<string[]> Load(CancellationToken token) =>
+            Interlocked.Increment(ref loads) == 1 ? Task.FromResult(new[] { "v1" }) : throw new HttpRequestException("down");
+
+        var first = await cache.GetAsync(Load, CancellationToken.None);
+        time.Advance(TimeSpan.FromMinutes(11));
+        var stale = await cache.GetAsync(Load, CancellationToken.None);
+        var again = await cache.GetAsync(Load, CancellationToken.None);
+
+        stale.Should().BeSameAs(first);
+        again.Should().BeSameAs(first);
+        loads.Should().Be(2, "the failed reload is not repeated at once");
+    }
+
+    /// <summary>
+    /// Verifies serving an expired value after a failed reload is reported, not silent.
+    /// </summary>
+    [Fact]
+    public async Task ExpiringCache_ReloadFails_ReportsTheFailure()
+    {
+        var time = new FakeTimeProvider();
+        var reported = new List<(Exception Error, int Failures)>();
+        var cache = new ExpiringCache<string[]>(TimeSpan.FromMinutes(10), time, (ex, failures) => reported.Add((ex, failures)));
+        var loads = 0;
+        Task<string[]> Load(CancellationToken token) =>
+            Interlocked.Increment(ref loads) == 1 ? Task.FromResult(new[] { "v1" }) : throw new HttpRequestException("down");
+
+        await cache.GetAsync(Load, CancellationToken.None);
+        time.Advance(TimeSpan.FromMinutes(11));
+        await cache.GetAsync(Load, CancellationToken.None);
+
+        var only = reported.Should().ContainSingle().Subject;
+        only.Error.Should().BeOfType<HttpRequestException>();
+        only.Failures.Should().Be(1);
+    }
+
+    /// <summary>
+    /// Verifies the number of failures in a row counts up while the outage lasts and starts over after a reload worked.
+    /// </summary>
+    [Fact]
+    public async Task ExpiringCache_RepeatedFailures_AreCountedUntilAReloadSucceeds()
+    {
+        var time = new FakeTimeProvider();
+        var counts = new List<int>();
+        var cache = new ExpiringCache<string[]>(TimeSpan.FromMinutes(10), time, (_, failures) => counts.Add(failures));
+        var loads = 0;
+        Task<string[]> Load(CancellationToken token) => Interlocked.Increment(ref loads) switch
+        {
+            1 => Task.FromResult(new[] { "v1" }),
+            2 or 3 or 5 => throw new HttpRequestException("down"),
+            _ => Task.FromResult(new[] { "v" + loads }),
+        };
+
+        await cache.GetAsync(Load, CancellationToken.None);
+        time.Advance(TimeSpan.FromMinutes(11));
+        await cache.GetAsync(Load, CancellationToken.None);
+        time.Advance(TimeSpan.FromMinutes(2));
+        await cache.GetAsync(Load, CancellationToken.None);
+        time.Advance(TimeSpan.FromMinutes(2));
+        await cache.GetAsync(Load, CancellationToken.None);
+        time.Advance(TimeSpan.FromMinutes(11));
+        await cache.GetAsync(Load, CancellationToken.None);
+
+        counts.Should().Equal(1, 2, 1);
+    }
+
+    /// <summary>
     /// Verifies a load that completes synchronously does not leave its finished task behind, so the value is reloaded
     /// after it expires.
     /// </summary>

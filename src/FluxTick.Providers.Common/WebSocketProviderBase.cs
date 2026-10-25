@@ -91,6 +91,11 @@ public abstract class WebSocketProviderBase : MarketDataProviderBase
     protected virtual TimeSpan HealthyUptime => TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// Gets how long to wait for the connection and handshake before the attempt counts as failed.
+    /// </summary>
+    protected virtual TimeSpan ConnectTimeout => TimeSpan.FromSeconds(15);
+
+    /// <summary>
     /// Gets how long one outgoing message may take, measured on the system clock. A send that exceeds it counts as a
     /// failed send: the connection is dropped and the reconnect subscribes again, so a stalled socket cannot block
     /// subscription changes for long.
@@ -310,6 +315,10 @@ public abstract class WebSocketProviderBase : MarketDataProviderBase
     }
 
     /// <inheritdoc />
+    protected override void OnStatusListenerFailed(Exception exception) =>
+        Logger.LogWarning(exception, "A listener of the {Provider} status failed", Descriptor.DisplayName);
+
+    /// <inheritdoc />
     protected override async ValueTask DisposeCoreAsync()
     {
         await StopLoopAsync().ConfigureAwait(false);
@@ -369,7 +378,22 @@ public abstract class WebSocketProviderBase : MarketDataProviderBase
                 using var socket = new ClientWebSocket();
                 socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
                 socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(30);
-                await socket.ConnectAsync(_webSocketUri, cancellationToken).ConfigureAwait(false);
+
+                // A middlebox that accepts the connection but never completes the handshake must not hang the loop.
+                using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    connectCts.CancelAfter(ConnectTimeout);
+                    try
+                    {
+                        await socket.ConnectAsync(_webSocketUri, connectCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        // Only the timeout cancelled it; the status shows that instead of "The operation was canceled".
+                        throw new ConnectTimeoutException($"Connecting timed out after {ConnectTimeout.TotalSeconds:0} seconds");
+                    }
+                }
+
                 connectedAt = TimeProvider.GetTimestamp();
                 await SubscribeAsync(socket, cancellationToken).ConfigureAwait(false);
                 await ReceiveWithHeartbeatAsync(socket, cancellationToken).ConfigureAwait(false);
@@ -382,7 +406,15 @@ public abstract class WebSocketProviderBase : MarketDataProviderBase
             catch (Exception ex)
             {
                 failure = ex.Message;
-                Logger.LogWarning(ex, "{Provider} connection failed", Descriptor.DisplayName);
+                if (ex is ConnectTimeoutException)
+                {
+                    // The stack of an exception made for the status text says nothing, and the loop retries often.
+                    Logger.LogWarning("{Provider} connection failed: {Reason}", Descriptor.DisplayName, ex.Message);
+                }
+                else
+                {
+                    Logger.LogWarning(ex, "{Provider} connection failed", Descriptor.DisplayName);
+                }
             }
             finally
             {
@@ -650,4 +682,13 @@ public abstract class WebSocketProviderBase : MarketDataProviderBase
             _sendLock.Release();
         }
     }
+
+    /// <summary>
+    /// The timeout of connecting, made for the status text. It is logged by its message alone, since its stack says
+    /// nothing; any other timeout keeps its stack in the log.
+    /// </summary>
+    /// <param name="message">
+    /// The message shown as the reason in the status.
+    /// </param>
+    private sealed class ConnectTimeoutException(string message) : TimeoutException(message);
 }

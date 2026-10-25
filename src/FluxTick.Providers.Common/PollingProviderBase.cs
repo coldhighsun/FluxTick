@@ -145,6 +145,10 @@ public abstract class PollingProviderBase : MarketDataProviderBase
     }
 
     /// <inheritdoc />
+    protected override void OnStatusListenerFailed(Exception exception) =>
+        Logger.LogWarning(exception, "A listener of the {Provider} status failed", Descriptor.DisplayName);
+
+    /// <inheritdoc />
     protected override async ValueTask DisposeCoreAsync()
     {
         await StopLoopAsync().ConfigureAwait(false);

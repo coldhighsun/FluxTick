@@ -168,6 +168,13 @@ public sealed record ProviderOptionDefinition(
                     return new(OptionValidationError.NotDuration, "Must be a duration.");
                 }
 
+                // Zero or negative would make a polling loop spin or throw, whatever bounds the option declares. A
+                // positive Min already rejects it below, with its own limit.
+                if (span <= TimeSpan.Zero && Min is not > 0)
+                {
+                    return new(OptionValidationError.BelowMinimum, "Must be greater than zero.", 0);
+                }
+
                 return CheckRange(span.TotalSeconds);
             case ProviderOptionType.Choice:
                 return Choices is not null && Choices.Contains(value)

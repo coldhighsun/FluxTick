@@ -42,7 +42,10 @@ public interface ISettingsStore
 /// <param name="logger">
 /// The logger.
 /// </param>
-public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManager> logger)
+/// <param name="timeProvider">
+/// The clock; the system clock when none is given.
+/// </param>
+public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManager> logger, TimeProvider? timeProvider = null)
 {
     /// <summary>
     /// Serializes updates and saves.
@@ -53,6 +56,32 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
     /// The current immutable-by-convention settings instance.
     /// </summary>
     private AppSettings _current = new();
+
+    /// <summary>
+    /// Whether the stored settings could not be read, so that nothing may be saved over them yet.
+    /// </summary>
+    private volatile bool _loadFailed;
+
+    /// <summary>
+    /// How long to wait after a failed attempt before the stored settings are read again.
+    /// </summary>
+    private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// The time from which the stored settings may be read again.
+    /// </summary>
+    private DateTimeOffset _nextRecovery;
+
+    /// <summary>
+    /// The clock that times the recovery attempts.
+    /// </summary>
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
+    /// <summary>
+    /// Gets a value indicating whether the stored settings could not be read, so that the defaults are in use and changes
+    /// are not saved until the file can be read.
+    /// </summary>
+    public bool StoredSettingsUnreadable => _loadFailed;
 
     /// <summary>
     /// Gets the current settings. Treat the instance as read-only; use <see cref="UpdateAsync"/> to change it.
@@ -78,13 +107,35 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
     /// </returns>
     public async Task LoadAsync(AppSettings fallback, CancellationToken cancellationToken = default)
     {
-        var loaded = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        AppSettings? loaded;
+        try
+        {
+            loaded = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The file exists but cannot be read. Saving the fallback now would replace the user's settings with
+            // defaults, so the fallback is only used in memory until the file can be read again; see TryUpdateAsync.
+            logger.LogError(ex, "Settings could not be read; using defaults without saving them");
+            fallback.Normalize();
+            Volatile.Write(ref _current, fallback);
+            _loadFailed = true;
+            return;
+        }
+
         var adopted = loaded ?? fallback;
         var normalized = adopted.Normalize();
         Volatile.Write(ref _current, adopted);
         if (loaded is null || normalized)
         {
-            await store.SaveAsync(Current, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await store.SaveAsync(Current, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogError(ex, "Failed to save settings");
+            }
         }
     }
 
@@ -127,6 +178,11 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (_loadFailed && _time.GetUtcNow() >= _nextRecovery)
+            {
+                await TryRecoverAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             var next = Current.Clone();
             if (!mutate(next))
             {
@@ -135,12 +191,27 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
 
             next.Normalize();
             Volatile.Write(ref _current, next);
-            Changed?.Invoke(this, EventArgs.Empty);
+            try
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                // A failing listener must not keep the change from being saved.
+                logger.LogError(ex, "A listener of the settings change failed");
+            }
+
+            if (_loadFailed)
+            {
+                // The stored settings were never read; writing now would replace them with the defaults.
+                return true;
+            }
+
             try
             {
                 await store.SaveAsync(next, cancellationToken).ConfigureAwait(false);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 logger.LogError(ex, "Failed to save settings");
             }
@@ -150,6 +221,39 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reads the stored settings again after the first read failed, and adopts them when that works. Must be called
+    /// while holding the gate.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// A token to cancel the operation.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the attempt ended.
+    /// </returns>
+    private async Task TryRecoverAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var stored = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (stored is not null)
+            {
+                stored.Normalize();
+                Volatile.Write(ref _current, stored);
+            }
+
+            // Without a stored file, the defaults are all there is, and they may be saved.
+            _loadFailed = false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Settings still cannot be read; the change is kept in memory only");
+
+            // Reading retries for a moment, with the gate held; do not do that with every change.
+            _nextRecovery = _time.GetUtcNow() + RecoveryInterval;
         }
     }
 }

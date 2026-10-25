@@ -28,6 +28,16 @@ internal sealed class YahooApiException(string message) : Exception(message);
 internal static class YahooParser
 {
     /// <summary>
+    /// The smallest number of seconds since the Unix epoch that a date can hold.
+    /// </summary>
+    private static readonly long MinUnixSeconds = DateTimeOffset.MinValue.ToUnixTimeSeconds();
+
+    /// <summary>
+    /// The largest number of seconds since the Unix epoch that a date can hold.
+    /// </summary>
+    private static readonly long MaxUnixSeconds = DateTimeOffset.MaxValue.ToUnixTimeSeconds();
+
+    /// <summary>
     /// Parses a <c>v8/finance/chart</c> response.
     /// </summary>
     /// <param name="json">
@@ -48,22 +58,33 @@ internal static class YahooParser
     public static YahooChartData ParseChart(string json, string providerId, string symbol)
     {
         using var document = JsonDocument.Parse(json);
-        var chart = document.RootElement.GetProperty("chart");
+        if (!document.RootElement.TryGetProperty("chart", out var chart))
+        {
+            throw new YahooApiException("Yahoo returned an unexpected response.");
+        }
+
         if (chart.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
         {
             var description = error.TryGetProperty("description", out var d) ? d.GetString() : null;
             throw new YahooApiException(description ?? "Yahoo returned an error.");
         }
 
-        var results = chart.GetProperty("result");
-        if (results.ValueKind != JsonValueKind.Array || results.GetArrayLength() == 0)
+        if (!chart.TryGetProperty("result", out var results)
+            || results.ValueKind != JsonValueKind.Array
+            || results.GetArrayLength() == 0)
         {
             throw new YahooApiException("Yahoo returned no result.");
         }
 
         var result = results[0];
-        var meta = result.GetProperty("meta");
-        if (!meta.TryGetProperty("regularMarketPrice", out var priceElement) || !priceElement.TryGetDecimal(out var price))
+        if (!result.TryGetProperty("meta", out var meta) || meta.ValueKind != JsonValueKind.Object)
+        {
+            throw new YahooApiException("Yahoo returned no price.");
+        }
+
+        if (!meta.TryGetProperty("regularMarketPrice", out var priceElement)
+            || priceElement.ValueKind != JsonValueKind.Number
+            || !priceElement.TryGetDecimal(out var price))
         {
             throw new YahooApiException("Yahoo returned no price.");
         }
@@ -78,8 +99,11 @@ internal static class YahooParser
             }
         }
 
-        var timestamp = meta.TryGetProperty("regularMarketTime", out var time) && time.TryGetInt64(out var seconds)
-            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+        // A time that is missing, or that no date can hold, counts as not given: the quote is as old as the answer.
+        var timestamp = meta.TryGetProperty("regularMarketTime", out var time)
+            && time.TryGetInt64(out var seconds)
+            && TryUnixTime(seconds, out var traded)
+            ? traded
             : DateTimeOffset.UtcNow;
 
         return new YahooChartData(new Quote(new AssetId(providerId, symbol), price, reference, timestamp), ParseHistory(result));
@@ -159,8 +183,10 @@ internal static class YahooParser
             || timestamps.ValueKind != JsonValueKind.Array
             || !result.TryGetProperty("indicators", out var indicators)
             || !indicators.TryGetProperty("quote", out var quoteArray)
+            || quoteArray.ValueKind != JsonValueKind.Array
             || quoteArray.GetArrayLength() == 0
-            || !quoteArray[0].TryGetProperty("close", out var closes))
+            || !quoteArray[0].TryGetProperty("close", out var closes)
+            || closes.ValueKind != JsonValueKind.Array)
         {
             return [];
         }
@@ -169,13 +195,42 @@ internal static class YahooParser
         var count = Math.Min(timestamps.GetArrayLength(), closes.GetArrayLength());
         for (var i = 0; i < count; i++)
         {
-            if (closes[i].ValueKind == JsonValueKind.Number && closes[i].TryGetDecimal(out var close))
+            if (closes[i].ValueKind == JsonValueKind.Number
+                && closes[i].TryGetDecimal(out var close)
+                && timestamps[i].ValueKind == JsonValueKind.Number
+                && timestamps[i].TryGetInt64(out var seconds)
+                && TryUnixTime(seconds, out var traded))
             {
-                points.Add(new PricePoint(DateTimeOffset.FromUnixTimeSeconds(timestamps[i].GetInt64()), close));
+                points.Add(new PricePoint(traded, close));
             }
         }
 
         return points;
+    }
+
+    /// <summary>
+    /// Converts seconds since the Unix epoch to a time, unless no date can hold them, which
+    /// <see cref="DateTimeOffset.FromUnixTimeSeconds"/> would answer with an exception.
+    /// </summary>
+    /// <param name="seconds">
+    /// The seconds since the Unix epoch.
+    /// </param>
+    /// <param name="time">
+    /// The time, when there is one.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the seconds are within the range of dates.
+    /// </returns>
+    private static bool TryUnixTime(long seconds, out DateTimeOffset time)
+    {
+        if (seconds < MinUnixSeconds || seconds > MaxUnixSeconds)
+        {
+            time = default;
+            return false;
+        }
+
+        time = DateTimeOffset.FromUnixTimeSeconds(seconds);
+        return true;
     }
 
     /// <summary>

@@ -81,7 +81,7 @@ Rules of thumb:
 
 - Do no network I/O in the constructor or in the factory; start lazily on the first subscription.
 - Expect empty and non-empty subscription sets to alternate. While nobody looks at the data (the window is hidden to the tray and *Connect data sources on demand* is on), the app sends every provider an empty set, and the full watchlist again when someone does. On an empty set close the connection, stop timers and report `Idle`; on the next non-empty set start from scratch, as on the first one. The base classes do this for you.
-- Report problems with `SetStatus(ProviderConnectionState.Reconnecting | Failed, message)` so the UI can show them.
+- Report problems with `SetStatus(ProviderConnectionState.Reconnecting | Failed, message)` so the UI can show them. A listener of `StatusChanged` that throws is swallowed and passed to `OnStatusListenerFailed` (the polling and WebSocket base classes log it), so a broken listener never ends your loop.
 - Observe `ShutdownToken` in every background loop.
 - Prefer `TimeProvider` over `DateTime.UtcNow` / `Task.Delay` so the provider is testable with `FakeTimeProvider`.
 
@@ -96,7 +96,7 @@ abstractions):
 | `WebSocketProviderBase` | Any streaming source. It owns connecting, subscribing each instrument exactly once, an optional keep-alive message and reconnecting with exponential backoff. A message that fails to parse is dropped without costing the connection. You implement the subscribe/unsubscribe messages and `HandleMessage`. Override `SendTimeout` (default 10 s; a send that takes longer drops the connection and reconnects), `MaxMessageBytes` (default 4 MB; a larger single message drops the connection) or `HealthyUptime` (default 10 s; only a connection that stayed up this long restarts the backoff at `InitialBackoff`) when an exchange needs other limits. |
 | `PollingProviderBase` | Any polling source (Yahoo and Tencent). It owns the loop, an immediate poll for newly added instruments, the delay that doubles while the service pushes back, and the Connected/Reconnecting/Failed status. You implement one method that fetches and publishes, and return a `PollOutcome`; an exception you let escape counts as a failed cycle. |
 | `SymbolIndex` / `SymbolSearch` | Searching a downloaded pair listing for crypto exchanges. Build a `SymbolIndex` once per download (`CryptoExchangeProvider` keeps it in an `ExpiringCache`) and call `SymbolSearch.Search` with it for every query; the index holds the normalized names so a search does not rebuild them. |
-| `ExpiringCache<T>` | Keeping a downloaded symbol list for a few minutes; concurrent callers share one download. |
+| `ExpiringCache<T>` | Keeping a downloaded symbol list for a few minutes; concurrent callers share one download. When a reload fails and an old value exists, the old value is served and the next try waits a minute; pass the optional third argument to log that. |
 | `EndpointOptions.GetWebSocketUri` / `GetHttpUri` / `Combine` | Reading a URL option and falling back to its default when the stored text is not an address with the right scheme (`ws`/`wss` or `http`/`https`); use these instead of `Uri.TryCreate`, which also accepts text such as `host:8443/path`. `Combine` appends a request path to an endpoint and keeps the endpoint's own path (a proxy prefix), which `new Uri(baseUri, "/path")` would replace. |
 | `JsonValues` | Reading decimals, Unix timestamps and ISO 8601 times that an API sends as either numbers or strings. |
 
@@ -147,7 +147,8 @@ Optional descriptor arguments:
 
 Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The settings page generates the right editor
 and validates input from the definition. `ProviderOptions` always returns a valid value, falling back to the default
-for anything missing or malformed.
+for anything missing or malformed. A `Duration` must be greater than zero (a poll interval of zero would spin), whatever
+`Min` and `Max` you declare, so do not use zero as a default.
 
 How the settings page stores options, so you know what your declaration promises:
 

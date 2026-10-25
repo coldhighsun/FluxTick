@@ -3,6 +3,7 @@ using FluxTick.Core.Application;
 using FluxTick.Core.Infrastructure;
 using FluxTick.Core.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace FluxTick.Core.Tests;
 
@@ -282,6 +283,174 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies a file with explicit nulls loads and is repaired instead of crashing.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithNullCollections_NormalizesInsteadOfThrowing()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "watchlist": null, "groups": null, "alerts": null, "appearance": null }""");
+        var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+
+        manager.Current.Groups.Should().NotBeEmpty();
+        manager.Current.Alerts.Should().NotBeNull();
+        manager.Current.Appearance.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Verifies null entries inside collections are dropped instead of failing the start.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithNullEntries_DropsThem()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """{ "watchlist": [null], "groups": [null], "alerts": [null], "providers": { "binance": null }, "routing": { "Crypto": null } }""");
+        var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+
+        manager.Current.Watchlist.Should().BeEmpty();
+        manager.Current.Providers.Should().BeEmpty();
+        manager.Current.Routing.Should().BeEmpty();
+        manager.Current.Groups.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// Verifies a file that stays unreadable is not read again with every change.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_FileStaysUnreadable_ReadsAgainOnlyOncePerInterval()
+    {
+        var store = new FlakyStore(new AppSettings(), failFirst: 100);
+        var time = new FakeTimeProvider();
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance, time);
+        await manager.LoadAsync(new AppSettings());
+
+        await manager.UpdateAsync(s => s.Appearance.Compact = true);
+        await manager.UpdateAsync(s => s.Appearance.Compact = false);
+        await manager.UpdateAsync(s => s.Appearance.Compact = true);
+
+        store.Loads.Should().Be(2, "the start and the first change; the next ones wait for the interval");
+        manager.StoredSettingsUnreadable.Should().BeTrue();
+
+        time.Advance(TimeSpan.FromSeconds(6));
+        await manager.UpdateAsync(s => s.Appearance.Compact = false);
+
+        store.Loads.Should().Be(3, "the interval has passed, so the file is tried again");
+    }
+
+    /// <summary>
+    /// Verifies the manager tells the app that the stored settings could not be read.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WhenFileIsUnreadable_ReportsItAndRecoversAfterwards()
+    {
+        var manager = new SettingsManager(new FlakyStore(new AppSettings()), NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+        manager.StoredSettingsUnreadable.Should().BeTrue();
+
+        await manager.UpdateAsync(s => s.Appearance.Compact = true);
+        manager.StoredSettingsUnreadable.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a failing change listener does not keep the change from being saved.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_WithThrowingListener_StillSaves()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new CountingStore(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance));
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+        await manager.LoadAsync(new AppSettings());
+        var saves = store.Saves;
+        manager.Changed += (_, _) => throw new InvalidOperationException("boom");
+
+        await manager.UpdateAsync(s => s.Appearance.Opacity = 0.5);
+
+        store.Saves.Should().Be(saves + 1);
+    }
+
+    /// <summary>
+    /// Verifies a store that is not allowed to write does not make an update throw.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_WhenSaveIsDenied_DoesNotThrow()
+    {
+        var manager = new SettingsManager(new DenyingStore(), NullLogger<SettingsManager>.Instance);
+        await manager.LoadAsync(new AppSettings());
+
+        var act = () => manager.UpdateAsync(s => s.Appearance.Opacity = 0.5);
+
+        await act.Should().NotThrowAsync();
+        manager.Current.Appearance.Opacity.Should().Be(0.5);
+    }
+
+    /// <summary>
+    /// Verifies a settings file that cannot be read is reported instead of being taken for a missing one.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WhenFileIsLocked_Throws()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, "{}");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        await using var locked = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        var act = () => store.LoadAsync();
+
+        await act.Should().ThrowAsync<IOException>();
+    }
+
+    /// <summary>
+    /// Verifies defaults are not saved over a settings file that could not be read, and that the stored settings are
+    /// picked up again once it can be.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_AfterUnreadableFile_DoesNotOverwriteItAndRecovers()
+    {
+        var stored = new AppSettings();
+        stored.Appearance.Opacity = 0.4;
+        var store = new FlakyStore(stored);
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+        store.Saves.Should().Be(0, "the defaults must not replace the unreadable file");
+        await manager.UpdateAsync(s => s.Appearance.Opacity = 0.7);
+
+        manager.Current.Appearance.Opacity.Should().Be(0.7);
+        manager.Current.Appearance.Opacity.Should().Be(0.7);
+        store.Saves.Should().Be(1);
+    }
+
+    /// <summary>
+    /// Verifies the full screen state is persisted, and is off for settings files that predate it.
+    /// </summary>
+    [Fact]
+    public async Task WindowFullScreen_IsPersistedAndDefaultsToOff()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+        await manager.LoadAsync(new AppSettings());
+        manager.Current.Window.FullScreen.Should().BeFalse();
+
+        await manager.UpdateAsync(s => s.Window.FullScreen = true);
+        var reloaded = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+        await reloaded.LoadAsync(new AppSettings());
+
+        reloaded.Current.Window.FullScreen.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies updates are applied to a copy, published and persisted.
     /// </summary>
     [Fact]
@@ -511,6 +680,59 @@ public sealed class RoutingAndSettingsTests : IDisposable
         await manager.UpdateAsync(s => s.Watchlist.Clear());
 
         manager.Current.Appearance.CollapsedProviders.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A settings store whose first read fails, as a locked file does.
+    /// </summary>
+    /// <param name="stored">
+    /// The settings it returns from the second read on.
+    /// </param>
+    private sealed class FlakyStore(AppSettings stored, int failFirst = 1) : ISettingsStore
+    {
+        /// <summary>
+        /// The number of reads so far.
+        /// </summary>
+        private int _loads;
+
+        /// <summary>
+        /// Gets the number of reads so far.
+        /// </summary>
+        public int Loads => Volatile.Read(ref _loads);
+
+        /// <summary>
+        /// The number of saves so far.
+        /// </summary>
+        private int _saves;
+
+        /// <summary>
+        /// Gets the number of saves so far.
+        /// </summary>
+        public int Saves => Volatile.Read(ref _saves);
+
+        /// <inheritdoc />
+        public Task<AppSettings?> LoadAsync(CancellationToken cancellationToken = default) =>
+            Interlocked.Increment(ref _loads) <= failFirst ? throw new IOException("locked") : Task.FromResult<AppSettings?>(stored);
+
+        /// <inheritdoc />
+        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _saves);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// A settings store that nothing may be written to.
+    /// </summary>
+    private sealed class DenyingStore : ISettingsStore
+    {
+        /// <inheritdoc />
+        public Task<AppSettings?> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult<AppSettings?>(null);
+
+        /// <inheritdoc />
+        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default) =>
+            throw new UnauthorizedAccessException();
     }
 
     /// <summary>

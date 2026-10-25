@@ -172,6 +172,16 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     }
 
     /// <summary>
+    /// Called when a listener of <see cref="StatusChanged"/> threw; the exception is not propagated. Override to log it.
+    /// </summary>
+    /// <param name="exception">
+    /// The exception of the listener.
+    /// </param>
+    protected virtual void OnStatusListenerFailed(Exception exception)
+    {
+    }
+
+    /// <summary>
     /// Updates the status and raises <see cref="StatusChanged"/> when it changed.
     /// </summary>
     /// <param name="state">
@@ -186,7 +196,15 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
         var previous = Interlocked.Exchange(ref _status, next);
         if (previous != next)
         {
-            StatusChanged?.Invoke(this, next);
+            try
+            {
+                StatusChanged?.Invoke(this, next);
+            }
+            catch (Exception ex)
+            {
+                // A failing listener must not end the polling or reconnect loop that reports the status.
+                OnStatusListenerFailed(ex);
+            }
         }
     }
 }

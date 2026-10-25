@@ -57,7 +57,25 @@ public abstract class CryptoExchangeProvider : WebSocketProviderBase, IHistoryPr
     {
         _restBase = endpoints.Rest;
         _http = http;
-        _symbols = new ExpiringCache<SymbolIndex>(SymbolCacheLifetime, timeProvider);
+        _symbols = new ExpiringCache<SymbolIndex>(
+            SymbolCacheLifetime,
+            timeProvider,
+            (ex, failures) =>
+            {
+                // The first failure is worth its stack; while the outage lasts, a line a minute is enough.
+                if (failures == 1)
+                {
+                    Logger.LogWarning(ex, "{Provider} could not refresh its symbol list; using the old one", Descriptor.DisplayName);
+                }
+                else
+                {
+                    Logger.LogDebug(
+                        "{Provider} still cannot refresh its symbol list ({Failures} failures in a row): {Reason}",
+                        Descriptor.DisplayName,
+                        failures,
+                        ex.Message);
+                }
+            });
     }
 
     /// <summary>
