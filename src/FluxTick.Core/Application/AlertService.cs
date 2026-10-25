@@ -93,6 +93,9 @@ public sealed class AlertService : IDisposable
     /// </summary>
     public void Start()
     {
+        // Unsubscribing first keeps a second call from subscribing twice, which would fire every alert twice.
+        _market.SnapshotChanged -= OnSnapshotChanged;
+        _settings.Changed -= OnSettingsChanged;
         _market.SnapshotChanged += OnSnapshotChanged;
         _settings.Changed += OnSettingsChanged;
         Reload();

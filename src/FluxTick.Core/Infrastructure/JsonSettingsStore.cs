@@ -15,6 +15,16 @@ namespace FluxTick.Core.Infrastructure;
 /// </param>
 public sealed class JsonSettingsStore(string path, ILogger<JsonSettingsStore> logger) : ISettingsStore
 {
+    /// <summary>
+    /// How often a file that cannot be opened is tried before the failure is reported.
+    /// </summary>
+    private const int ReadAttempts = 3;
+
+    /// <summary>
+    /// The pause between two attempts to read the file.
+    /// </summary>
+    private static readonly TimeSpan ReadRetryDelay = TimeSpan.FromMilliseconds(150);
+
     /// <inheritdoc />
     public async Task<AppSettings?> LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -23,6 +33,33 @@ public sealed class JsonSettingsStore(string path, ILogger<JsonSettingsStore> lo
             return null;
         }
 
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await ReadAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < ReadAttempts)
+            {
+                // A scanner or sync tool often holds the file for a moment; the settings must not be mistaken for missing.
+                logger.LogDebug(ex, "Settings file is busy; trying again");
+                await Task.Delay(ReadRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads the settings file once. A corrupt file is moved aside; a file that cannot be read throws, so that the
+    /// caller does not take it for a first run and write defaults over it.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// A token to cancel the operation.
+    /// </param>
+    /// <returns>
+    /// The settings, or <see langword="null"/> when the file is corrupt.
+    /// </returns>
+    private async Task<AppSettings?> ReadAsync(CancellationToken cancellationToken)
+    {
         try
         {
             await using var stream = File.OpenRead(path);
@@ -33,7 +70,15 @@ public sealed class JsonSettingsStore(string path, ILogger<JsonSettingsStore> lo
         {
             var backup = $"{path}.bad";
             logger.LogWarning(ex, "Settings file is corrupt; moving it to {Backup} and using defaults", backup);
-            File.Move(path, backup, overwrite: true);
+            try
+            {
+                File.Move(path, backup, overwrite: true);
+            }
+            catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(moveEx, "Could not move the corrupt settings file aside");
+            }
+
             return null;
         }
     }

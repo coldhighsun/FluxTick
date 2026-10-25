@@ -176,6 +176,21 @@ public sealed class AlertServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// Verifies starting twice does not subscribe twice, which would fire every alert twice.
+    /// </summary>
+    [Fact]
+    public async Task Start_CalledTwice_FiresOnlyOnce()
+    {
+        var provider = await StartAsync(AlertCondition.PriceAbove, 100, repeat: true);
+        _alerts.Start();
+
+        await EmitAsync(provider, 99);
+        await EmitAsync(provider, 101);
+
+        _fired.Should().ContainSingle();
+    }
+
+    /// <summary>
     /// Verifies a repeating rule fires again once the condition stopped and came true again.
     /// </summary>
     [Fact]

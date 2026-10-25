@@ -61,6 +61,121 @@ public class YahooTests
     }
 
     /// <summary>
+    /// Verifies responses with null or missing fields surface as a typed exception instead of an unrelated one.
+    /// </summary>
+    /// <param name="json">
+    /// The response body.
+    /// </param>
+    [Theory]
+    [InlineData("""{"chart":{"result":[{"meta":{"regularMarketPrice":null}}],"error":null}}""")]
+    [InlineData("""{"chart":{"result":[{}],"error":null}}""")]
+    [InlineData("""{"chart":{"error":null}}""")]
+    [InlineData("""{}""")]
+    public void ParseChart_MalformedResponse_ThrowsYahooApiException(string json)
+    {
+        var act = () => YahooParser.ParseChart(json, "yahoo", "AAPL");
+
+        act.Should().Throw<YahooApiException>();
+    }
+
+    /// <summary>
+    /// Verifies a trade time that no date can hold does not throw: the quote takes the time of the answer, and a history
+    /// point with such a time is left out.
+    /// </summary>
+    [Fact]
+    public void ParseChart_TimeOutsideTheDateRange_IsHandledLikeAMissingOne()
+    {
+        const string json = """
+            {"chart":{"result":[{"meta":{"regularMarketPrice":1.5,"regularMarketTime":99999999999999},
+            "timestamp":[99999999999999,1700000000],
+            "indicators":{"quote":[{"close":[2.0,3.0]}]}}],"error":null}}
+            """;
+        var before = DateTimeOffset.UtcNow;
+
+        var data = YahooParser.ParseChart(json, "yahoo", "AAPL");
+
+        data.Quote.Timestamp.Should().BeOnOrAfter(before);
+        data.History.Select(p => p.Price).Should().Equal(3.0m);
+    }
+
+    /// <summary>
+    /// Verifies a null close series is tolerated.
+    /// </summary>
+    [Fact]
+    public void ParseChart_NullCloseSeries_ReturnsQuoteWithoutHistory()
+    {
+        const string json = """{"chart":{"result":[{"meta":{"regularMarketPrice":1.5},"timestamp":[1],"indicators":{"quote":[{"close":null}]}}],"error":null}}""";
+
+        var data = YahooParser.ParseChart(json, "yahoo", "AAPL");
+
+        data.Quote.Price.Should().Be(1.5m);
+        data.History.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies a symbol with a malformed response does not stop the others from updating.
+    /// </summary>
+    [Fact]
+    public async Task Provider_OneSymbolMalformed_StillPublishesOthers()
+    {
+        var handler = new StubHandler(r => r.RequestUri!.AbsolutePath.EndsWith("MSFT", StringComparison.Ordinal)
+            ? Json("""{"chart":{"result":[{"meta":{"regularMarketPrice":null}}],"error":null}}""")
+            : Json(ChartJson));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+
+        await provider.SetSubscriptionsAsync([Aapl, Msft]);
+        var quotes = await ReadAsync(provider, 1);
+
+        quotes.Single().AssetId.Symbol.Should().Be("AAPL");
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+    }
+
+    /// <summary>
+    /// Verifies a server error for every request doubles the delay, not only HTTP 429.
+    /// </summary>
+    [Fact]
+    public async Task Provider_ServerErrors_BackOff()
+    {
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var time = new FakeTimeProvider();
+        await using var provider = CreateProvider(handler, time);
+
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await EventuallyAsync(() => handler.Requests.Count == 1);
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Reconnecting);
+
+        var start = time.GetUtcNow();
+        await EventuallyAsync(() =>
+        {
+            if (handler.Requests.Count == 2)
+            {
+                return true;
+            }
+
+            time.Advance(TimeSpan.FromSeconds(1));
+            return false;
+        });
+
+        (time.GetUtcNow() - start).Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(10), "the 5 second delay doubled");
+    }
+
+    /// <summary>
+    /// Verifies the poll asks for the cheap daily chart while the history asks for the minute series.
+    /// </summary>
+    [Fact]
+    public async Task Provider_Poll_RequestsDailyInterval()
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await ReadAsync(provider, 1);
+        await provider.GetHistoryAsync(Aapl);
+
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal("?interval=1d&range=1d", "?interval=1m&range=1d");
+    }
+
+    /// <summary>
     /// Verifies search results are mapped to asset classes and unsupported types are skipped.
     /// </summary>
     [Fact]

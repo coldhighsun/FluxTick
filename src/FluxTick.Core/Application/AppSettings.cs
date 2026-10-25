@@ -402,6 +402,12 @@ public sealed class WindowSettings
     /// Gets or sets the height in device independent pixels.
     /// </summary>
     public double Height { get; set; } = 420;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the window was full screen when it was last used, so that it opens full
+    /// screen again. The position and size above stay those of the normal window.
+    /// </summary>
+    public bool FullScreen { get; set; }
 }
 
 /// <summary>
@@ -481,7 +487,46 @@ public sealed class AppSettings
     /// </returns>
     public bool Normalize()
     {
+        // A file may hold an explicit null for any of these, which the deserializer stores as is.
         var changed = false;
+        if (Watchlist is null || Groups is null || Alerts is null || Providers is null || Routing is null
+            || Appearance is null || General is null || Updates is null || Window is null
+            || Appearance.CollapsedProviders is null || Appearance.CollapsedTypes is null)
+        {
+            Watchlist ??= [];
+            Groups ??= [];
+            Alerts ??= [];
+            Providers ??= [];
+            Routing ??= [];
+            Appearance ??= new();
+            General ??= new();
+            Updates ??= new();
+            Window ??= new();
+            Appearance.CollapsedProviders ??= [];
+            Appearance.CollapsedTypes ??= [];
+            changed = true;
+        }
+
+        // The same for entries inside the collections: an explicit null there would fail further down.
+        changed |= Watchlist.RemoveAll(e => e is null) > 0;
+        changed |= Groups.RemoveAll(g => g is null) > 0;
+        changed |= Alerts.RemoveAll(a => a is null) > 0;
+        changed |= RemoveNullValues(Providers);
+        changed |= RemoveNullValues(Routing);
+        foreach (var provider in Providers.Values)
+        {
+            if (provider.Options is null)
+            {
+                provider.Options = [];
+                changed = true;
+            }
+        }
+
+        foreach (var order in Routing.Values)
+        {
+            changed |= order.RemoveAll(id => id is null) > 0;
+        }
+
         if (Groups.Count == 0)
         {
             Groups.Add(new WatchGroup { Name = DefaultGroupName });
@@ -519,6 +564,47 @@ public sealed class AppSettings
         changed |= TrayAssetSelection.Sanitize(General.TrayAssets, Watchlist);
 
         return changed;
+    }
+
+    /// <summary>
+    /// Removes the entries of a dictionary whose value is <see langword="null"/>.
+    /// </summary>
+    /// <typeparam name="TKey">
+    /// The key type.
+    /// </typeparam>
+    /// <typeparam name="TValue">
+    /// The value type.
+    /// </typeparam>
+    /// <param name="dictionary">
+    /// The dictionary to clean.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an entry was removed.
+    /// </returns>
+    private static bool RemoveNullValues<TKey, TValue>(Dictionary<TKey, TValue> dictionary)
+        where TKey : notnull
+    {
+        // Normalize runs with every settings change, and nothing is null almost always: look before building a list.
+        List<TKey>? nulls = null;
+        foreach (var (key, value) in dictionary)
+        {
+            if (value is null)
+            {
+                (nulls ??= []).Add(key);
+            }
+        }
+
+        if (nulls is null)
+        {
+            return false;
+        }
+
+        foreach (var key in nulls)
+        {
+            dictionary.Remove(key);
+        }
+
+        return true;
     }
 
     /// <summary>

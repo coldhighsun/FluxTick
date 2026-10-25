@@ -69,6 +69,21 @@ public sealed record ProviderStatusChangedEventArgs(string ProviderId, ProviderS
 public sealed class MarketDataService : IAsyncDisposable
 {
     /// <summary>
+    /// The number of history answers without a point after which an instrument is not asked again.
+    /// </summary>
+    private const int MaxEmptyHistoryAnswers = 3;
+
+    /// <summary>
+    /// The wait before a failed history load is tried again; it doubles with each failure.
+    /// </summary>
+    private static readonly TimeSpan SeedRetryBase = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// The longest wait before a failed history load is tried again.
+    /// </summary>
+    private static readonly TimeSpan SeedRetryMax = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// The available providers.
     /// </summary>
     private readonly ProviderRegistry _registry;
@@ -459,7 +474,28 @@ public sealed class MarketDataService : IAsyncDisposable
 
         foreach (var slot in slots)
         {
+            await DisposeSlotQuietlyAsync(slot).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Disposes one provider slot; a failure is logged so the remaining slots are still disposed.
+    /// </summary>
+    /// <param name="slot">
+    /// The slot to dispose.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the slot is disposed or its failure is logged.
+    /// </returns>
+    private async Task DisposeSlotQuietlyAsync(ProviderSlot slot)
+    {
+        try
+        {
             await slot.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Disposing provider {Provider} failed", slot.Id);
         }
     }
 
@@ -619,10 +655,26 @@ public sealed class MarketDataService : IAsyncDisposable
             slots = [.. _slots.Values];
         }
 
+        // A provider that fails must not keep the others from getting their subscriptions; the failure is raised once
+        // all of them were tried.
+        List<Exception> failures = [];
         foreach (var slot in slots)
         {
             var mine = connect ? watchlist.Where(a => a.ProviderId == slot.Id).ToArray() : [];
-            await slot.Provider.SetSubscriptionsAsync(mine, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await slot.Provider.SetSubscriptionsAsync(mine, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Also a timeout that surfaces as a cancellation: only the caller's own token ends the whole routing.
+                failures.Add(ex);
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw failures.Count == 1 ? failures[0] : new AggregateException(failures);
         }
 
         // Only now: if routing failed above, the next apply still sees the old state and does the work again.
@@ -837,13 +889,21 @@ public sealed class MarketDataService : IAsyncDisposable
                 {
                     _slots.Remove(id);
                     retired.Add(slot);
+
+                    // The wait after a failed history load was for the provider that is gone; the new one starts afresh.
+                    foreach (var state in _assets.Values.Where(s => s.Asset.ProviderId == id))
+                    {
+                        state.SeedFailures = 0;
+                        state.NextSeedAttempt = default;
+                        state.EmptyHistoryAnswers = 0;
+                    }
                 }
             }
         }
 
         foreach (var slot in retired)
         {
-            await slot.DisposeAsync().ConfigureAwait(false);
+            await DisposeSlotQuietlyAsync(slot).ConfigureAwait(false);
         }
     }
 
@@ -960,12 +1020,14 @@ public sealed class MarketDataService : IAsyncDisposable
     private void SeedEmptySeries()
     {
         List<(AssetState State, IHistoryProvider History)> work = [];
+        var now = _timeProvider.GetUtcNow();
         lock (_gate)
         {
             foreach (var state in _assets.Values)
             {
                 if (!state.Seeded
                     && !state.Seeding
+                    && state.NextSeedAttempt <= now
                     && _slots.TryGetValue(state.Asset.ProviderId, out var slot)
                     && slot.Provider is IHistoryProvider history)
                 {
@@ -1001,6 +1063,15 @@ public sealed class MarketDataService : IAsyncDisposable
             var points = await history.GetHistoryAsync(state.Asset).ConfigureAwait(false);
             lock (_gate)
             {
+                state.SeedFailures = 0;
+                state.NextSeedAttempt = default;
+                if (points.Count == 0 && ++state.EmptyHistoryAnswers >= MaxEmptyHistoryAnswers)
+                {
+                    // A source without history, or a market without data today, would otherwise be asked again with every
+                    // settings change; a few empty answers in a row are taken as the answer.
+                    state.Seeded = true;
+                }
+
                 if (points.Count > 0 && _assets.ContainsKey(state.Asset.Id))
                 {
                     var latest = state.Latest;
@@ -1019,6 +1090,17 @@ public sealed class MarketDataService : IAsyncDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _logger.LogWarning(ex, "Could not load history for {AssetId}", state.Asset.Id);
+
+            // Asking again with every route, which also happens when the window is shown or hidden, would hammer a
+            // source that keeps failing: wait longer after each failure, up to a cap.
+            lock (_gate)
+            {
+                state.SeedFailures++;
+                var wait = TimeSpan.FromTicks(Math.Min(
+                    SeedRetryBase.Ticks << Math.Min(state.SeedFailures - 1, 10),
+                    SeedRetryMax.Ticks));
+                state.NextSeedAttempt = _timeProvider.GetUtcNow() + wait;
+            }
         }
         finally
         {
@@ -1387,6 +1469,21 @@ public sealed class MarketDataService : IAsyncDisposable
         /// Gets or sets a value indicating whether the sparkline was seeded from history.
         /// </summary>
         public bool Seeded { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many history loads ended without a single point.
+        /// </summary>
+        public int EmptyHistoryAnswers { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many history loads failed in a row.
+        /// </summary>
+        public int SeedFailures { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time before which the history is not asked for again after a failure.
+        /// </summary>
+        public DateTimeOffset NextSeedAttempt { get; set; }
     }
 
     /// <summary>
@@ -1437,17 +1534,24 @@ public sealed class MarketDataService : IAsyncDisposable
         public async Task DisposeAsync()
         {
             await Cts.CancelAsync().ConfigureAwait(false);
-            await Provider.DisposeAsync().ConfigureAwait(false);
             try
             {
-                await Pump.ConfigureAwait(false);
+                await Provider.DisposeAsync().ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            finally
             {
-                // Expected.
-            }
+                // The pump must end and the source be released even when the provider fails to dispose.
+                try
+                {
+                    await Pump.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected.
+                }
 
-            Cts.Dispose();
+                Cts.Dispose();
+            }
         }
     }
 }

@@ -13,9 +13,23 @@ namespace FluxTick.Providers.Common;
 /// <param name="timeProvider">
 /// The clock.
 /// </param>
-public sealed class ExpiringCache<T>(TimeSpan lifetime, TimeProvider timeProvider)
+/// <param name="onStaleServed">
+/// Called when a reload failed and the expired value is served instead, so that the outage is not invisible, with the
+/// failure and the number of reloads that failed in a row (1 for the first); it must not throw.
+/// </param>
+public sealed class ExpiringCache<T>(TimeSpan lifetime, TimeProvider timeProvider, Action<Exception, int>? onStaleServed = null)
     where T : class
 {
+    /// <summary>
+    /// How long an expired value is served after a failed reload before the next attempt.
+    /// </summary>
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// The number of reloads that failed in a row; a reload that succeeds starts it again.
+    /// </summary>
+    private int _failures;
+
     /// <summary>
     /// Guards the fields below.
     /// </summary>
@@ -103,12 +117,39 @@ public sealed class ExpiringCache<T>(TimeSpan lifetime, TimeProvider timeProvide
         }
         catch (Exception ex)
         {
+            T? stale;
+            int failures;
             lock (_gate)
             {
                 _loading = null;
+                failures = ++_failures;
+                stale = _value;
+                if (stale is not null)
+                {
+                    // Keep serving the old value and try again soon instead of failing every caller until it loads.
+                    var retryAfter = lifetime < RetryDelay ? lifetime : RetryDelay;
+                    _loadedAt = timeProvider.GetUtcNow() - lifetime + retryAfter;
+                }
             }
 
-            source.SetException(ex);
+            if (stale is not null)
+            {
+                try
+                {
+                    onStaleServed?.Invoke(ex, failures);
+                }
+                catch (Exception)
+                {
+                    // A failing report must not turn the stale value into a failure.
+                }
+
+                source.SetResult(stale);
+            }
+            else
+            {
+                source.SetException(ex);
+            }
+
             return;
         }
 
@@ -117,6 +158,7 @@ public sealed class ExpiringCache<T>(TimeSpan lifetime, TimeProvider timeProvide
             _value = fresh;
             _loadedAt = timeProvider.GetUtcNow();
             _loading = null;
+            _failures = 0;
         }
 
         source.SetResult(fresh);

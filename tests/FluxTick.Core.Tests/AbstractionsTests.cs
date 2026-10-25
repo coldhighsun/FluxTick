@@ -81,12 +81,27 @@ public class AbstractionsTests
     [InlineData(ProviderOptionType.Bool, "yes", false)]
     [InlineData(ProviderOptionType.Duration, "00:00:05", true)]
     [InlineData(ProviderOptionType.Duration, "5", false)]
+    [InlineData(ProviderOptionType.Duration, "00:00:00", false)]
+    [InlineData(ProviderOptionType.Duration, "-00:00:05", false)]
     [InlineData(ProviderOptionType.String, "anything", true)]
     public void Validate_ByType_AcceptsOnlyWellFormedValues(ProviderOptionType type, string value, bool valid)
     {
         var definition = new ProviderOptionDefinition("k", "k", type, "0");
 
         (definition.Validate(value) is null).Should().Be(valid);
+    }
+
+    /// <summary>
+    /// Verifies a zero duration is reported as below the minimum, with the declared minimum when there is one.
+    /// </summary>
+    [Fact]
+    public void Check_ZeroDuration_IsBelowTheMinimum()
+    {
+        var open = new ProviderOptionDefinition("k", "k", ProviderOptionType.Duration, "00:00:05");
+        var bounded = new ProviderOptionDefinition("k", "k", ProviderOptionType.Duration, "00:00:05", Min: 2, Max: 60);
+
+        open.Check("00:00:00").Should().Match<OptionValidation>(v => v.Error == OptionValidationError.BelowMinimum && v.Limit == 0);
+        bounded.Check("00:00:00").Should().Match<OptionValidation>(v => v.Error == OptionValidationError.BelowMinimum && v.Limit == 2);
     }
 
     /// <summary>

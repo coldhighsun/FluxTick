@@ -62,7 +62,7 @@ public sealed class YahooProvider : PollingProviderBase, IHistoryProvider, ISymb
     /// <inheritdoc />
     public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
     {
-        var data = await FetchChartAsync(asset.Symbol, cancellationToken).ConfigureAwait(false);
+        var data = await FetchChartAsync(asset.Symbol, intraday: true, cancellationToken).ConfigureAwait(false);
         return data.History;
     }
 
@@ -105,6 +105,7 @@ public sealed class YahooProvider : PollingProviderBase, IHistoryProvider, ISymb
         var succeeded = 0;
         var failed = 0;
         var limited = 0;
+        var refused = 0;
         string? lastError = null;
 
         await Parallel.ForEachAsync(
@@ -114,7 +115,7 @@ public sealed class YahooProvider : PollingProviderBase, IHistoryProvider, ISymb
             {
                 try
                 {
-                    var data = await FetchChartAsync(asset.Symbol, token).ConfigureAwait(false);
+                    var data = await FetchChartAsync(asset.Symbol, intraday: false, token).ConfigureAwait(false);
                     Publish(data.Quote);
                     Interlocked.Increment(ref succeeded);
                 }
@@ -123,27 +124,42 @@ public sealed class YahooProvider : PollingProviderBase, IHistoryProvider, ISymb
                     Interlocked.Increment(ref limited);
                     lastError = "Rate limited by Yahoo";
                 }
-                catch (Exception ex) when (ex is HttpRequestException or YahooApiException or System.Text.Json.JsonException or TaskCanceledException)
+                catch (Exception ex) when (!token.IsCancellationRequested)
                 {
-                    if (token.IsCancellationRequested)
+                    // Any other failure, including an odd response of one symbol, must not fail the other symbols.
+                    // A refused request and a timeout both mean the service does not answer; ask less often.
+                    if (ex is HttpRequestException or TaskCanceledException)
                     {
-                        throw;
+                        Interlocked.Increment(ref refused);
                     }
 
                     Interlocked.Increment(ref failed);
                     lastError = $"{asset.Symbol}: {ex.Message}";
-                    Logger.LogWarning(ex, "Yahoo request for {Symbol} failed", asset.Symbol);
+                    if (ex is HttpRequestException or YahooApiException or System.Text.Json.JsonException or TaskCanceledException)
+                    {
+                        Logger.LogWarning(ex, "Yahoo request for {Symbol} failed", asset.Symbol);
+                    }
+                    else
+                    {
+                        // Not something the service can do: a bug in the parser or the provider, which must not pass for a
+                        // service that does not answer.
+                        Logger.LogError(ex, "Yahoo request for {Symbol} failed unexpectedly", asset.Symbol);
+                    }
                 }
             }).ConfigureAwait(false);
 
-        return new PollOutcome(succeeded, failed + limited, lastError, BackOff: limited > 0);
+        return new PollOutcome(succeeded, failed + limited, lastError, BackOff: limited > 0 || (succeeded == 0 && refused > 0));
     }
 
     /// <summary>
-    /// Downloads and parses the 1-day, 1-minute chart of a symbol.
+    /// Downloads and parses the chart of a symbol.
     /// </summary>
     /// <param name="symbol">
     /// The Yahoo symbol.
+    /// </param>
+    /// <param name="intraday">
+    /// Whether to request the 1-minute series of the day; a poll only needs the quote in the metadata, which a single
+    /// daily candle carries as well.
     /// </param>
     /// <param name="cancellationToken">
     /// A token to cancel the request.
@@ -151,9 +167,10 @@ public sealed class YahooProvider : PollingProviderBase, IHistoryProvider, ISymb
     /// <returns>
     /// The parsed chart.
     /// </returns>
-    private async Task<YahooChartData> FetchChartAsync(string symbol, CancellationToken cancellationToken)
+    private async Task<YahooChartData> FetchChartAsync(string symbol, bool intraday, CancellationToken cancellationToken)
     {
-        var uri = EndpointOptions.Combine(_baseUri, $"/v8/finance/chart/{Uri.EscapeDataString(symbol)}?interval=1m&range=1d");
+        var interval = intraday ? "1m" : "1d";
+        var uri = EndpointOptions.Combine(_baseUri, $"/v8/finance/chart/{Uri.EscapeDataString(symbol)}?interval={interval}&range=1d");
         using var response = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {

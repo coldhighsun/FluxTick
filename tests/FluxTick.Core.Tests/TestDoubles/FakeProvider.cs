@@ -30,6 +30,26 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
     public IReadOnlyList<PricePoint> History { get; set; } = [];
 
     /// <summary>
+    /// The number of calls to <see cref="GetHistoryAsync"/>.
+    /// </summary>
+    private int _historyRequests;
+
+    /// <summary>
+    /// Gets the number of times the history was asked for.
+    /// </summary>
+    public int HistoryRequests => Volatile.Read(ref _historyRequests);
+
+    /// <summary>
+    /// Gets or sets an exception that <see cref="GetHistoryAsync"/> fails with, or <see langword="null"/> for none.
+    /// </summary>
+    public Exception? HistoryFailure { get; set; }
+
+    /// <summary>
+    /// Gets or sets an exception thrown when the subscriptions change, or <see langword="null"/> for none.
+    /// </summary>
+    public Exception? SubscribeFailure { get; set; }
+
+    /// <summary>
     /// Gets or sets the assets returned by <see cref="SearchAsync"/>.
     /// </summary>
     public IReadOnlyList<Asset> SearchResults { get; set; } = [];
@@ -65,8 +85,11 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
     public void ChangeStatus(ProviderConnectionState state, string? message = null) => SetStatus(state, message);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default) =>
-        Task.FromResult(History);
+    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _historyRequests);
+        return HistoryFailure is { } failure ? Task.FromException<IReadOnlyList<PricePoint>>(failure) : Task.FromResult(History);
+    }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default) =>
@@ -79,6 +102,11 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
         IReadOnlyCollection<Asset> removed,
         CancellationToken cancellationToken)
     {
+        if (SubscribeFailure is { } failure)
+        {
+            throw failure;
+        }
+
         // Like the real providers: nothing subscribed means nothing connected.
         if (current.Count == 0)
         {
@@ -138,13 +166,18 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
     /// </summary>
     public List<FakeProvider> Created { get; } = [];
 
+    /// <summary>
+    /// Gets or sets the exception the history of the providers created from now on fails with, or <see langword="null"/>.
+    /// </summary>
+    public Exception? HistoryFailure { get; set; }
+
     /// <inheritdoc />
     public ProviderDescriptor Descriptor { get; }
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)
     {
-        var provider = new FakeProvider(Descriptor, context.Options);
+        var provider = new FakeProvider(Descriptor, context.Options) { HistoryFailure = HistoryFailure };
         Created.Add(provider);
         return provider;
     }
