@@ -38,16 +38,13 @@ jobs:
         run: dotnet publish src/FluxTick.App -c Release -r ${{ matrix.rid }} -p:OfficialBuild=true -o publish/${{ matrix.rid }}
 
       - name: Package
+        if: matrix.rid != 'win-x64'
         shell: bash
         run: |
           cd publish/${{ matrix.rid }}
-          if [ "${{ matrix.rid }}" = "win-x64" ]; then
-            7z a ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick.exe
-          else
-            zip -j ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick
-          fi
+          zip -j ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick
 
-      # The installer gets its own name (-setup.exe) so the in-app updater, which matches FluxTick-{tag}-{rid}.zip, ignores it.
+      # Windows is only released as an installer (no portable zip): the in-app updater installs FluxTick-{tag}-{rid}-setup.exe.
       - name: Build installer
         if: matrix.rid == 'win-x64'
         shell: pwsh
