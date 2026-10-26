@@ -88,6 +88,21 @@ public sealed partial class App : Application
     private UpdateService? _updates;
 
     /// <summary>
+    /// How often the app considers looking for a newer release while it runs.
+    /// </summary>
+    private static readonly TimeSpan UpdateCheckTick = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Looks for a newer release again now and then, because the app may run for a long time.
+    /// </summary>
+    private DispatcherTimer? _updateTimer;
+
+    /// <summary>
+    /// The window that offers the newer version, while it is open.
+    /// </summary>
+    private UpdatePromptWindow? _updatePrompt;
+
+    /// <summary>
     /// The popup that lists the watched instruments after the tray icon was clicked, or <see langword="null"/> until the
     /// first time it is needed.
     /// </summary>
@@ -245,6 +260,10 @@ public sealed partial class App : Application
 
             _updates = _services.GetRequiredService<UpdateService>();
             _updates.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyUpdateTray);
+            _updates.UpdateFound += (_, _) => Dispatcher.UIThread.Post(ShowUpdatePrompt);
+
+            // The installer ends this process without its shutdown, so what is still waiting to be saved is saved first.
+            _updates.PrepareForInstallAsync = InstallPreparation.Create(_geometrySave, _settings);
             StartUpdateCheck();
 
             // The alerts watch the prices whether or not a window shows them, so the notifications are not tied to one.
@@ -526,9 +545,54 @@ public sealed partial class App : Application
     /// </summary>
     private void StartUpdateCheck()
     {
-        if (_settings!.Current.Updates.AutoCheck && _updates!.CanAutoCheck)
+        if (!_updates!.CanAutoCheck)
+        {
+            return;
+        }
+
+        if (_settings!.Current.Updates.AutoCheck)
         {
             Dispatcher.UIThread.Post(async () => await _updates.CheckAsync(manual: false), DispatcherPriority.Background);
+        }
+
+        // The app can run in the tray for weeks. The tick is shorter than the check interval, because the service skips
+        // a check that is too soon after the last one and a tick of exactly that interval would always be too soon. The
+        // switch is read at every tick, so that turning it on later works without a restart. A known newer release is not
+        // asked for again: nothing changes until it is installed, and a pending update is never throttled.
+        _updateTimer = new DispatcherTimer { Interval = UpdateCheckTick };
+        _updateTimer.Tick += async (_, _) =>
+        {
+            // A setup program that was still running when it was first tried may be deletable by now.
+            await _updates.DeleteLeftoversAsync();
+            if (_settings.Current.Updates.AutoCheck && _updates.LatestVersion is null)
+            {
+                await _updates.CheckAsync(manual: false);
+            }
+        };
+        _updateTimer.Start();
+    }
+
+    /// <summary>
+    /// Tells the user that a newer version exists and offers to install it, in a small window at the bottom right of
+    /// the screen. A prompt that is still open is kept.
+    /// </summary>
+    private void ShowUpdatePrompt()
+    {
+        if (_updatePrompt is not null || _services is null || IsExiting)
+        {
+            return;
+        }
+
+        var prompt = new UpdatePromptWindow { DataContext = _services.GetRequiredService<UpdateViewModel>() };
+        prompt.Closed += (_, _) => _updatePrompt = null;
+        _updatePrompt = prompt;
+        prompt.Show();
+
+        if (prompt.Screens.Primary is { } screen)
+        {
+            prompt.Measure(new Size(prompt.Width, double.PositiveInfinity));
+            var size = PixelSize.FromSize(prompt.DesiredSize, screen.Scaling);
+            prompt.Position = ToastStackMath.Place(screen.WorkingArea, [size])[0];
         }
     }
 
@@ -542,7 +606,7 @@ public sealed partial class App : Application
             return;
         }
 
-        var announce = _updates.Status is UpdateStatus.Available or UpdateStatus.Downloading or UpdateStatus.Downloaded or UpdateStatus.Failed
+        var announce = _updates.Status is UpdateStatus.Available or UpdateStatus.Downloading or UpdateStatus.Downloaded or UpdateStatus.Installing or UpdateStatus.Failed
             && _updates.LatestVersion is not null;
         if (!announce)
         {

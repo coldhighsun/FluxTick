@@ -125,7 +125,8 @@ public static class AppHost
             sp.GetRequiredService<ILogger<UpdateService>>(),
             UpdateService.ReadVersion(typeof(AppHost).Assembly),
             UpdateService.ReadOfficialBuild(typeof(AppHost).Assembly),
-            AppPaths.UpdatesDirectory));
+            AppPaths.UpdatesDirectory,
+            useSetup: OperatingSystem.IsWindows()));
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<AddAssetViewModel>();
         services.AddSingleton<SettingsViewModel>();
