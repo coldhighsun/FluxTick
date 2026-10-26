@@ -329,11 +329,22 @@
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoCheck}" />
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" />
+                  <Button Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding ShowCheck}" />
+                  <Button Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
                   <Button Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
                   <Button Content="{loc:T Update_OpenFolder}" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsDownloaded}" />
                 </StackPanel>
                 <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{loc:T Update_ReleaseNotes}" FontWeight="SemiBold" VerticalAlignment="Center"
+                             IsVisible="{Binding HasReleaseNotes}" />
+                  <Button Grid.Column="1" Classes="link" Content="{loc:T Update_OpenReleasePage}" FontSize="11"
+                          Command="{Binding OpenReleasePageCommand}" IsVisible="{Binding HasReleasePage}" />
+                </Grid>
+                <TextBox Text="{Binding ReleaseNotes, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
+                         TextWrapping="Wrap" Height="160" FontSize="11" IsVisible="{Binding HasReleaseNotes}"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </StackPanel>
             </Border>
           </StackPanel>

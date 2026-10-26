@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Avalonia.Interactivity;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 
 namespace FluxTick.App.Views;
@@ -50,13 +50,6 @@ public sealed partial class AboutWindow : ToolWindow
             return;
         }
 
-        try
-        {
-            Process.Start(new ProcessStartInfo(about.HomepageUrl) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            // No browser is registered; there is nothing the window can do about it.
-        }
+        ExternalLinks.TryOpenGitHub(about.HomepageUrl);
     }
 }

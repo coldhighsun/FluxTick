@@ -1,8 +1,12 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using GitHubReleaseUpdater;
 using GitHubReleaseUpdater.Assets;
 using GitHubReleaseUpdater.Download;
+using GitHubReleaseUpdater.Exceptions;
+using GitHubReleaseUpdater.Installation;
 using GitHubReleaseUpdater.LastCheck;
 using GitHubReleaseUpdater.Versioning;
 using Microsoft.Extensions.Logging;
@@ -45,15 +49,21 @@ public enum UpdateStatus
     Downloaded,
 
     /// <summary>
+    /// The installer of the downloaded package was started. It closes the program when it replaces it; when it ends
+    /// without doing so, the status goes back to <see cref="Downloaded"/>.
+    /// </summary>
+    Installing,
+
+    /// <summary>
     /// The last check or download failed.
     /// </summary>
     Failed,
 }
 
 /// <summary>
-/// Looks for a newer release of FluxTick on GitHub and downloads its package. It does not replace the running
-/// program: the package is verified and left in the updates directory for the user to unpack. Members must be
-/// used from the UI thread.
+/// Looks for a newer release of FluxTick on GitHub and downloads its package. Where the package is a setup program
+/// (Windows) it can also start it, which replaces the running program; elsewhere the package is verified and left in
+/// the updates directory for the user to unpack. Members must be used from the UI thread.
 /// </summary>
 public sealed class UpdateService
 {
@@ -73,9 +83,30 @@ public sealed class UpdateService
     public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// The name of a release package; <c>{rid}</c> is the runtime of the running program, such as <c>win-x64</c>.
+    /// The name of a release archive; <c>{rid}</c> is the runtime of the running program, such as <c>linux-x64</c>.
     /// </summary>
-    internal const string AssetPattern = "FluxTick-{tag}-{rid}.zip";
+    internal const string ArchivePattern = "FluxTick-{tag}-{rid}.zip";
+
+    /// <summary>
+    /// The name of a release setup program; <c>{rid}</c> is the runtime of the running program, such as <c>win-x64</c>.
+    /// </summary>
+    internal const string SetupPattern = "FluxTick-{tag}-{rid}-setup.exe";
+
+    /// <summary>
+    /// How many times <see cref="InstallerGracePeriod"/> a setup program that cannot be watched is given.
+    /// </summary>
+    private const int UnwatchedGraceFactor = 10;
+
+    /// <summary>
+    /// The argument that makes the setup program close FluxTick when it replaces it, whatever its silent-mode default is.
+    /// </summary>
+    internal const string CloseApplicationsArgument = "/CLOSEAPPLICATIONS";
+
+    /// <summary>
+    /// The argument that makes the setup program start FluxTick again once it is done, which it does not after a
+    /// silent install otherwise.
+    /// </summary>
+    internal const string RelaunchArgument = "/RELAUNCH=1";
 
     /// <summary>
     /// Remembers when the last check happened.
@@ -103,9 +134,24 @@ public sealed class UpdateService
     private readonly bool _officialBuild;
 
     /// <summary>
+    /// Starts the setup program, or <see langword="null"/> for the default one.
+    /// </summary>
+    private readonly IInstallerLauncher? _launcher;
+
+    /// <summary>
     /// The result of the last check that found a newer release.
     /// </summary>
     private UpdateCheckResult? _check;
+
+    /// <summary>
+    /// The package that was downloaded and verified for <see cref="_check"/>.
+    /// </summary>
+    private DownloadResult? _download;
+
+    /// <summary>
+    /// The version the user was told about, so that it is announced once.
+    /// </summary>
+    private SemanticVersion? _announced;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UpdateService"/> class.
@@ -125,8 +171,14 @@ public sealed class UpdateService
     /// <param name="downloadDirectory">
     /// Where packages are downloaded to.
     /// </param>
+    /// <param name="useSetup">
+    /// Whether the release package is a setup program that can be started (Windows), instead of an archive.
+    /// </param>
     /// <param name="http">
     /// The client used for GitHub, or <see langword="null"/> for the shared default one.
+    /// </param>
+    /// <param name="launcher">
+    /// Starts the setup program, or <see langword="null"/> for the default one.
     /// </param>
     public UpdateService(
         string stateFile,
@@ -134,20 +186,51 @@ public sealed class UpdateService
         SemanticVersion? currentVersion,
         bool officialBuild,
         string downloadDirectory,
-        HttpClient? http = null)
+        bool useSetup,
+        HttpClient? http = null,
+        IInstallerLauncher? launcher = null)
     {
         _store = new FileLastCheckStore(stateFile, logger);
         _logger = logger;
         CurrentVersion = currentVersion;
         _officialBuild = officialBuild;
         _downloadDirectory = downloadDirectory;
+        CanInstallPackages = useSetup;
         _http = http;
+        _launcher = launcher;
     }
 
     /// <summary>
     /// Raised whenever <see cref="Status"/> or the download progress changes.
     /// </summary>
     public event EventHandler? Changed;
+
+    /// <summary>
+    /// Gets or sets what the program does just before the setup program is started, such as saving what is still
+    /// waiting to be saved. The setup program ends the program without its own shutdown. A failure of it does not stop
+    /// the install.
+    /// </summary>
+    public Func<Task>? PrepareForInstallAsync { get; set; }
+
+    /// <summary>
+    /// Gets how long <see cref="PrepareForInstallAsync"/> is given before the setup program is started anyway.
+    /// </summary>
+    internal TimeSpan PrepareTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Gets how long the program waits after the setup program ended before it offers the package again.
+    /// </summary>
+    internal TimeSpan InstallerGracePeriod { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Gets the wait for a process to end, replaceable so that tests need no real process.
+    /// </summary>
+    internal Func<int, Task> WaitForProcessExitAsync { get; init; } = WatchProcessAsync;
+
+    /// <summary>
+    /// Raised when an automatic check finds a newer release that was not announced yet and that can be installed.
+    /// </summary>
+    public event EventHandler? UpdateFound;
 
     /// <summary>
     /// Gets the running version, or <see langword="null"/> when it cannot be told.
@@ -165,6 +248,18 @@ public sealed class UpdateService
     public SemanticVersion? LatestVersion => _check?.Update?.Version;
 
     /// <summary>
+    /// Gets the release notes of the newer version as GitHub shows them, or <see langword="null"/> when there are none.
+    /// </summary>
+    public string? ReleaseNotes => _check?.Update is null || string.IsNullOrWhiteSpace(_check.ReleaseNotes)
+        ? null
+        : _check.ReleaseNotes.Trim();
+
+    /// <summary>
+    /// Gets the address of the page of the newer release on GitHub, or <see langword="null"/> when there is none.
+    /// </summary>
+    public string? ReleaseUrl => _check?.Update is null ? null : _check.Release?.HtmlUrl;
+
+    /// <summary>
     /// Gets the download progress between 0 and 100, or <see langword="null"/> when it is not known.
     /// </summary>
     public double? DownloadPercent { get; private set; }
@@ -172,7 +267,7 @@ public sealed class UpdateService
     /// <summary>
     /// Gets the full path of the downloaded package once <see cref="Status"/> is <see cref="UpdateStatus.Downloaded"/>.
     /// </summary>
-    public string? DownloadedFile { get; private set; }
+    public string? DownloadedFile => _download?.FilePath;
 
     /// <summary>
     /// Gets a value indicating whether the app may look for an update by itself. It may not when the running version
@@ -191,6 +286,18 @@ public sealed class UpdateService
     /// Gets a value indicating whether the package can be downloaded now, also to try again after a failure.
     /// </summary>
     public bool CanDownload => HasPackage && Status is UpdateStatus.Available or UpdateStatus.Failed;
+
+    /// <summary>
+    /// Gets a value indicating whether the release package is a setup program that this app can start (Windows),
+    /// instead of an archive to unpack.
+    /// </summary>
+    public bool CanInstallPackages { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the downloaded setup program can be started now, also to try again after a
+    /// failure to start it.
+    /// </summary>
+    public bool CanInstall => CanInstallPackages && _download is not null && Status is UpdateStatus.Downloaded or UpdateStatus.Failed;
 
     /// <summary>
     /// Reads the version of the running program from its assembly, which MinVer sets from the git tag.
@@ -247,7 +354,7 @@ public sealed class UpdateService
     /// </returns>
     public async Task CheckAsync(bool manual)
     {
-        if (CurrentVersion is null || Status is UpdateStatus.Checking or UpdateStatus.Downloading)
+        if (CurrentVersion is null || Status is UpdateStatus.Checking or UpdateStatus.Downloading or UpdateStatus.Installing)
         {
             return;
         }
@@ -279,19 +386,22 @@ public sealed class UpdateService
                 _check = result;
                 if (!keepDownload)
                 {
-                    DownloadedFile = null;
+                    _download = null;
                 }
 
                 _logger.LogInformation("Update {Latest} is available, running {Current}", result.LatestVersion, CurrentVersion);
                 SetStatus(keepDownload ? UpdateStatus.Downloaded : UpdateStatus.Available);
                 await _store.SetUpdateFoundAsync(true);
+                Announce(manual, result.Update!.Version);
             }
             else
             {
                 _check = null;
-                DownloadedFile = null;
+                _download = null;
                 SetStatus(UpdateStatus.UpToDate);
                 await _store.SetUpdateFoundAsync(false);
+
+                await DeleteLeftoversAsync();
             }
         }
         catch (Exception ex)
@@ -331,7 +441,7 @@ public sealed class UpdateService
         }
 
         DownloadPercent = 0;
-        DownloadedFile = null;
+        _download = null;
         SetStatus(UpdateStatus.Downloading);
         try
         {
@@ -353,7 +463,7 @@ public sealed class UpdateService
                 Changed?.Invoke(this, EventArgs.Empty);
             });
             var file = await updater.DownloadAsync(_check, _downloadDirectory, progress);
-            DownloadedFile = file.FilePath;
+            _download = file;
             _logger.LogInformation("Downloaded update to {Path}, verified: {Verified}", file.FilePath, file.Verified);
             SetStatus(UpdateStatus.Downloaded);
         }
@@ -365,13 +475,211 @@ public sealed class UpdateService
     }
 
     /// <summary>
+    /// Deletes what earlier downloads left in the updates directory once the app is up to date: the setup program of an
+    /// update that was just installed is not needed again. It is a chore on the side, so a failure only means the files
+    /// stay until the next try; a file still in use, such as the setup program that is just finishing, is the usual one.
+    /// The disk work is done off the UI thread, and the status is looked at again before each file, so that a download
+    /// that starts meanwhile keeps its files.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the files that could be deleted are deleted.
+    /// </returns>
+    public async Task DeleteLeftoversAsync()
+    {
+        if (Status != UpdateStatus.UpToDate)
+        {
+            return;
+        }
+
+        try
+        {
+            var files = await Task.Run(() => Directory.Exists(_downloadDirectory)
+                ? Directory.GetFiles(_downloadDirectory)
+                : []);
+            foreach (var file in files)
+            {
+                if (Status != UpdateStatus.UpToDate)
+                {
+                    return;
+                }
+
+                await Task.Run(() => TryDelete(file));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex, "Could not delete the leftover update files");
+        }
+    }
+
+    /// <summary>
+    /// Starts the downloaded setup program, which closes the running program itself once it replaces it. The program
+    /// is not closed here, so that a refused elevation prompt or a setup program that fails or is cancelled leaves it
+    /// running; when the setup program ends while the program still runs, the package is offered again.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the setup program was started and has ended, or failed to start.
+    /// </returns>
+    public async Task InstallAsync()
+    {
+        if (!CanInstall || _download is not { } download)
+        {
+            return;
+        }
+
+        SetStatus(UpdateStatus.Installing);
+        await PrepareAsync();
+        InstallerLaunchResult launched;
+        try
+        {
+            using var updater = CreateUpdater();
+            launched = await updater.LaunchInstallerAsync(download, new InstallerLaunchOptions
+            {
+                Arguments = $"{InstallerLaunchOptions.InnoSetupSilent.Arguments} {CloseApplicationsArgument} {RelaunchArgument}",
+                RequireVerified = true,
+            });
+        }
+        catch (InstallerLaunchException ex) when (ex.IsUserCancelled)
+        {
+            _logger.LogInformation("The installer was not allowed to start");
+            SetStatus(UpdateStatus.Downloaded);
+            return;
+        }
+        catch (InstallerLaunchException ex)
+        {
+            _logger.LogWarning(ex, "Could not start the installer");
+            SetStatus(UpdateStatus.Failed);
+            return;
+        }
+        catch (UpdaterException ex)
+        {
+            // The file is not what was verified: trying it again would fail the same way, so it is downloaded again.
+            _logger.LogWarning(ex, "The downloaded installer cannot be used");
+            _download = null;
+            SetStatus(UpdateStatus.Failed);
+            return;
+        }
+        catch (Exception ex)
+        {
+            // Typically a virus scanner holding the fresh file; the file itself is fine, so it is kept for another try.
+            _logger.LogWarning(ex, "Could not start the downloaded installer");
+            SetStatus(UpdateStatus.Failed);
+            return;
+        }
+
+        _logger.LogInformation("Started the installer {Path}", download.FilePath);
+        await WaitForInstallerAsync(launched.ProcessId);
+    }
+
+    /// <summary>
+    /// Lets the program get ready for being ended by the setup program.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when that is done or failed.
+    /// </returns>
+    private async Task PrepareAsync()
+    {
+        if (PrepareForInstallAsync is not { } prepare)
+        {
+            return;
+        }
+
+        try
+        {
+            await prepare().WaitAsync(PrepareTimeout);
+        }
+        catch (Exception ex)
+        {
+            // Not being able to save, or a save that takes too long, must not keep the update from being installed.
+            _logger.LogWarning(ex, "Could not get ready for the installer");
+        }
+    }
+
+    /// <summary>
+    /// Waits for the setup program to end. When it does while this program still runs, it did not replace it: the user
+    /// cancelled it or it failed, so the package is offered again. A short wait follows the end of the process, since a
+    /// setup program may hand over to an elevated copy of itself and end first. A setup program that cannot be watched,
+    /// or that has no process to watch, is given a long time instead.
+    /// </summary>
+    /// <param name="processId">
+    /// The process of the setup program, or <see langword="null"/> when the launcher started none.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the package is offered again.
+    /// </returns>
+    private async Task WaitForInstallerAsync(int? processId)
+    {
+        var wait = InstallerGracePeriod;
+        if (processId is null)
+        {
+            wait *= UnwatchedGraceFactor;
+        }
+        else
+        {
+            try
+            {
+                await WaitForProcessExitAsync(processId.Value);
+            }
+            catch (ArgumentException)
+            {
+                // The setup program is already gone.
+            }
+            catch (Exception ex)
+            {
+                // An elevated setup program, for example, may not be watched from here.
+                wait *= UnwatchedGraceFactor;
+                _logger.LogInformation(ex, "Could not watch the installer, waiting {Wait} for it", wait);
+            }
+        }
+
+        await Task.Delay(wait);
+        _logger.LogWarning("The installer ended without replacing the running program");
+        SetStatus(UpdateStatus.Downloaded);
+    }
+
+    /// <summary>
+    /// Waits for a process to end.
+    /// </summary>
+    /// <param name="processId">
+    /// The process.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the process ended.
+    /// </returns>
+    private static async Task WatchProcessAsync(int processId)
+    {
+        using var process = Process.GetProcessById(processId);
+        await process.WaitForExitAsync();
+    }
+
+    /// <summary>
+    /// Tells the listeners about a newer release found by an automatic check, once per version.
+    /// </summary>
+    /// <param name="manual">
+    /// Whether the user asked for the check, who sees the result anyway.
+    /// </param>
+    /// <param name="version">
+    /// The newer version.
+    /// </param>
+    private void Announce(bool manual, SemanticVersion version)
+    {
+        if (manual || !CanInstallPackages || !HasPackage || Equals(_announced, version))
+        {
+            return;
+        }
+
+        _announced = version;
+        UpdateFound?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
     /// Deletes what earlier downloads left in the updates directory, except the files of the package about to be
     /// downloaded, whose partial file lets an interrupted download go on. A file that cannot be deleted stays.
     /// </summary>
     /// <param name="keepName">
-    /// The file name of the package about to be downloaded.
+    /// The file name of the package about to be downloaded, or <see langword="null"/> to delete everything.
     /// </param>
-    private void CleanDownloadDirectory(string keepName)
+    private void CleanDownloadDirectory(string? keepName)
     {
         if (!Directory.Exists(_downloadDirectory))
         {
@@ -380,19 +688,31 @@ public sealed class UpdateService
 
         foreach (var file in Directory.EnumerateFiles(_downloadDirectory))
         {
-            if (Path.GetFileName(file).StartsWith(keepName, StringComparison.Ordinal))
+            if (keepName is not null && Path.GetFileName(file).StartsWith(keepName, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            try
-            {
-                File.Delete(file);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning(ex, "Could not delete the old update file {Path}", file);
-            }
+            TryDelete(file);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a file of an earlier download. A file that cannot be deleted stays.
+    /// </summary>
+    /// <param name="file">
+    /// The file.
+    /// </param>
+    private void TryDelete(string file)
+    {
+        try
+        {
+            File.Delete(file);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Typically still in use; it is tried again later.
+            _logger.LogInformation(ex, "Could not delete the old update file {Path}", file);
         }
     }
 
@@ -408,8 +728,10 @@ public sealed class UpdateService
         Repo = Repo,
         CurrentVersion = CurrentVersion!,
         TagPrefix = "v",
+        // Only stable releases are offered, whatever version is running.
         IncludePrerelease = false,
-        AssetSelector = new PatternAssetSelector(AssetPattern),
+        AssetSelector = new PatternAssetSelector(CanInstallPackages ? SetupPattern : ArchivePattern),
+        InstallerLauncher = _launcher,
         RequireChecksum = true,
         LastCheckStore = _store,
         MinimumCheckInterval = MinimumCheckInterval,
