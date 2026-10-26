@@ -65,3 +65,13 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: 
 
 [Run]
 Filename: "{app}\FluxTick.exe"; Description: "{cm:LaunchProgram,FluxTick}"; Flags: nowait postinstall skipifsilent
+; An update started by the app installs silently; this starts the program again afterwards, which skipifsilent above
+; does not. The app passes /RELAUNCH=1 for that. It runs as the user who started the setup, not as an elevated one.
+Filename: "{app}\FluxTick.exe"; Flags: nowait runasoriginaluser; Check: ShouldRelaunch
+
+[Code]
+{ True when the app asked to be started again once the update is installed. }
+function ShouldRelaunch: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
