@@ -93,6 +93,7 @@ public sealed partial class MainWindow
     /// </summary>
     static MainWindow()
     {
+        PopupSizeFix.Register();
         MenuBase.OpenedEvent.AddClassHandler<ContextMenu>((menu, _) => OpenMenus.Add(menu));
         MenuBase.ClosedEvent.AddClassHandler<ContextMenu>((menu, _) => OpenMenus.Remove(menu));
     }
