@@ -54,11 +54,6 @@ public sealed class AlertService : IDisposable
     private int _watchedCount;
 
     /// <summary>
-    /// Keeps the data sources connected while a rule is enabled. Guarded by <see cref="_gate"/>.
-    /// </summary>
-    private IDisposable? _usage;
-
-    /// <summary>
     /// Whether the service was disposed. Guarded by <see cref="_gate"/>.
     /// </summary>
     private bool _disposed;
@@ -110,8 +105,6 @@ public sealed class AlertService : IDisposable
         {
             _disposed = true;
             _watched = [];
-            _usage?.Dispose();
-            _usage = null;
         }
     }
 
@@ -129,7 +122,6 @@ public sealed class AlertService : IDisposable
     /// <summary>
     /// Takes over the enabled rules of the current settings. A rule that stays as it is keeps what it was last
     /// evaluated to; a new or changed one starts again, so it only fires when its condition becomes true after that.
-    /// The data sources stay connected while at least one rule is enabled.
     /// </summary>
     private void Reload()
     {
@@ -167,15 +159,6 @@ public sealed class AlertService : IDisposable
 
             _watched = next;
             _watchedCount = rules.Count;
-            if (rules.Count > 0)
-            {
-                _usage ??= _market.AcquireUsage();
-            }
-            else
-            {
-                _usage?.Dispose();
-                _usage = null;
-            }
         }
     }
 

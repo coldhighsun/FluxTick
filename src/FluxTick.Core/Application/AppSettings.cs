@@ -366,11 +366,6 @@ public sealed class GeneralSettings
     /// in the order they are listed. It is empty until the user adds instruments.
     /// </summary>
     public List<string> TrayAssets { get; set; } = [];
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the data sources connect only while the window or the tray list is shown.
-    /// </summary>
-    public bool ConnectOnDemand { get; set; } = true;
 }
 
 /// <summary>

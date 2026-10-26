@@ -68,25 +68,7 @@ internal sealed class EdgeDockModel
     /// <summary>
     /// Gets a value indicating whether the window rests, or is on its way to rest, in its hidden position.
     /// </summary>
-    public bool Hidden
-    {
-        get;
-        private set
-        {
-            if (field == value)
-            {
-                return;
-            }
-
-            field = value;
-            HiddenChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    /// <summary>
-    /// Raised when <see cref="Hidden"/> changes.
-    /// </summary>
-    public event EventHandler? HiddenChanged;
+    public bool Hidden { get; private set; }
 
     /// <summary>
     /// The number of edges a window can dock to: every edge there is, except none.

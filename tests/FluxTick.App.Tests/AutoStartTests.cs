@@ -261,21 +261,4 @@ public sealed class TrayPolicyTests
         h.SettingsPage.StartMinimized.Should().BeTrue();
         h.SettingsPage.CloseToTray.Should().BeFalse();
     }
-
-    /// <summary>
-    /// Verifies connecting on demand is on by default and the switch is persisted.
-    /// </summary>
-    [Fact]
-    public async Task ConnectOnDemand_DefaultsToOnAndIsPersisted()
-    {
-        await using var h = new Harness();
-        h.SettingsPage.Reload();
-        h.SettingsPage.ConnectOnDemand.Should().BeTrue();
-
-        h.SettingsPage.ConnectOnDemand = false;
-
-        await Harness.EventuallyAsync(() => h.Store.Stored!.General.ConnectOnDemand == false);
-        h.SettingsPage.Reload();
-        h.SettingsPage.ConnectOnDemand.Should().BeFalse();
-    }
 }

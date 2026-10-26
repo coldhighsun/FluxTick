@@ -32,12 +32,6 @@ public sealed record MarketDataServiceOptions
     public TimeSpan HealthInterval { get; init; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Gets how long the sources stay connected after the last user of the data is gone, when connecting on demand.
-    /// A window that is shown and hidden in quick succession then does not reconnect every time.
-    /// </summary>
-    public TimeSpan IdleDisconnectDelay { get; init; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>
     /// Gets how long a handler of <see cref="MarketDataService.ProviderStatusChanged"/> or
     /// <see cref="MarketDataService.SnapshotChanged"/> may take before a warning is logged, because the events behind it
     /// wait.
@@ -139,43 +133,6 @@ public sealed class MarketDataService : IAsyncDisposable
     private readonly ITimer _healthTimer;
 
     /// <summary>
-    /// The settings applied last, used to re-route the subscriptions when the use of the data changes.
-    /// </summary>
-    private AppSettings? _lastSettings;
-
-    /// <summary>
-    /// How many users currently look at the data. Guarded by <see cref="_gate"/>.
-    /// </summary>
-    private int _usageCount;
-
-    /// <summary>
-    /// Whether sources connect only while the data is used. Guarded by <see cref="_gate"/>.
-    /// </summary>
-    private bool _onDemand;
-
-    /// <summary>
-    /// Whether the last user left recently and the sources are still kept connected. Guarded by <see cref="_gate"/>.
-    /// </summary>
-    private bool _inGrace;
-
-    /// <summary>
-    /// Ends the grace period. Guarded by <see cref="_gate"/>.
-    /// </summary>
-    private ITimer? _graceTimer;
-
-    /// <summary>
-    /// Identifies the running grace period, so that a callback of one that was replaced is ignored. Guarded by
-    /// <see cref="_gate"/>.
-    /// </summary>
-    private int _graceVersion;
-
-    /// <summary>
-    /// Whether the subscriptions were last routed to the providers, or <see langword="null"/> before the first time.
-    /// Guarded by <see cref="_applyLock"/>.
-    /// </summary>
-    private bool? _connected;
-
-    /// <summary>
     /// Whether the service was disposed; set once, read under <see cref="_applyLock"/>.
     /// </summary>
     private volatile bool _disposed;
@@ -274,7 +231,7 @@ public sealed class MarketDataService : IAsyncDisposable
     {
         lock (_gate)
         {
-            return _slots.TryGetValue(providerId, out var slot) ? EffectiveStatus(slot.Provider.Status) : null;
+            return _slots.TryGetValue(providerId, out var slot) ? slot.Provider.Status : null;
         }
     }
 
@@ -331,32 +288,6 @@ public sealed class MarketDataService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Registers that someone looks at the data. While connecting on demand, the sources only connect while at least one
-    /// usage is held (and for a short grace period after the last one ends). Dispose the result to end the usage.
-    /// </summary>
-    /// <returns>
-    /// The usage to dispose when the data is no longer looked at.
-    /// </returns>
-    public IDisposable AcquireUsage()
-    {
-        bool changed;
-        lock (_gate)
-        {
-            var before = WantsConnection;
-            _usageCount++;
-            CancelGrace();
-            changed = WantsConnection != before;
-        }
-
-        if (changed)
-        {
-            _ = ReapplyAsync();
-        }
-
-        return new Usage(this);
-    }
-
-    /// <summary>
     /// Reconciles the running providers and subscriptions with the settings: starts newly enabled providers,
     /// restarts those whose options changed, stops disabled ones and routes the watchlist.
     /// </summary>
@@ -381,23 +312,6 @@ public sealed class MarketDataService : IAsyncDisposable
                 return;
             }
 
-            bool connect;
-            lock (_gate)
-            {
-                // The first settings are the ones the app starts with: nobody has looked yet, so nothing connects until
-                // somebody does. Only a later switch-on gets the grace period of a user who just left.
-                var first = _lastSettings is null;
-                _lastSettings = settings;
-                var onDemand = settings.General.ConnectOnDemand;
-                if (onDemand && !_onDemand && _usageCount == 0 && !first)
-                {
-                    StartGrace();
-                }
-
-                _onDemand = onDemand;
-                connect = WantsConnection;
-            }
-
             var desired = new Dictionary<string, IReadOnlyDictionary<string, string>>();
             foreach (var descriptor in _registry.Descriptors.Where(settings.IsProviderEnabled))
             {
@@ -409,7 +323,7 @@ public sealed class MarketDataService : IAsyncDisposable
 
             var watchlist = WatchlistOf(settings);
             UpdateAssets(watchlist);
-            announced.AddRange(await RouteSubscriptionsAsync(watchlist, connect, cancellationToken).ConfigureAwait(false));
+            await RouteSubscriptionsAsync(watchlist, cancellationToken).ConfigureAwait(false);
             snapshots = CollectHealthChanges(forceRaise: true);
         }
         finally
@@ -430,11 +344,6 @@ public sealed class MarketDataService : IAsyncDisposable
         // on one of them, so a stuck provider cannot block shutdown.
         _disposed = true;
         await _healthTimer.DisposeAsync().ConfigureAwait(false);
-        lock (_gate)
-        {
-            CancelGrace();
-        }
-
         await DisposeSlotsAsync().ConfigureAwait(false);
 
         // An apply that was already running may have started providers meanwhile; give it a moment, then dispose those.
@@ -500,126 +409,6 @@ public sealed class MarketDataService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets a value indicating whether the sources should be connected. Must be called while holding the lock.
-    /// </summary>
-    private bool WantsConnection => !_onDemand || _usageCount > 0 || _inGrace;
-
-    /// <summary>
-    /// Ends one usage and, when it was the last one, keeps the sources for the grace period.
-    /// </summary>
-    private void ReleaseUsage()
-    {
-        lock (_gate)
-        {
-            if (_usageCount == 0)
-            {
-                return;
-            }
-
-            _usageCount--;
-            if (_usageCount == 0 && _onDemand)
-            {
-                StartGrace();
-            }
-        }
-    }
-
-    /// <summary>
-    /// Starts the grace period after which the sources disconnect. Must be called while holding the lock.
-    /// </summary>
-    private void StartGrace()
-    {
-        CancelGrace();
-        _inGrace = true;
-        var version = _graceVersion;
-        _graceTimer = _timeProvider.CreateTimer(_ => OnGraceElapsed(version), null, _options.IdleDisconnectDelay, Timeout.InfiniteTimeSpan);
-    }
-
-    /// <summary>
-    /// Stops a running grace period. Must be called while holding the lock.
-    /// </summary>
-    private void CancelGrace()
-    {
-        _inGrace = false;
-        _graceVersion++;
-        _graceTimer?.Dispose();
-        _graceTimer = null;
-    }
-
-    /// <summary>
-    /// Disconnects the sources when the grace period ended without a new usage.
-    /// </summary>
-    /// <param name="version">
-    /// The grace period the callback belongs to.
-    /// </param>
-    private void OnGraceElapsed(int version)
-    {
-        lock (_gate)
-        {
-            if (!_inGrace || version != _graceVersion)
-            {
-                return;
-            }
-
-            CancelGrace();
-            if (WantsConnection)
-            {
-                return;
-            }
-        }
-
-        _ = ReapplyAsync();
-    }
-
-    /// <summary>
-    /// Routes the subscriptions again with the settings applied last, after the use of the data changed.
-    /// </summary>
-    /// <returns>
-    /// A task that completes once the subscriptions are updated.
-    /// </returns>
-    private async Task ReapplyAsync()
-    {
-        List<string> announced = [];
-        List<AssetId> snapshots = [];
-        await _applyLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            AppSettings? settings;
-            bool connect;
-            lock (_gate)
-            {
-                settings = _lastSettings;
-                connect = WantsConnection;
-            }
-
-            // Nothing to do before the first apply, after dispose, or when the use changed but the state did not
-            // (for example the window was shown and hidden again within the grace period).
-            if (settings is null || _disposed || connect == _connected)
-            {
-                return;
-            }
-
-            announced.AddRange(await RouteSubscriptionsAsync(WatchlistOf(settings), connect, CancellationToken.None).ConfigureAwait(false));
-            snapshots = CollectHealthChanges(forceRaise: false);
-        }
-        catch (Exception ex) when (_disposed && ex is OperationCanceledException or ObjectDisposedException)
-        {
-            // The providers were disposed under the apply; nothing is left to update.
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            _logger.LogError(ex, "Could not update the subscriptions after the use of the data changed");
-        }
-        finally
-        {
-            _applyLock.Release();
-        }
-
-        RaiseSnapshots(snapshots);
-        EnqueueStatus(announced);
-    }
-
-    /// <summary>
     /// Builds the instruments of the watchlist, once per id, in display order.
     /// </summary>
     /// <param name="settings">
@@ -632,23 +421,20 @@ public sealed class MarketDataService : IAsyncDisposable
         settings.Watchlist.Select(e => e.ToAsset()).DistinctBy(a => a.Id).ToList();
 
     /// <summary>
-    /// Sends every provider its instruments, or none while disconnected. Must be called while holding the apply lock.
+    /// Sends every provider its instruments: a provider with none is left without a connection until it gets some. Must
+    /// be called while holding the apply lock.
     /// </summary>
     /// <param name="watchlist">
     /// The instruments to track.
-    /// </param>
-    /// <param name="connect">
-    /// Whether the sources should be connected.
     /// </param>
     /// <param name="cancellationToken">
     /// A token to cancel the operation.
     /// </param>
     /// <returns>
-    /// The ids of the providers whose shown status changed, to announce once the apply lock is released.
+    /// A task that completes once every provider has its instruments.
     /// </returns>
-    private async Task<List<string>> RouteSubscriptionsAsync(List<Asset> watchlist, bool connect, CancellationToken cancellationToken)
+    private async Task RouteSubscriptionsAsync(List<Asset> watchlist, CancellationToken cancellationToken)
     {
-        // The age of the last quote is kept across a pause, so prices from before it show as stale until new ones arrive.
         List<ProviderSlot> slots;
         lock (_gate)
         {
@@ -660,7 +446,7 @@ public sealed class MarketDataService : IAsyncDisposable
         List<Exception> failures = [];
         foreach (var slot in slots)
         {
-            var mine = connect ? watchlist.Where(a => a.ProviderId == slot.Id).ToArray() : [];
+            var mine = watchlist.Where(a => a.ProviderId == slot.Id).ToArray();
             try
             {
                 await slot.Provider.SetSubscriptionsAsync(mine, cancellationToken).ConfigureAwait(false);
@@ -677,24 +463,7 @@ public sealed class MarketDataService : IAsyncDisposable
             throw failures.Count == 1 ? failures[0] : new AggregateException(failures);
         }
 
-        // Only now: if routing failed above, the next apply still sees the old state and does the work again.
-        var previous = _connected;
-        _connected = connect;
-        List<string> announced = [];
-        if (previous != connect)
-        {
-            LogConnectionChange(connect, first: previous is null);
-
-            // A provider that stays idle sends no event of its own, but what it is shown as changed.
-            announced.AddRange(slots.Where(slot => slot.Provider.Status.State == ProviderConnectionState.Idle).Select(slot => slot.Id));
-        }
-
-        if (connect)
-        {
-            SeedEmptySeries();
-        }
-
-        return announced;
+        SeedEmptySeries();
     }
 
     /// <summary>
@@ -789,7 +558,7 @@ public sealed class MarketDataService : IAsyncDisposable
                 ProviderStatus? status;
                 lock (_gate)
                 {
-                    status = _slots.TryGetValue(id, out var slot) ? EffectiveStatus(slot.Provider.Status) : null;
+                    status = _slots.TryGetValue(id, out var slot) ? slot.Provider.Status : null;
                 }
 
                 if (status is null)
@@ -812,60 +581,6 @@ public sealed class MarketDataService : IAsyncDisposable
             {
                 _logger.LogError(ex, "Could not handle the status of provider {ProviderId}", id);
             }
-        }
-    }
-
-    /// <summary>
-    /// Logs that the sources were connected or disconnected on purpose, with the reason.
-    /// </summary>
-    /// <param name="connected">
-    /// Whether the sources are connected now.
-    /// </param>
-    /// <param name="first">
-    /// Whether this is the first state since the start, so nothing was connected or disconnected before it.
-    /// </param>
-    private void LogConnectionChange(bool connected, bool first)
-    {
-        bool onDemand;
-        int usages;
-        lock (_gate)
-        {
-            onDemand = _onDemand;
-            usages = _usageCount;
-        }
-
-        if (connected)
-        {
-            _logger.LogInformation(
-                onDemand ? "Data sources connected: {Usages} window(s) show prices" : "Data sources connected: connecting on demand is off",
-                usages);
-        }
-        else if (first)
-        {
-            _logger.LogInformation("Data sources stay disconnected: no window shows prices yet");
-        }
-        else
-        {
-            _logger.LogInformation("Data sources disconnected: no window shows prices and the grace period is over");
-        }
-    }
-
-    /// <summary>
-    /// Reports a provider that was disconnected on purpose as paused instead of idle.
-    /// </summary>
-    /// <param name="status">
-    /// The status the provider reports.
-    /// </param>
-    /// <returns>
-    /// The status to show.
-    /// </returns>
-    private ProviderStatus EffectiveStatus(ProviderStatus status)
-    {
-        lock (_gate)
-        {
-            return status.State == ProviderConnectionState.Idle && !WantsConnection
-                ? new ProviderStatus(ProviderConnectionState.Paused)
-                : status;
         }
     }
 
@@ -1091,8 +806,8 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             _logger.LogWarning(ex, "Could not load history for {AssetId}", state.Asset.Id);
 
-            // Asking again with every route, which also happens when the window is shown or hidden, would hammer a
-            // source that keeps failing: wait longer after each failure, up to a cap.
+            // Asking again with every route, which happens with every change of the settings, would hammer a source that
+            // keeps failing: wait longer after each failure, up to a cap.
             lock (_gate)
             {
                 state.SeedFailures++;
@@ -1390,29 +1105,6 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </returns>
     private static bool OptionsEqual(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) =>
         left.Count == right.Count && left.All(p => right.TryGetValue(p.Key, out var v) && v == p.Value);
-
-    /// <summary>
-    /// One held usage of the data; disposing it more than once ends it only once.
-    /// </summary>
-    /// <param name="owner">
-    /// The service that counts the usage.
-    /// </param>
-    private sealed class Usage(MarketDataService owner) : IDisposable
-    {
-        /// <summary>
-        /// Whether the usage was already ended.
-        /// </summary>
-        private int _disposed;
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) == 0)
-            {
-                owner.ReleaseUsage();
-            }
-        }
-    }
 
     /// <summary>
     /// Mutable per-instrument state guarded by the service lock.
