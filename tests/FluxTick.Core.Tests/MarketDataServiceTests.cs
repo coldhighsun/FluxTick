@@ -60,7 +60,6 @@ public class MarketDataServiceTests
     private static AppSettings SettingsFor(params Asset[] assets)
     {
         var settings = new AppSettings();
-        settings.General.ConnectOnDemand = false;
         settings.Watchlist.AddRange(assets.Select(WatchlistEntry.From));
         return settings;
     }
@@ -85,319 +84,6 @@ public class MarketDataServiceTests
             }
 
             await Task.Delay(10);
-        }
-    }
-
-    /// <summary>
-    /// Builds settings that connect on demand.
-    /// </summary>
-    /// <param name="assets">
-    /// The assets to track.
-    /// </param>
-    /// <returns>
-    /// The settings.
-    /// </returns>
-    private static AppSettings OnDemandFor(params Asset[] assets)
-    {
-        var settings = SettingsFor(assets);
-        settings.General.ConnectOnDemand = true;
-        return settings;
-    }
-
-    /// <summary>
-    /// Verifies nothing is subscribed while nobody uses the data, and everything once somebody does.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_WithoutUsage_SubscribesNothingUntilAcquired()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-
-        // The grace period after switching on keeps the sources until it elapses.
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-
-        using var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-    }
-
-    /// <summary>
-    /// Verifies the sources stay connected for the grace period after the last usage ended, and a new usage cancels it.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_ReleasedUsage_DisconnectsOnlyAfterGracePeriod()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var first = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-
-        first.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(20));
-        provider.Subscribed.Should().HaveCount(1);
-
-        using var second = service.AcquireUsage();
-        _time.Advance(TimeSpan.FromSeconds(60));
-        provider.Subscribed.Should().HaveCount(1);
-
-        second.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-    }
-
-    /// <summary>
-    /// Verifies applying settings while nobody uses the data does not reconnect the sources.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_ApplyWithoutUsage_StaysDisconnected()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-
-        await service.ApplyAsync(OnDemandFor(Btc, Aapl));
-
-        provider.Subscribed.Should().BeEmpty();
-        service.GetSnapshots().Should().HaveCount(2);
-    }
-
-    /// <summary>
-    /// Verifies turning the option off connects at once, whatever the use of the data.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_SwitchedOff_ConnectsWithoutUsage()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-
-        await service.ApplyAsync(SettingsFor(Btc));
-
-        provider.Subscribed.Should().ContainSingle();
-    }
-
-    /// <summary>
-    /// Verifies a disconnected instrument keeps its last price but shows it as stale once it is old, and a quote after
-    /// reconnecting makes it live again.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_Disconnected_KeepsOldPriceAsStaleUntilANewQuote()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-        provider.Emit(new Quote(Btc.Id, 105m, 100m, _time.GetUtcNow()));
-        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
-
-        usage.Dispose();
-        _time.Advance(TimeSpan.FromMinutes(5));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-
-        var paused = service.GetSnapshots().Single();
-        paused.Quote!.Price.Should().Be(105m);
-        paused.Health.Should().Be(AssetHealth.Stale);
-
-        using var again = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-        service.GetSnapshots().Single().Health.Should().Be(AssetHealth.Stale);
-
-        provider.Emit(new Quote(Btc.Id, 106m, 100m, _time.GetUtcNow()));
-        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
-    }
-
-    /// <summary>
-    /// Verifies a usage taken after disposal does not start providers again.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_UsageAfterDispose_DoesNotRecreateProviders()
-    {
-        var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        await service.DisposeAsync();
-
-        using var usage = service.AcquireUsage();
-        await Task.Delay(100);
-
-        _crypto.Created.Should().ContainSingle();
-    }
-
-    /// <summary>
-    /// Verifies showing and hiding again within the grace period neither touches the providers nor raises events.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_UsageWithinGracePeriod_CausesNoWork()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var first = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-        var raised = 0;
-        service.SnapshotChanged += (_, _) => Interlocked.Increment(ref raised);
-
-        first.Dispose();
-        using var second = service.AcquireUsage();
-        await Task.Delay(100);
-
-        raised.Should().Be(0);
-        provider.Subscribed.Should().HaveCount(1);
-        _crypto.Created.Should().ContainSingle();
-    }
-
-    /// <summary>
-    /// Verifies a provider that went idle because nobody looks is reported as paused, and as idle otherwise.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_Disconnected_ReportsProviderAsPaused()
-    {
-        await using var service = NewService();
-        var statuses = new List<ProviderConnectionState>();
-
-        // Subscribed before the first apply: the pump raises a status only when it differs from the one it raised last,
-        // so an event raised before the subscription could leave this test with nothing to see.
-        service.ProviderStatusChanged += (_, e) =>
-        {
-            if (e.ProviderId == "crypto")
-            {
-                lock (statuses)
-                {
-                    statuses.Add(e.Status.State);
-                }
-            }
-        };
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-        service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Idle);
-        provider.ChangeStatus(ProviderConnectionState.Connected);
-
-        usage.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-        provider.ChangeStatus(ProviderConnectionState.Idle);
-
-        service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Paused);
-
-        // The event is raised by the service's own thread, a moment after the change.
-        await WaitUntilAsync(() =>
-        {
-            lock (statuses)
-            {
-                return statuses.Contains(ProviderConnectionState.Paused);
-            }
-        });
-    }
-
-    /// <summary>
-    /// Verifies the first settings do not connect anything while nobody looks, so a start-minimized app stays offline.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_FirstApplyWithoutUsage_DoesNotConnect()
-    {
-        await using var service = NewService();
-
-        await service.ApplyAsync(OnDemandFor(Btc));
-
-        _crypto.Created.Single().Subscribed.Should().BeEmpty();
-    }
-
-    /// <summary>
-    /// Verifies switching the option on later keeps the sources for the grace period and then disconnects them.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_SwitchedOnLater_KeepsGracePeriodThenDisconnects()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(SettingsFor(Btc));
-        var provider = _crypto.Created.Single();
-        provider.Subscribed.Should().HaveCount(1);
-
-        await service.ApplyAsync(OnDemandFor(Btc));
-        _time.Advance(TimeSpan.FromSeconds(20));
-        provider.Subscribed.Should().HaveCount(1);
-
-        _time.Advance(TimeSpan.FromSeconds(11));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-    }
-
-    /// <summary>
-    /// Verifies the end of a grace period that was replaced does not cut the new one short.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_ReplacedGracePeriod_DoesNotCutTheNewOneShort()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var first = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-
-        first.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(25));
-        var second = service.AcquireUsage();
-        second.Dispose();
-
-        // Thirty seconds after the first release would have ended the old period; the new one has 20 seconds left.
-        _time.Advance(TimeSpan.FromSeconds(10));
-        await Task.Delay(100);
-        provider.Subscribed.Should().HaveCount(1);
-
-        _time.Advance(TimeSpan.FromSeconds(21));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-    }
-
-    /// <summary>
-    /// Verifies the paused state is announced even for a provider that stays idle, and the connected state again.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_IdleProvider_AnnouncesPausedAndBack()
-    {
-        await using var service = NewService();
-        var states = new List<ProviderConnectionState>();
-
-        // Subscribed before the first apply: the pump raises a status only when it differs from the one it raised last,
-        // so an event raised before the subscription could leave this test with nothing to see.
-        service.ProviderStatusChanged += (_, e) =>
-        {
-            if (e.ProviderId == "crypto")
-            {
-                lock (states)
-                {
-                    states.Add(e.Status.State);
-                }
-            }
-        };
-        await service.ApplyAsync(OnDemandFor(Btc));
-
-        var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => _crypto.Created.Single().Subscribed.Count == 1);
-        usage.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => _crypto.Created.Single().Subscribed.Count == 0);
-
-        // The events are raised by the service's own thread, a moment after the change.
-        await WaitUntilAsync(() =>
-        {
-            lock (states)
-            {
-                return states.Contains(ProviderConnectionState.Paused);
-            }
-        });
-        // An event carries the status at the time it is raised, so a quick pause may skip the idle one: what counts is
-        // that only these two appear and the last one is the paused state.
-        lock (states)
-        {
-            states.Should().OnlyContain(state => state == ProviderConnectionState.Idle || state == ProviderConnectionState.Paused);
-            states.Last().Should().Be(ProviderConnectionState.Paused);
         }
     }
 
@@ -446,26 +132,6 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
-    /// Verifies a status handler may wait for another apply, because events are raised after the apply lock is released.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_StatusHandlerWaitingForAnApply_DoesNotDeadlock()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var handled = new TaskCompletionSource();
-        service.ProviderStatusChanged += (_, _) =>
-        {
-            service.ApplyAsync(OnDemandFor(Btc)).GetAwaiter().GetResult();
-            handled.TrySetResult();
-        };
-
-        using var usage = service.AcquireUsage();
-
-        (await Task.WhenAny(handled.Task, Task.Delay(TimeSpan.FromSeconds(3)))).Should().BeSameAs(handled.Task);
-    }
-
-    /// <summary>
     /// Verifies a snapshot handler may wait for another apply, because snapshots are raised after the apply lock is
     /// released.
     /// </summary>
@@ -485,192 +151,6 @@ public class MarketDataServiceTests
         var apply = Task.Run(() => service.ApplyAsync(SettingsFor(Btc)));
 
         (await Task.WhenAny(apply, Task.Delay(TimeSpan.FromSeconds(3)))).Should().BeSameAs(apply);
-    }
-
-    /// <summary>
-    /// Verifies a snapshot handler may wait for an apply when the snapshot comes from the reapply that follows a change
-    /// in the use of the data: a provider that was reconnecting goes idle when disconnected, which changes the health.
-    /// </summary>
-    [Fact]
-    public async Task Reapply_SnapshotHandlerWaitingForAnApply_DoesNotDeadlock()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-        provider.ChangeStatus(ProviderConnectionState.Reconnecting, "down");
-        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Reconnecting);
-        var handled = new TaskCompletionSource();
-        var nested = 0;
-        service.SnapshotChanged += (_, _) =>
-        {
-            // The apply raises snapshots itself, so only the first one starts a nested apply.
-            if (Interlocked.Exchange(ref nested, 1) == 0)
-            {
-                service.ApplyAsync(OnDemandFor(Btc)).GetAwaiter().GetResult();
-                handled.TrySetResult();
-            }
-        };
-
-        usage.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(31));
-
-        (await Task.WhenAny(handled.Task, Task.Delay(TimeSpan.FromSeconds(3)))).Should().BeSameAs(handled.Task);
-    }
-
-    /// <summary>
-    /// Verifies a status change a provider reports while the subscriptions are being routed, such as going idle on an
-    /// empty set, is raised after the apply lock is released, so a handler may wait for another apply.
-    /// </summary>
-    [Fact]
-    public async Task Reapply_ProviderStatusChangedWhileRouting_IsRaisedOutsideTheLock()
-    {
-        await using var service = NewService();
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-        var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-        provider.ChangeStatus(ProviderConnectionState.Connected);
-        var handled = new TaskCompletionSource();
-        var nested = 0;
-        service.ProviderStatusChanged += (_, e) =>
-        {
-            if (e.ProviderId == "crypto" && Interlocked.Exchange(ref nested, 1) == 0)
-            {
-                service.ApplyAsync(OnDemandFor(Btc)).GetAwaiter().GetResult();
-                handled.TrySetResult();
-            }
-        };
-
-        usage.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(31));
-
-        (await Task.WhenAny(handled.Task, Task.Delay(TimeSpan.FromSeconds(3)))).Should().BeSameAs(handled.Task);
-    }
-
-    /// <summary>
-    /// Verifies a provider that starts while nobody looks is announced as paused.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_ProviderStartedWhilePaused_IsAnnounced()
-    {
-        await using var service = NewService();
-        var first = OnDemandFor(Btc);
-        first.Providers["stocks"] = new ProviderSettings { Enabled = false };
-        await service.ApplyAsync(first);
-        var states = new List<ProviderConnectionState>();
-        service.ProviderStatusChanged += (_, e) =>
-        {
-            if (e.ProviderId == "stocks")
-            {
-                lock (states)
-                {
-                    states.Add(e.Status.State);
-                }
-            }
-        };
-
-        await service.ApplyAsync(OnDemandFor(Btc, Aapl));
-
-        await WaitUntilAsync(() =>
-        {
-            lock (states)
-            {
-                return states.Count > 0;
-            }
-        });
-        lock (states)
-        {
-            states.Should().Equal(ProviderConnectionState.Paused);
-        }
-    }
-
-    /// <summary>
-    /// Verifies a usage taken before the first settings (a window that is about to open) connects at once, without a
-    /// disconnected state in between.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_UsageBeforeFirstApply_ConnectsWithoutDisconnecting()
-    {
-        var logs = new CollectingLoggerFactory();
-        await using var service = new MarketDataService(new ProviderRegistry([_crypto]), logs, _time);
-        using var usage = service.AcquireUsage();
-
-        await service.ApplyAsync(OnDemandFor(Btc));
-
-        _crypto.Created.Single().Subscribed.Should().HaveCount(1);
-        logs.Messages.Should().NotContain(m => m.Contains("disconnected", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Verifies the last status announced for a provider is the one it has after many quick pauses and resumes.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_QuickCycles_LastAnnouncedStatusIsTheCurrentOne()
-    {
-        await using var service = NewService();
-        var last = (int)ProviderConnectionState.Failed;
-
-        // Subscribed before the first apply: the pump raises a status only when it differs from the one it raised last,
-        // so if the quick cycles end where they began, the only event is the one the first apply causes.
-        service.ProviderStatusChanged += (_, e) =>
-        {
-            if (e.ProviderId == "crypto")
-            {
-                Volatile.Write(ref last, (int)e.Status.State);
-            }
-        };
-        await service.ApplyAsync(OnDemandFor(Btc));
-        var provider = _crypto.Created.Single();
-
-        for (var i = 0; i < 10; i++)
-        {
-            var usage = service.AcquireUsage();
-            await WaitUntilAsync(() => provider.Subscribed.Count == 1);
-            usage.Dispose();
-            _time.Advance(TimeSpan.FromSeconds(31));
-            await WaitUntilAsync(() => provider.Subscribed.Count == 0);
-        }
-
-        await WaitUntilAsync(() => Volatile.Read(ref last) == (int)ProviderConnectionState.Paused);
-        service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Paused);
-
-        using var again = service.AcquireUsage();
-        await WaitUntilAsync(() => Volatile.Read(ref last) == (int)ProviderConnectionState.Idle);
-        service.GetProviderStatus("crypto")!.State.Should().Be(ProviderConnectionState.Idle);
-    }
-
-    /// <summary>
-    /// Verifies the first state at startup is logged as staying disconnected, not as a disconnect that never happened.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_FirstApplyWithoutUsage_LogsNoDisconnect()
-    {
-        var logs = new CollectingLoggerFactory();
-        await using var service = new MarketDataService(new ProviderRegistry([_crypto]), logs, _time);
-
-        await service.ApplyAsync(OnDemandFor(Btc));
-
-        logs.Messages.Should().Contain(m => m.StartsWith("Data sources stay disconnected", StringComparison.Ordinal));
-        logs.Messages.Should().NotContain(m => m.StartsWith("Data sources disconnected", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Verifies disconnecting and reconnecting on purpose is logged with its reason.
-    /// </summary>
-    [Fact]
-    public async Task OnDemand_ConnectionChanges_AreLogged()
-    {
-        var logs = new CollectingLoggerFactory();
-        await using var service = new MarketDataService(new ProviderRegistry([_crypto]), logs, _time);
-        await service.ApplyAsync(OnDemandFor(Btc));
-
-        var usage = service.AcquireUsage();
-        await WaitUntilAsync(() => logs.Messages.Any(m => m.StartsWith("Data sources connected", StringComparison.Ordinal)));
-        usage.Dispose();
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => logs.Messages.Any(m => m.StartsWith("Data sources disconnected", StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -927,6 +407,33 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a status change a provider reports while the subscriptions are being routed, such as going idle on an
+    /// empty set, is raised after the apply lock is released, so a handler may wait for another apply.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ProviderStatusChangedWhileRouting_IsRaisedOutsideTheLock()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.ChangeStatus(ProviderConnectionState.Connected);
+        var handled = new TaskCompletionSource();
+        var nested = 0;
+        service.ProviderStatusChanged += (_, e) =>
+        {
+            if (e.ProviderId == "crypto" && e.Status.State == ProviderConnectionState.Idle && Interlocked.Exchange(ref nested, 1) == 0)
+            {
+                service.ApplyAsync(SettingsFor()).GetAwaiter().GetResult();
+                handled.TrySetResult();
+            }
+        };
+
+        await service.ApplyAsync(SettingsFor());
+
+        (await Task.WhenAny(handled.Task, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(handled.Task);
+    }
+
+    /// <summary>
     /// Verifies a quote updates the snapshot and raises an event with live health.
     /// </summary>
     [Fact]
@@ -1044,6 +551,31 @@ public class MarketDataServiceTests
 
         _crypto.Created.Single().Subscribed.Should().BeEmpty();
         service.GetSnapshots().Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies a provider no instrument uses stays idle without a subscription, gets one when an instrument that it serves
+    /// is added, and is left with none again when the last one is removed.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ProviderUsedByNoInstrument_IsSubscribedOnlyWhileAnInstrumentUsesIt()
+    {
+        await using var service = NewService();
+
+        await service.ApplyAsync(SettingsFor(Btc));
+
+        var stocks = _stocks.Created.Single();
+        stocks.Subscribed.Should().BeEmpty();
+        service.GetProviderStatus("stocks")!.State.Should().Be(ProviderConnectionState.Idle);
+
+        await service.ApplyAsync(SettingsFor(Btc, Aapl));
+
+        stocks.Subscribed.Should().ContainSingle().Which.Should().Be(Aapl);
+
+        await service.ApplyAsync(SettingsFor(Btc));
+
+        stocks.Subscribed.Should().BeEmpty();
+        _crypto.Created.Single().Subscribed.Should().ContainSingle().Which.Should().Be(Btc);
     }
 
     /// <summary>

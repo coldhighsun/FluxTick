@@ -70,7 +70,7 @@ public sealed class AlertServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts the services with a rule on Bitcoin and connect-on-demand switched on.
+    /// Starts the services with a rule on Bitcoin.
     /// </summary>
     /// <param name="condition">
     /// The condition of the rule.
@@ -87,7 +87,6 @@ public sealed class AlertServiceTests : IAsyncDisposable
     private async Task<FakeProvider> StartAsync(AlertCondition condition, decimal threshold, bool repeat = false)
     {
         var settings = new AppSettings();
-        settings.General.ConnectOnDemand = true;
         settings.Watchlist.Add(WatchlistEntry.From(Btc));
         settings.Alerts.Add(new AlertRule { Id = "r1", ProviderId = "crypto", Symbol = "BTC", Condition = condition, Threshold = threshold, Repeat = repeat });
         await _settings.LoadAsync(settings);
@@ -224,7 +223,7 @@ public sealed class AlertServiceTests : IAsyncDisposable
     /// Verifies a rule that does not repeat is switched off in the settings after it fired.
     /// </summary>
     [Fact]
-    public async Task OneShotRule_AfterFiring_IsDisabledAndReleasesTheUsage()
+    public async Task OneShotRule_AfterFiring_IsDisabled()
     {
         var provider = await StartAsync(AlertCondition.PriceBelow, 50);
 
@@ -233,10 +232,6 @@ public sealed class AlertServiceTests : IAsyncDisposable
 
         _fired.Should().ContainSingle();
         await WaitUntilAsync(() => !_settings.Current.Alerts.Single().Enabled);
-
-        // The last usage is gone, so the sources disconnect once the grace period is over.
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
     }
 
     /// <summary>
@@ -303,23 +298,6 @@ public sealed class AlertServiceTests : IAsyncDisposable
         await EmitAsync(provider, 91);
 
         _fired.Should().BeEmpty();
-    }
-
-    /// <summary>
-    /// Verifies the sources stay connected for a rule while the window is hidden, and disconnect when the last rule is
-    /// removed.
-    /// </summary>
-    [Fact]
-    public async Task EnabledRule_HoldsTheUsageUntilItIsRemoved()
-    {
-        var provider = await StartAsync(AlertCondition.PriceAbove, 100);
-
-        _time.Advance(TimeSpan.FromMinutes(5));
-        provider.Subscribed.Should().HaveCount(1);
-
-        await _settings.UpdateAsync(s => s.Alerts.Clear());
-        _time.Advance(TimeSpan.FromSeconds(31));
-        await WaitUntilAsync(() => provider.Subscribed.Count == 0);
     }
 
     /// <summary>

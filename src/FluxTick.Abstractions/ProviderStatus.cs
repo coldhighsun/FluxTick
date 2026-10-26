@@ -24,11 +24,6 @@ public enum ProviderConnectionState
     /// The provider cannot obtain data and the cause needs attention.
     /// </summary>
     Failed,
-
-    /// <summary>
-    /// The provider is deliberately disconnected because nobody looks at the data.
-    /// </summary>
-    Paused,
 }
 
 /// <summary>

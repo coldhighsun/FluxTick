@@ -207,11 +207,6 @@ public sealed class Harness : IAsyncDisposable
     public const string Plain = "plain";
 
     /// <summary>
-    /// The usage that stands in for a visible window.
-    /// </summary>
-    private readonly IDisposable _usage;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="Harness"/> class.
     /// </summary>
     /// <param name="settings">
@@ -235,8 +230,6 @@ public sealed class Harness : IAsyncDisposable
         Settings.LoadAsync(new AppSettings()).GetAwaiter().GetResult();
         Market = new MarketDataService(registry, NullLoggerFactory.Instance, Time);
 
-        // The tests stand in for a visible window, which is what keeps the sources connected.
-        _usage = Market.AcquireUsage();
         var ui = new InlineDispatcher();
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
         SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true));
@@ -346,7 +339,6 @@ public sealed class Harness : IAsyncDisposable
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
-        _usage.Dispose();
         Main.Dispose();
         SettingsPage.Dispose();
         AddAsset.Dispose();

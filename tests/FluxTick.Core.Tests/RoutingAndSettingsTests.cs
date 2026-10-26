@@ -185,20 +185,21 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies a settings file written before connecting on demand existed connects on demand.
+    /// Verifies a settings file written while connecting on demand was an option still loads, and its other values are
+    /// kept.
     /// </summary>
     [Fact]
-    public async Task LoadAsync_WithoutConnectOnDemandKey_DefaultsToOn()
+    public async Task LoadAsync_WithRemovedConnectOnDemandKey_StillLoads()
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "settings.json");
-        await File.WriteAllTextAsync(path, """{ "general": { "startMinimized": true } }""");
+        await File.WriteAllTextAsync(path, """{ "general": { "connectOnDemand": false, "startMinimized": true } }""");
         var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
 
         var loaded = await store.LoadAsync();
 
-        loaded!.General.ConnectOnDemand.Should().BeTrue();
-        loaded.General.StartMinimized.Should().BeTrue();
+        loaded.Should().NotBeNull();
+        loaded!.General.StartMinimized.Should().BeTrue();
     }
 
     /// <summary>
