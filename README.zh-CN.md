@@ -74,10 +74,12 @@
 从 [Releases](https://github.com/coldhighsun/FluxTick/releases) 页面获取最新版本：
 
 - **Windows：** `FluxTick-<版本>-win-x64-setup.exe` 为当前用户安装（无需管理员权限）。卸载时会保留 `%APPDATA%\FluxTick` 中的设置。
-  也提供免安装的 `FluxTick-<版本>-win-x64.zip`。
+  Windows 不提供免安装版。
 - **Linux / macOS：** `FluxTick-<版本>-linux-x64.zip` / `FluxTick-<版本>-osx-arm64.zip`。
 
 安装程序未做代码签名，首次运行时 Windows SmartScreen 可能会提示。
+
+Windows 上，FluxTick 在启动时以及运行期间约每天一次检查新版本（仅检查正式版，忽略预发布版），并提示下载、校验并安装新的安装程序，完成后自动重新启动。可在 设置 → 更新 中关闭。
 
 ### 从源码运行
 
