@@ -122,8 +122,6 @@
   "Settings_CloseToTray": "Close button hides to tray",
   "Settings_CloseToTrayHint": "When off, closing the window exits FluxTick",
   "Settings_TabAlerts": "Alerts",
-  "Settings_TrayHoverList": "List instruments on tray hover",
-  "Settings_TrayHoverListHint": "Hover the tray icon to see prices without opening the window",
   "Settings_ConnectOnDemand": "Connect data sources on demand",
   "Settings_ConnectOnDemandHint": "Only stay connected while the window or the tray list is shown; disconnect 30 seconds after it is hidden",
   "TrayPopup_Empty": "The tray list is empty",

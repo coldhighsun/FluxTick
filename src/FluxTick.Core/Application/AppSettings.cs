@@ -362,11 +362,6 @@ public sealed class GeneralSettings
     public bool CloseToTray { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether hovering the tray icon lists the watched instruments.
-    /// </summary>
-    public bool TrayHoverList { get; set; } = true;
-
-    /// <summary>
     /// Gets or sets the instruments the tray list shows, as keys made by <see cref="TrayAssetSelection.Key(string, string)"/>
     /// in the order they are listed. It is empty until the user adds instruments.
     /// </summary>

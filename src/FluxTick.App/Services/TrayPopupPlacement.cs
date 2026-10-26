@@ -14,6 +14,25 @@ public static class TrayPopupPlacement
     private const int Gap = 8;
 
     /// <summary>
+    /// Decides whether a popup that never got the focus closes: Windows may refuse to give it the focus, and then nothing
+    /// tells it that the user clicked elsewhere, so a press of a mouse button outside it closes it. A popup that has the
+    /// focus closes itself when it loses it, so this is only asked for one that does not.
+    /// </summary>
+    /// <param name="buttonDown">
+    /// Whether a mouse button is held down.
+    /// </param>
+    /// <param name="pointer">
+    /// The pointer position in screen pixels.
+    /// </param>
+    /// <param name="popup">
+    /// The popup bounds in screen pixels.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the popup should close.
+    /// </returns>
+    public static bool ShouldDismiss(bool buttonDown, PixelPoint pointer, PixelRect popup) => buttonDown && !popup.Contains(pointer);
+
+    /// <summary>
     /// Places the popup next to the tray icon, on the side facing the work area, and keeps it inside the work area.
     /// The taskbar is the part of the screen outside the work area, so the edge the icon lies beyond tells where it is.
     /// </summary>

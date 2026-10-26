@@ -47,6 +47,11 @@ internal enum TrayToggle
     /// Slide the docked window back to its edge.
     /// </summary>
     SlideIn,
+
+    /// <summary>
+    /// Leave the window as it is, because it is already in sight.
+    /// </summary>
+    Keep,
 }
 
 /// <summary>
@@ -282,6 +287,22 @@ internal sealed class EdgeDockModel
 
         return Hidden ? TrayToggle.SlideOut : TrayToggle.SlideIn;
     }
+
+    /// <summary>
+    /// Decides what a double-click on the tray icon does: it only ever brings the window into sight.
+    /// </summary>
+    /// <param name="visible">
+    /// Whether the window is shown, as opposed to hidden to the tray.
+    /// </param>
+    /// <returns>
+    /// What <see cref="ToggleFromTray"/> says when that brings the window into sight; otherwise
+    /// <see cref="TrayToggle.Keep"/>, as the window is there already.
+    /// </returns>
+    public TrayToggle ShowFromTray(bool visible) => ToggleFromTray(visible) switch
+    {
+        TrayToggle.Hide or TrayToggle.SlideIn => TrayToggle.Keep,
+        var toggle => toggle,
+    };
 
     /// <summary>
     /// Decides whether the wait to hide the window starts again after something that kept it open went away.

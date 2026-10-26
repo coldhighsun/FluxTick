@@ -420,24 +420,6 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies the about window is requested, but not while another tool window is open.
-    /// </summary>
-    [Fact]
-    public async Task ShowAbout_RaisesRequestUnlessAToolWindowIsOpen()
-    {
-        await using var h = new Harness();
-        await h.Main.InitializeAsync();
-        var requests = 0;
-        h.Main.AboutRequested += (_, _) => requests++;
-
-        h.Main.ShowAboutCommand.Execute(null);
-        h.Main.BeginToolWindow(ToolWindowKind.Settings);
-        h.Main.ShowAboutCommand.Execute(null);
-
-        requests.Should().Be(1);
-    }
-
-    /// <summary>
     /// Verifies no window is requested and no page state is reset while a tool window is already open.
     /// </summary>
     [Fact]

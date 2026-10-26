@@ -115,4 +115,19 @@ public class TrayPopupPlacementTests
 
         position.Y.Should().Be(124 + 8);
     }
+
+    /// <summary>
+    /// Verifies a popup that never got the focus closes on a press outside it, and in no other case.
+    /// </summary>
+    [Fact]
+    public void ShouldDismiss_ByState_ClosesOnlyOnAPressOutside()
+    {
+        var popup = new PixelRect(100, 100, 280, 200);
+        var outside = new PixelPoint(50, 50);
+        var inside = new PixelPoint(150, 150);
+
+        TrayPopupPlacement.ShouldDismiss(buttonDown: true, outside, popup).Should().BeTrue();
+        TrayPopupPlacement.ShouldDismiss(buttonDown: true, inside, popup).Should().BeFalse();
+        TrayPopupPlacement.ShouldDismiss(buttonDown: false, outside, popup).Should().BeFalse();
+    }
 }

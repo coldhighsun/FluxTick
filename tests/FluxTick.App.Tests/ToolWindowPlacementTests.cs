@@ -83,4 +83,17 @@ public class ToolWindowPlacementTests
         (position.X + Size.Width).Should().BeLessThanOrEqualTo(narrow.Right);
         (position.Y + Size.Height).Should().BeLessThanOrEqualTo(narrow.Bottom);
     }
+
+    /// <summary>
+    /// Verifies a window that is as tall as its content is placed with the height of the content, limited to the maximum,
+    /// and one with a height of its own with that height.
+    /// </summary>
+    [Fact]
+    public void PlacementHeight_ByWindowKind_PicksTheHeight()
+    {
+        ToolWindowPlacement.PlacementHeight(double.NaN, 380, 900).Should().Be(380);
+        ToolWindowPlacement.PlacementHeight(double.NaN, 1200, 900).Should().Be(900);
+        ToolWindowPlacement.PlacementHeight(520, 380, 900).Should().Be(520);
+        ToolWindowPlacement.PlacementHeight(520, 380, 400).Should().Be(400);
+    }
 }

@@ -374,6 +374,23 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
+    /// A double-click on the tray icon only brings the window into sight, and leaves one that is there alone.
+    /// </summary>
+    [Fact]
+    public void ShowFromTray_ByDockState_NeverHides()
+    {
+        var model = new EdgeDockModel();
+        model.ShowFromTray(visible: false).Should().Be(TrayToggle.Show);
+        model.ShowFromTray(visible: true).Should().Be(TrayToggle.Keep);
+
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.ShowFromTray(visible: true).Should().Be(TrayToggle.Keep);
+
+        model.SetHidden(true);
+        model.ShowFromTray(visible: true).Should().Be(TrayToggle.SlideOut);
+    }
+
+    /// <summary>
     /// The wait to hide starts again only for a shown, docked window that the pointer is not on.
     /// </summary>
     [Fact]
