@@ -73,10 +73,12 @@ pick it in the *Add instrument* window or make it the default for an asset class
 Grab the latest build from the [Releases](https://github.com/coldhighsun/FluxTick/releases) page:
 
 - **Windows:** `FluxTick-<version>-win-x64-setup.exe` installs for the current user (no administrator rights needed).
-  Uninstalling keeps your settings in `%APPDATA%\FluxTick`. A portable `FluxTick-<version>-win-x64.zip` is also available.
+  Uninstalling keeps your settings in `%APPDATA%\FluxTick`. There is no portable build for Windows.
 - **Linux / macOS:** `FluxTick-<version>-linux-x64.zip` / `FluxTick-<version>-osx-arm64.zip`.
 
 The installer is not code-signed, so Windows SmartScreen may warn on first run.
+
+On Windows, FluxTick looks for a newer release when it starts and about once a day while it runs (stable releases only, pre-releases are ignored). It then offers to download, verify and install the new setup program, and starts again when done. This can be turned off under Settings → Updates.
 
 ### Run from source
 
