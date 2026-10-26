@@ -40,7 +40,6 @@ public sealed partial class TrayListViewModel : LocalizedViewModel
     {
         _settings = settings;
         _rows = rows;
-        TrayHoverAvailability.Changed += OnAvailabilityChanged;
     }
 
     /// <summary>
@@ -107,27 +106,6 @@ public sealed partial class TrayListViewModel : LocalizedViewModel
     /// </returns>
     private bool CanToggle(AssetRowViewModel? row) => row is null || row.InTray || !IsFull;
 
-    /// <summary>
-    /// Tells the menus that the tray list became available or unavailable.
-    /// </summary>
-    /// <param name="sender">
-    /// Not used.
-    /// </param>
-    /// <param name="e">
-    /// The event data.
-    /// </param>
-    private void OnAvailabilityChanged(object? sender, EventArgs e) =>
-        Ui.Post(() =>
-        {
-            foreach (var row in _rows)
-            {
-                row.RefreshTrayMenu();
-            }
-        });
-
     /// <inheritdoc />
     protected override void OnLanguageChanged() => OnPropertyChanged(nameof(AddTip));
-
-    /// <inheritdoc />
-    protected override void Detach() => TrayHoverAvailability.Changed -= OnAvailabilityChanged;
 }

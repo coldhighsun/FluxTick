@@ -51,13 +51,6 @@
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsTrayHoverSupported}">
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_TrayHoverList}" />
-                    <TextBlock Text="{loc:T Settings_TrayHoverListHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                  </StackPanel>
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding TrayHoverList}" />
-                </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_ConnectOnDemand}" />
@@ -187,7 +180,7 @@
       </TabItem>
 
       <!-- Only Windows lists instruments when the pointer rests on the tray icon. -->
-      <TabItem Header="{loc:T Settings_TabTray}" IsVisible="{Binding IsTrayHoverSupported}">
+      <TabItem Header="{loc:T Settings_TabTray}" IsVisible="{Binding IsTrayListSupported}">
         <ScrollViewer Name="TrayAssetsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
             <Border Classes="card">

@@ -13,6 +13,23 @@ public static class ToolWindowPlacement
     private const int Gap = 8;
 
     /// <summary>
+    /// Gets the height a tool window is placed with before it is shown.
+    /// </summary>
+    /// <param name="height">
+    /// The height of the window, or <see cref="double.NaN"/> for a window that is as tall as its content.
+    /// </param>
+    /// <param name="desired">
+    /// The height the content wants.
+    /// </param>
+    /// <param name="max">
+    /// The tallest the window may be.
+    /// </param>
+    /// <returns>
+    /// The height to place the window with.
+    /// </returns>
+    public static double PlacementHeight(double height, double desired, double max) => Math.Min(double.IsNaN(height) ? desired : height, max);
+
+    /// <summary>
     /// Places a tool window beside the owner, preferring the left side, and keeps it inside the work area.
     /// </summary>
     /// <param name="owner">

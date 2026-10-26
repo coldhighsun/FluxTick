@@ -69,7 +69,7 @@ public static class TrayAssetSelection
     /// </returns>
     public static IReadOnlyList<T> Resolve<T>(IReadOnlyList<T> watchlist, Func<T, string> keyOf, IReadOnlyList<string> trayAssets)
     {
-        // Nothing is chosen by default, and the popup asks on every hover, so do not index the watchlist for nothing.
+        // Nothing is chosen by default, and the popup asks on every click, so do not index the watchlist for nothing.
         if (trayAssets.Count == 0)
         {
             return [];

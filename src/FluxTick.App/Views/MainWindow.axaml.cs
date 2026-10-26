@@ -213,7 +213,10 @@ public sealed partial class MainWindow : Window
     /// Shows the window when hidden, hides it when visible. A window that is docked to a screen edge is not hidden to
     /// the tray but slides to its edge and back out, the same way it does for the pointer.
     /// </summary>
-    public void ToggleVisibility()
+    /// <param name="showOnly">
+    /// Whether a window that is in sight stays there and is only brought forward, instead of being hidden.
+    /// </param>
+    public void ToggleVisibility(bool showOnly = false)
     {
         // A minimized window is visible to the shell but out of sight, and may have no taskbar button to restore it
         // from: the tray click brings it back instead of hiding it.
@@ -223,8 +226,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        switch (_dock.ToggleFromTray(IsVisible))
+        switch (showOnly ? _dock.ShowFromTray(IsVisible) : _dock.ToggleFromTray(IsVisible))
         {
+            case TrayToggle.Keep:
+                Activate();
+                break;
             case TrayToggle.Show:
                 Show();
                 Activate();
@@ -302,7 +308,6 @@ public sealed partial class MainWindow : Window
         {
             _observed.SettingsRequested -= OnSettingsRequested;
             _observed.AddAssetRequested -= OnAddAssetRequested;
-            _observed.AboutRequested -= OnAboutRequested;
             _observed.AlertsRequested -= OnAlertsRequested;
             _observed.FullScreenExitRequested -= OnFullScreenExitRequested;
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
@@ -314,7 +319,6 @@ public sealed partial class MainWindow : Window
         {
             _observed.SettingsRequested += OnSettingsRequested;
             _observed.AddAssetRequested += OnAddAssetRequested;
-            _observed.AboutRequested += OnAboutRequested;
             _observed.AlertsRequested += OnAlertsRequested;
             _observed.FullScreenExitRequested += OnFullScreenExitRequested;
             _observed.PropertyChanged += OnLayoutPropertyChanged;
@@ -697,25 +701,6 @@ public sealed partial class MainWindow : Window
         }
 
         await ShowToolWindowAsync(viewModel, ToolWindowKind.Settings, new SettingsWindow { DataContext = viewModel.Settings });
-    }
-
-    /// <summary>
-    /// Opens the about window modally.
-    /// </summary>
-    /// <param name="sender">
-    /// The view model.
-    /// </param>
-    /// <param name="e">
-    /// The event data.
-    /// </param>
-    private async void OnAboutRequested(object? sender, EventArgs e)
-    {
-        if (DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        await ShowToolWindowAsync(viewModel, ToolWindowKind.About, new AboutWindow { DataContext = new AboutViewModel(viewModel.Settings.Updates) });
     }
 
     /// <summary>

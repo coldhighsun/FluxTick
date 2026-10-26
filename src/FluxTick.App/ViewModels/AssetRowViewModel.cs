@@ -215,21 +215,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// Gets a value indicating whether the menu offers to put the instrument on the tray list. The menus only offer the
     /// tray list where it works, which the platform decides for all rows alike.
     /// </summary>
-    public bool CanAddToTray => TrayHoverAvailability.IsSupported && !InTray;
+    public bool CanAddToTray => TrayPopupAvailability.IsSupported && !InTray;
 
     /// <summary>
     /// Gets a value indicating whether the menu offers to take the instrument off the tray list.
     /// </summary>
-    public bool CanRemoveFromTray => TrayHoverAvailability.IsSupported && InTray;
-
-    /// <summary>
-    /// Tells the menu that the platform started or stopped supporting the tray list.
-    /// </summary>
-    public void RefreshTrayMenu()
-    {
-        OnPropertyChanged(nameof(CanAddToTray));
-        OnPropertyChanged(nameof(CanRemoveFromTray));
-    }
+    public bool CanRemoveFromTray => TrayPopupAvailability.IsSupported && InTray;
 
     /// <summary>
     /// Gets or sets the price of the enabled alert that fires when the price rises to it, or <see langword="null"/> for

@@ -31,11 +31,6 @@ public enum ToolWindowKind
     AddAsset,
 
     /// <summary>
-    /// The about window.
-    /// </summary>
-    About,
-
-    /// <summary>
     /// The price alerts window of an instrument.
     /// </summary>
     Alerts,
@@ -334,11 +329,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public event EventHandler? AddAssetRequested;
 
     /// <summary>
-    /// Raised when the about window should be shown.
-    /// </summary>
-    public event EventHandler? AboutRequested;
-
-    /// <summary>
     /// Raised when the price alerts window of an instrument should be shown.
     /// </summary>
     public event EventHandler? AlertsRequested;
@@ -478,20 +468,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
 
         Settings.Reload();
         SettingsRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>
-    /// Requests the about window, which is shown by the view.
-    /// </summary>
-    [RelayCommand]
-    public void ShowAbout()
-    {
-        if (IsToolWindowOpen)
-        {
-            return;
-        }
-
-        AboutRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

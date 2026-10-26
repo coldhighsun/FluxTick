@@ -8,7 +8,6 @@
         SizeToContent="Height"
         CanResize="False"
         ShowInTaskbar="False"
-        ShowActivated="False"
         Topmost="True"
         WindowDecorations="None"
         Background="Transparent"

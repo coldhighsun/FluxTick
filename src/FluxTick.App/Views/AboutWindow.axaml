@@ -37,6 +37,8 @@
       </Border>
       <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="10"
                  TextWrapping="Wrap" TextAlignment="Center" />
+      <Button Classes="primary" Content="{loc:T Common_Close}" HorizontalAlignment="Center" MinWidth="96"
+              HorizontalContentAlignment="Center" Click="OnCloseClick" />
     </StackPanel>
   </views:ToolWindowFrame>
 </views:ToolWindow>

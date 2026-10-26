@@ -754,7 +754,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         Routing = new ObservableCollection<RoutingRowViewModel>(
             Enum.GetValues<AssetClass>().Select(c => new RoutingRowViewModel(c, r => _ = SaveRoutingAsync(r))));
         market.ProviderStatusChanged += OnProviderStatusChanged;
-        TrayHoverAvailability.Changed += OnTrayAvailabilityChanged;
         Reload();
         StartTrayProbe(trayProbe ?? TrayAvailability.Detect);
     }
@@ -763,20 +762,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     protected override void Detach()
     {
         Market.ProviderStatusChanged -= OnProviderStatusChanged;
-        TrayHoverAvailability.Changed -= OnTrayAvailabilityChanged;
         Alerts.Dispose();
     }
-
-    /// <summary>
-    /// Shows or hides the tray settings when the tray list becomes available or unavailable.
-    /// </summary>
-    /// <param name="sender">
-    /// Not used.
-    /// </param>
-    /// <param name="e">
-    /// The event data.
-    /// </param>
-    private void OnTrayAvailabilityChanged(object? sender, EventArgs e) => Ui.Post(() => OnPropertyChanged(nameof(IsTrayHoverSupported)));
 
     /// <summary>
     /// Shows the new state of the data sources when one changes.
@@ -865,9 +852,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public bool IsAutoStartSupported => _autoStart?.IsSupported == true;
 
     /// <summary>
-    /// Gets a value indicating whether the platform can tell when the pointer rests on the tray icon.
+    /// Gets a value indicating whether the platform can list the instruments when the tray icon is clicked.
     /// </summary>
-    public bool IsTrayHoverSupported => TrayHoverAvailability.IsSupported;
+    public bool IsTrayListSupported => TrayPopupAvailability.IsSupported;
 
     /// <summary>
     /// Gets or sets a value indicating whether the app starts when the user signs in.
@@ -915,12 +902,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
                 }
             },
             TaskScheduler.Default);
-
-    /// <summary>
-    /// Gets or sets a value indicating whether hovering the tray icon lists the watched instruments.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool TrayHoverList { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether the data sources connect only while the window or the tray list is shown.
@@ -1028,7 +1009,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             LaunchAtLogin = IsAutoStartSupported && _autoStart!.IsEnabled();
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
-            TrayHoverList = current.General.TrayHoverList;
             ConnectOnDemand = current.General.ConnectOnDemand;
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
@@ -1124,8 +1104,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         OnPropertyChanged(nameof(CloseButtonTip));
         SaveSetting(s => s.General.CloseToTray = value);
     }
-
-    partial void OnTrayHoverListChanged(bool value) => SaveSetting(s => s.General.TrayHoverList = value);
 
     /// <summary>
     /// Saves the connect-on-demand flag.

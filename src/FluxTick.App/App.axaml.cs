@@ -78,34 +78,25 @@ public sealed partial class App : Application
     private NativeMenuItem? _trayUpdate;
 
     /// <summary>
+    /// The about window, or <see langword="null"/> while it is not open.
+    /// </summary>
+    private AboutWindow? _aboutWindow;
+
+    /// <summary>
     /// The update check.
     /// </summary>
     private UpdateService? _updates;
 
     /// <summary>
-    /// The popup that lists the watched instruments while the pointer rests on the tray icon.
+    /// The popup that lists the watched instruments after the tray icon was clicked, or <see langword="null"/> until the
+    /// first time it is needed.
     /// </summary>
     private TrayPopupWindow? _trayPopup;
 
     /// <summary>
-    /// The watcher of the pointer on the tray icon, or <see langword="null"/> where hovering is not available.
+    /// Tells a click on the tray icon from the first half of a double-click.
     /// </summary>
-    private WindowsTrayHover? _trayHover;
-
-    /// <summary>
-    /// Whether the shell has reported the tray icon, which is when the popup replaces the plain tooltip.
-    /// </summary>
-    private bool _trayHoverActive;
-
-    /// <summary>
-    /// How many times the hover watcher was tried to start; the tray may not exist yet when the app starts.
-    /// </summary>
-    private int _trayHoverAttempts;
-
-    /// <summary>
-    /// Whether a retry of starting the hover watcher is waiting.
-    /// </summary>
-    private bool _trayHoverRetryQueued;
+    private TrayClickInterpreter? _trayClicks;
 
     /// <summary>
     /// How many times the desktop was asked for a tray while there was none; the tray host may start after the app.
@@ -123,9 +114,9 @@ public sealed partial class App : Application
     private static readonly TimeSpan OpeningTimeLimit = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// How many times starting the hover watcher is tried before giving up.
+    /// How long after the popup closed by itself a click on the tray icon is taken as the one that closed it.
     /// </summary>
-    private const int TrayHoverMaxAttempts = 5;
+    private static readonly TimeSpan TrayReopenGuard = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
     /// How many times the desktop is asked for a tray, a while apart, before the taskbar button stays for good.
@@ -183,8 +174,6 @@ public sealed partial class App : Application
         {
             var demo = desktop.Args?.Contains("--demo", StringComparer.OrdinalIgnoreCase) == true;
             _services = AppHost.Build(demo);
-            TrayHoverAvailability.ListenerFailed = ex =>
-                _services.GetService<ILogger<App>>()?.LogWarning(ex, "A listener of the tray list availability failed");
             LogUnhandledExceptions(_services);
             _settings = _services.GetRequiredService<SettingsManager>();
             _geometrySave = new Debouncer(TimeSpan.FromMilliseconds(600), TimeProvider.System);
@@ -226,20 +215,13 @@ public sealed partial class App : Application
                 ApplyLanguage();
                 ApplyTheme();
                 ApplyPalette();
-                ApplyTrayHover();
                 ApplyTrayAssets();
             });
             ApplyPalette();
-            Dispatcher.UIThread.Post(ApplyTrayHover, DispatcherPriority.Background);
 
             desktop.Exit += (_, _) =>
             {
                 IsExiting = true;
-                TrayHoverAvailability.ListenerFailed = null;
-                if (OperatingSystem.IsWindows())
-                {
-                    _trayHover?.Dispose();
-                }
 
                 // A move or resize in the last moments is still waiting for its quiet period; save it now.
                 try
@@ -359,7 +341,7 @@ public sealed partial class App : Application
     /// <returns>
     /// A task that completes once startup finished.
     /// </returns>
-    private static async Task StartAsync(MainViewModel viewModel, string[] args)
+    private async Task StartAsync(MainViewModel viewModel, string[] args)
     {
         await viewModel.InitializeAsync();
         var page = args.FirstOrDefault(a => a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))?["--page=".Length..];
@@ -374,7 +356,7 @@ public sealed partial class App : Application
                     viewModel.ShowSettings();
                     break;
                 case "about":
-                    viewModel.ShowAbout();
+                    ShowAboutWindow();
                     break;
             }
         });
@@ -435,8 +417,8 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Ends the tray popup with the main window: it is a window too, and the app only ends when the last window is closed,
-    /// and the watcher must not open it again once it is closed.
+    /// Ends the tray popup and the about window with the main window: they are windows too, and the app only ends when the
+    /// last window is closed.
     /// </summary>
     /// <param name="sender">
     /// The main window.
@@ -446,12 +428,8 @@ public sealed partial class App : Application
     /// </param>
     private void OnWindowClosed(object? sender, EventArgs e)
     {
-        if (OperatingSystem.IsWindows())
-        {
-            _trayHover?.Dispose();
-        }
-
         _trayPopup?.Close();
+        _aboutWindow?.Close();
     }
 
     /// <summary>
@@ -488,81 +466,40 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Starts or stops listing the instruments when the pointer rests on the tray icon, according to the setting.
-    /// Only Windows can tell where the tray icon is; elsewhere the tray keeps its plain tooltip.
+    /// Creates the tray popup on first use. It counts as a window that shows prices while it is open, so the data sources
+    /// connect for it.
     /// </summary>
-    private void ApplyTrayHover()
+    /// <returns>
+    /// The popup.
+    /// </returns>
+    private TrayPopupWindow EnsureTrayPopup()
     {
-        if (!OperatingSystem.IsWindows() || _settings is null || _services is null || TrayIcon.GetIcons(this)?.FirstOrDefault() is not { } tray)
-        {
-            return;
-        }
-
-        if (!_settings.Current.General.TrayHoverList)
-        {
-            _trayHoverAttempts = 0;
-            if (_trayHover is not null)
-            {
-                _trayHover.Dispose();
-                _trayHover = null;
-                _trayHoverActive = false;
-                _trayPopup?.Hide();
-                tray.ToolTipText = TrayTooltip();
-            }
-
-            return;
-        }
-
-        if (_trayHover is not null)
-        {
-            return;
-        }
-
         if (_trayPopup is null)
         {
-            _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services.GetRequiredService<MainViewModel>().Rows) };
-            BindUsage(_trayPopup, _services.GetRequiredService<MarketDataService>());
+            _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services!.GetRequiredService<MainViewModel>().Rows) };
+            _trayPopup.Dismissed += (_, _) => _trayClicks?.NotifyDismissed();
+            BindUsage(_trayPopup, _services!.GetRequiredService<MarketDataService>());
             ApplyTrayAssets();
         }
 
-        var popup = _trayPopup;
-        var hover = WindowsTrayHover.TryCreate(tray, () => popup.IsPointerOver, () => popup.IsVisible);
-        if (hover is null)
-        {
-            // Avalonia may not have created the tray icon yet, or the shell starts after the app; try again a few times.
-            // Settings changes call this too, so only one retry is waiting at a time.
-            if (!_trayHoverRetryQueued && _trayHoverAttempts < TrayHoverMaxAttempts)
-            {
-                _trayHoverAttempts++;
-                _trayHoverRetryQueued = true;
-                DispatcherTimer.RunOnce(
-                    () =>
-                    {
-                        _trayHoverRetryQueued = false;
-                        ApplyTrayHover();
-                    },
-                    TimeSpan.FromSeconds(3));
-            }
-            else if (!_trayHoverRetryQueued)
-            {
-                TrayHoverAvailability.ReportFailure();
-            }
+        return _trayPopup;
+    }
 
-            return;
+    /// <summary>
+    /// Opens the tray popup next to the pointer, which is on the tray icon right after the click.
+    /// </summary>
+    /// <returns>
+    /// <see langword="false"/> when the pointer position is not known, so the popup has nowhere to go.
+    /// </returns>
+    private bool ShowTrayList()
+    {
+        if (!OperatingSystem.IsWindows() || !WindowsTrayCursor.TryGetPosition(out var cursor))
+        {
+            return false;
         }
 
-        hover.Entered += (_, icon) => popup.ShowAt(icon);
-        hover.Left += (_, _) => popup.Hide();
-
-        // The tooltip stays until the shell reports the icon, so a desktop that cannot place it keeps the plain tooltip.
-        hover.Located += (_, _) =>
-        {
-            _trayHoverActive = true;
-            tray.ToolTipText = TrayTooltip();
-        };
-        _trayHover = hover;
-        _trayHoverAttempts = 0;
-        TrayHoverAvailability.ReportSuccess();
+        EnsureTrayPopup().ShowAt(new PixelRect(cursor, new PixelSize(1, 1)));
+        return true;
     }
 
     /// <summary>
@@ -577,12 +514,12 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Gets the tooltip of the tray icon. It is empty while the popup takes its place, as both at once would overlap.
+    /// Gets the tooltip of the tray icon: the name and the slogan of the app.
     /// </summary>
     /// <returns>
-    /// The tooltip text, or <see langword="null"/> for none.
+    /// The tooltip text.
     /// </returns>
-    private string? TrayTooltip() => _trayHoverActive ? null : $"FluxTick — {Loc.Get("Tagline")}";
+    private static string TrayTooltip() => $"FluxTick — {Loc.Get("Tagline")}";
 
     /// <summary>
     /// Looks for a newer release once the app is up, unless the user turned that off or this is a development build.
@@ -653,7 +590,7 @@ public sealed partial class App : Application
     private void OnTraySettingsClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true);
 
     /// <summary>
-    /// Opens the about window.
+    /// Opens the about window on its own: it does not bring up the main window and does not block it.
     /// </summary>
     /// <param name="sender">
     /// The menu item.
@@ -661,7 +598,36 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowAbout(), replaceToolWindow: true);
+    private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowAboutWindow();
+
+    /// <summary>
+    /// Opens the about window on its own, or brings it forward when it is open.
+    /// </summary>
+    private void ShowAboutWindow()
+    {
+        if (_aboutWindow is not null)
+        {
+            _aboutWindow.Activate();
+            return;
+        }
+
+        if (_services is null || IsExiting)
+        {
+            return;
+        }
+
+        var viewModel = _services.GetRequiredService<MainViewModel>();
+        var window = new AboutWindow
+        {
+            DataContext = new AboutViewModel(viewModel.Settings.Updates),
+
+            // A window that is always on top would cover one that is not, whichever of them was used last.
+            Topmost = _window?.Topmost == true,
+        };
+        window.Closed += (_, _) => _aboutWindow = null;
+        _aboutWindow = window;
+        window.ShowStandalone();
+    }
 
     /// <summary>
     /// Gives the main window a taskbar button only where there is a tray icon to bring it back with. The window keeps
@@ -858,7 +824,8 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Toggles the window when the tray icon is clicked.
+    /// Handles a click on the tray icon: one click lists the instruments, a double-click opens the main window. Where the
+    /// list is not available, or turned off, a click shows or hides the window as before.
     /// </summary>
     /// <param name="sender">
     /// The tray icon.
@@ -868,12 +835,31 @@ public sealed partial class App : Application
     /// </param>
     private void OnTrayClicked(object? sender, EventArgs e)
     {
-        if (OperatingSystem.IsWindows())
+        if (!TrayPopupAvailability.IsSupported)
         {
-            _trayHover?.Dismiss();
+            _window?.ToggleVisibility();
+            return;
         }
 
-        _window?.ToggleVisibility();
+        _trayClicks ??= new TrayClickInterpreter(TimeProvider.System, OperatingSystem.IsWindows() ? WindowsTrayCursor.DoubleClickTime : TimeSpan.FromMilliseconds(500), TrayReopenGuard);
+        switch (_trayClicks.Click(_trayPopup?.IsVisible == true))
+        {
+            case TrayClickInterpreter.TrayClickAction.ShowList:
+                // A click that cannot list the instruments still does what a click did before.
+                if (!ShowTrayList())
+                {
+                    _window?.ToggleVisibility();
+                }
+
+                break;
+            case TrayClickInterpreter.TrayClickAction.HideList:
+                _trayPopup?.Hide();
+                break;
+            case TrayClickInterpreter.TrayClickAction.OpenWindow:
+                _trayPopup?.Hide();
+                _window?.ToggleVisibility(showOnly: true);
+                break;
+        }
     }
 
     /// <summary>
