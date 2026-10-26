@@ -161,6 +161,19 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
             cancellationToken);
 
     /// <summary>
+    /// Waits until the changes that are being saved at this moment are saved, also those whose caller does not wait for
+    /// them. Changes made after the call are not waited for.
+    /// </summary>
+    /// <returns>
+    /// A task that completes once the changes that were under way are saved.
+    /// </returns>
+    public async Task WhenIdleAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        _gate.Release();
+    }
+
+    /// <summary>
     /// Applies a change to a copy of the settings and, when it changed something, publishes and persists it. A change
     /// that finds nothing to do costs neither a save nor a notification.
     /// </summary>
