@@ -50,6 +50,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="MinVer" />
     <PackageReference Include="Serilog.Extensions.Logging" />
+    <PackageReference Include="Serilog.Sinks.Async" />
     <PackageReference Include="Serilog.Sinks.File" />
   </ItemGroup>
 

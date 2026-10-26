@@ -155,7 +155,15 @@ public sealed partial class App : Application
     {
         var logger = services.GetRequiredService<ILogger<App>>();
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
             logger.LogCritical(e.ExceptionObject as Exception, "Unhandled exception (terminating: {Terminating})", e.IsTerminating);
+
+            // The log file is written in the background, and the process dies right after this.
+            if (e.IsTerminating)
+            {
+                AppHost.FlushLogs();
+            }
+        };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
             e.SetObserved();
