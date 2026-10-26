@@ -69,6 +69,16 @@
 
 ## 快速开始
 
+### 下载
+
+从 [Releases](https://github.com/coldhighsun/FluxTick/releases) 页面获取最新版本：
+
+- **Windows：** `FluxTick-<版本>-win-x64-setup.exe` 为当前用户安装（无需管理员权限）。卸载时会保留 `%APPDATA%\FluxTick` 中的设置。
+  也提供免安装的 `FluxTick-<版本>-win-x64.zip`。
+- **Linux / macOS：** `FluxTick-<版本>-linux-x64.zip` / `FluxTick-<版本>-osx-arm64.zip`。
+
+安装程序未做代码签名，首次运行时 Windows SmartScreen 可能会提示。
+
 ### 从源码运行
 
 需要 [.NET 10 SDK](https://dotnet.microsoft.com/download)。

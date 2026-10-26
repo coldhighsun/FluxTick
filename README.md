@@ -68,6 +68,16 @@ pick it in the *Add instrument* window or make it the default for an asset class
 
 ## Getting started
 
+### Download
+
+Grab the latest build from the [Releases](https://github.com/coldhighsun/FluxTick/releases) page:
+
+- **Windows:** `FluxTick-<version>-win-x64-setup.exe` installs for the current user (no administrator rights needed).
+  Uninstalling keeps your settings in `%APPDATA%\FluxTick`. A portable `FluxTick-<version>-win-x64.zip` is also available.
+- **Linux / macOS:** `FluxTick-<version>-linux-x64.zip` / `FluxTick-<version>-osx-arm64.zip`.
+
+The installer is not code-signed, so Windows SmartScreen may warn on first run.
+
 ### Run from source
 
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
