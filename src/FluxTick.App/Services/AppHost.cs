@@ -13,6 +13,7 @@ using FluxTick.Providers.Yahoo;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Core;
 using ThrottledLogging;
 
 namespace FluxTick.App.Services;
@@ -57,6 +58,17 @@ public static class AppHost
     internal static void ConfigureThrottledLogging() => ThrottledLogger.Language = LogCulture;
 
     /// <summary>
+    /// The logger that writes the log file, kept so that the entries still waiting for the background writer can be flushed.
+    /// </summary>
+    private static Logger? s_logger;
+
+    /// <summary>
+    /// Writes the entries that are still waiting for the background writer and stops logging. The log file is written on a
+    /// thread of its own, so a process that is about to die has to call this to keep its last entries.
+    /// </summary>
+    public static void FlushLogs() => s_logger?.Dispose();
+
+    /// <summary>
     /// Builds the service provider.
     /// </summary>
     /// <param name="demo">
@@ -71,13 +83,14 @@ public static class AppHost
 
         var serilog = new LoggerConfiguration()
             .MinimumLevel.Information()
-            .WriteTo.File(
+            .WriteTo.Async(file => file.File(
                 AppPaths.LogFile,
                 rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: 10 * 1024 * 1024,
                 rollOnFileSizeLimit: true,
-                retainedFileCountLimit: 5)
+                retainedFileCountLimit: 5))
             .CreateLogger();
+        s_logger = serilog;
         services.AddLogging(builder => builder.AddSerilog(serilog, dispose: true));
         ConfigureThrottledLogging();
 
