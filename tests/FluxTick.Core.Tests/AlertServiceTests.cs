@@ -324,4 +324,29 @@ public sealed class AlertServiceTests : IAsyncDisposable
         /// <inheritdoc />
         public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Verifies a price is not checked while its source is reconnecting, nor after the reconnecting turned the price stale.
+    /// </summary>
+    [Fact]
+    public async Task ReconnectingSource_DoesNotFireUntilLiveAgain()
+    {
+        var provider = await StartAsync(AlertCondition.PriceAbove, 100, repeat: true);
+        await EmitAsync(provider, 99);
+        var stale = new TaskCompletionSource();
+        _market.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.Health == AssetHealth.StaleReconnecting)
+            {
+                stale.TrySetResult();
+            }
+        };
+
+        provider.ChangeStatus(ProviderConnectionState.Reconnecting, "offline");
+        _time.Advance(TimeSpan.FromMinutes(2));
+        await stale.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await EmitAsync(provider, 101);
+
+        _fired.Should().BeEmpty("the quote came in while the source was still reconnecting");
+    }
 }

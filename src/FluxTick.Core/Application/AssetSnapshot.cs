@@ -28,6 +28,11 @@ public enum AssetHealth
     Reconnecting,
 
     /// <summary>
+    /// The provider has been reconnecting for longer than the staleness threshold, so what it last delivered is old.
+    /// </summary>
+    StaleReconnecting,
+
+    /// <summary>
     /// The provider reports a failure that needs attention.
     /// </summary>
     Failed,
