@@ -76,7 +76,7 @@ public static class NumericInput
     /// </param>
     private static void OnTextInput(object? sender, TextInputEventArgs e)
     {
-        if (sender is TextBox box && !string.IsNullOrEmpty(e.Text) && !NumberInput.IsPartialNumber(After(box, e.Text)))
+        if (sender is TextBox box && !string.IsNullOrEmpty(e.Text) && !NumberText.IsPartialNumber(After(box, e.Text)))
         {
             e.Handled = true;
         }
@@ -108,7 +108,7 @@ public static class NumericInput
             var text = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
 
             // The box may have changed while the clipboard was read, and the paste would then land in the wrong place.
-            if (!string.IsNullOrEmpty(text) && box.Text == before && NumberInput.IsPartialNumber(After(box, text)))
+            if (!string.IsNullOrEmpty(text) && box.Text == before && NumberText.IsPartialNumber(After(box, text)))
             {
                 box.Text = After(box, text);
                 box.CaretIndex = start + text.Length;

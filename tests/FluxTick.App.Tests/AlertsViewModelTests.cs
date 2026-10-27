@@ -333,31 +333,6 @@ public class AlertsViewModelTests
     }
 
     /// <summary>
-    /// Verifies which texts may be typed into a box for a real number.
-    /// </summary>
-    /// <param name="text">
-    /// The text the box would show.
-    /// </param>
-    /// <param name="expected">
-    /// Whether the box may show it.
-    /// </param>
-    [Theory]
-    [InlineData("", true)]
-    [InlineData("12", true)]
-    [InlineData("-", false)]
-    [InlineData("-12.5", false)]
-    [InlineData("12.", true)]
-    [InlineData(".5", true)]
-    [InlineData("1.2.3", false)]
-    [InlineData("1-2", false)]
-    [InlineData("abc", false)]
-    [InlineData("1e5", false)]
-    [InlineData("1,5", false)]
-    [InlineData("１２", false)]
-    public void IsPartialNumber_AcceptsOnlyRealNumbersAndTheirBeginnings(string text, bool expected) =>
-        NumberInput.IsPartialNumber(text).Should().Be(expected);
-
-    /// <summary>
     /// Verifies a row shows the bell while an enabled rule watches it.
     /// </summary>
     [Fact]
@@ -432,5 +407,30 @@ public class AlertsViewModelTests
         var rule = new AlertRule { Condition = AlertCondition.PriceBelow, Threshold = 1234.5m };
 
         AlertText.Summary(rule).Should().Contain("1234.5").And.Contain("below");
+    }
+
+    /// <summary>
+    /// Verifies that the same threshold written another way is not a change, and another number is.
+    /// </summary>
+    [Fact]
+    public async Task IsDirty_SameNumberWrittenAnotherWay_IsNotAChange()
+    {
+        var settings = Harness.WatchlistOf(Btc);
+        settings.Alerts.Add(new AlertRule { ProviderId = Btc.ProviderId, Symbol = Btc.Symbol, Threshold = 5.5m });
+        await using var h = new Harness(settings);
+        h.Alerts.Begin(Btc);
+        var item = h.Alerts.Items.Single();
+
+        TestCulture.Under("de-DE", () =>
+        {
+            item.ThresholdText = "5.5";
+            item.IsDirty.Should().BeFalse();
+            item.ThresholdText = "5,50";
+            item.IsDirty.Should().BeFalse();
+            item.ThresholdText = "5,6";
+            item.IsDirty.Should().BeTrue();
+            item.ThresholdText = "abc";
+            item.IsDirty.Should().BeTrue();
+        });
     }
 }

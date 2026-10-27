@@ -89,9 +89,10 @@ public sealed partial class AlertRuleItemViewModel : ObservableObject
     public partial string ThresholdText { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets a value indicating whether the condition or the threshold was changed and not saved yet.
+    /// Gets a value indicating whether the condition or the threshold was changed and not saved yet. The threshold counts
+    /// as changed when the number is, not when it is written differently.
     /// </summary>
-    public bool IsDirty => SelectedCondition != _saved.Condition || ThresholdText.Trim() != FormatThreshold(_saved.Threshold);
+    public bool IsDirty => SelectedCondition != _saved.Condition || !NumberText.TryParse(ThresholdText, out var typed) || typed != _saved.Threshold;
 
     /// <summary>
     /// Gets a value indicating whether the rule cannot be saved as it is typed.
@@ -219,7 +220,7 @@ public sealed partial class AlertRuleItemViewModel : ObservableObject
     /// <returns>
     /// The text.
     /// </returns>
-    private static string FormatThreshold(decimal threshold) => threshold.ToString("0.########", CultureInfo.InvariantCulture);
+    private static string FormatThreshold(decimal threshold) => NumberText.Format(threshold);
 
     /// <summary>
     /// Deletes the rule.
@@ -436,12 +437,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     /// <returns>
     /// <see langword="true"/> when the text is a number.
     /// </returns>
-    public static bool TryParseThreshold(string? text, out decimal value)
-    {
-        var trimmed = text?.Trim();
-        return decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out value)
-            || decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
-    }
+    public static bool TryParseThreshold(string? text, out decimal value) => NumberText.TryParse(text, out value);
 
     /// <summary>
     /// Adds the rule of the form for the instrument of the list.

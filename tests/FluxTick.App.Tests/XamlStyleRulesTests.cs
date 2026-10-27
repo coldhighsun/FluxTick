@@ -19,17 +19,7 @@ public class XamlStyleRulesTests
     /// <returns>
     /// The parsed document.
     /// </returns>
-    private static XDocument Load(string name)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FluxTick.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.SkipWhen(directory is null, "The sources are not next to the build output.");
-        return XDocument.Load(Path.Combine(directory!.FullName, "src", "FluxTick.App", "Views", name));
-    }
+    private static XDocument Load(string name) => SourceFiles.LoadXaml("Views", name);
 
     /// <summary>
     /// Finds the elements with a given name and a style class.
