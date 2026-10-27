@@ -5,6 +5,7 @@ using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
+using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
 using FluxTick.Providers.Yahoo;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -124,6 +125,11 @@ public sealed class YahooProviderContractTests : ProviderContractTests<YahooProv
 /// Contract tests for the Tencent provider.
 /// </summary>
 public sealed class TencentProviderContractTests : ProviderContractTests<TencentProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Sina provider.
+/// </summary>
+public sealed class SinaProviderContractTests : ProviderContractTests<SinaProviderFactory>;
 
 /// <summary>
 /// Contract tests for the OKX provider.

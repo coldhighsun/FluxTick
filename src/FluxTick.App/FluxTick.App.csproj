@@ -59,6 +59,7 @@
     <ProjectReference Include="..\FluxTick.Providers.Binance\FluxTick.Providers.Binance.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Yahoo\FluxTick.Providers.Yahoo.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Tencent\FluxTick.Providers.Tencent.csproj" />
+    <ProjectReference Include="..\FluxTick.Providers.Sina\FluxTick.Providers.Sina.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Okx\FluxTick.Providers.Okx.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Coinbase\FluxTick.Providers.Coinbase.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Kraken\FluxTick.Providers.Kraken.csproj" />

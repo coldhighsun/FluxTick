@@ -3,6 +3,7 @@ using FluxTick.Providers.Bybit;
 using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
+using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
 
 namespace FluxTick.Providers.Tests;
@@ -28,6 +29,7 @@ public class NewProvidersDefaultTests
     public static TheoryData<IMarketDataProviderFactory> Factories =>
     [
         new TencentProviderFactory(),
+        new SinaProviderFactory(),
         new OkxProviderFactory(),
         new CoinbaseProviderFactory(),
         new KrakenProviderFactory(),
