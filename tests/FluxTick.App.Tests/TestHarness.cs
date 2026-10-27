@@ -234,13 +234,25 @@ public sealed class Harness : IAsyncDisposable
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
         SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true));
         Alerts = new AlertsViewModel(Settings, registry, ui);
-        Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, Alerts, NullLogger<MainViewModel>.Instance);
+        Holding = new HoldingViewModel(Settings, ui);
+        Rates = new ExchangeRateService(new FixedRates(), NullLogger<ExchangeRateService>.Instance, Time, new ExchangeRateOptions());
+        Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, Alerts, Holding, Rates, NullLogger<MainViewModel>.Instance);
     }
 
     /// <summary>
     /// Gets the price alerts view model of the main window.
     /// </summary>
     public AlertsViewModel Alerts { get; }
+
+    /// <summary>
+    /// Gets the holding view model of the main window.
+    /// </summary>
+    public HoldingViewModel Holding { get; }
+
+    /// <summary>
+    /// Gets the exchange rate service, which fetches fixed rates when told to.
+    /// </summary>
+    public ExchangeRateService Rates { get; }
 
     /// <summary>
     /// Gets the clock.
@@ -344,4 +356,14 @@ public sealed class Harness : IAsyncDisposable
         AddAsset.Dispose();
         return Market.DisposeAsync();
     }
+}
+
+/// <summary>
+/// A rate source with a fixed table: one US dollar buys 7 yuan.
+/// </summary>
+public sealed class FixedRates : IExchangeRateProvider
+{
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, decimal>> GetRatesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, decimal>>(new Dictionary<string, decimal> { ["CNY"] = 7m });
 }

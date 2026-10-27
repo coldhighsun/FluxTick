@@ -25,28 +25,52 @@
           BoxShadow="0 4 16 0 #55000000">
     <StackPanel Spacing="2">
       <TextBlock Text="{loc:T TrayPopup_Empty}" Classes="muted" IsVisible="{Binding IsEmpty}" Margin="0,4" />
-      <ItemsControl ItemsSource="{Binding Items}">
+      <!-- Every row has two lines in each column and the same height, with or without a holding, and the texts of a column
+           are centered in it. The holding column shares its width between the rows: it has none while no instrument
+           is held, and all rows keep their prices in line while one is. -->
+      <ItemsControl ItemsSource="{Binding Items}" Grid.IsSharedSizeScope="True">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:AssetRowViewModel">
             <!-- Like the rows and cards of the window, an instrument whose prices stopped is dimmed and says why. -->
-            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3" Classes.stopped="{Binding IsDimmed}">
+            <Grid MinHeight="40" Classes.stopped="{Binding IsDimmed}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="Pnl" />
+              </Grid.ColumnDefinitions>
               <StackPanel VerticalAlignment="Center">
                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding Symbol}" Classes="muted mono" FontSize="10" />
+                <TextBlock Text="{Binding Symbol}" Classes="muted mono" FontSize="10" TextTrimming="CharacterEllipsis" />
               </StackPanel>
-              <TextBlock Grid.Column="1" Text="{Binding PriceText}" Classes="mono" VerticalAlignment="Center"
-                         Margin="8,0" Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
-              <Panel Grid.Column="2" MinWidth="64" VerticalAlignment="Center">
-                <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
-                           IsVisible="{Binding !HasStatus}"
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                <TextBlock Text="{Binding PriceText}" Classes="mono" HorizontalAlignment="Right"
                            Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
-                <TextBlock Text="{Binding StatusText}" Classes="warn" FontSize="11" HorizontalAlignment="Right"
-                           IsVisible="{Binding HasStatus}" />
-              </Panel>
+                <Panel MinWidth="64">
+                  <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
+                             IsVisible="{Binding !HasStatus}"
+                             Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+                  <TextBlock Text="{Binding StatusText}" Classes="warn" FontSize="11" HorizontalAlignment="Right"
+                             IsVisible="{Binding HasStatus}" />
+                </Panel>
+              </StackPanel>
+              <!-- The profit or loss of the holding: the amount over the percent. -->
+              <Grid Grid.Column="2" VerticalAlignment="Center">
+                <StackPanel IsVisible="{Binding HasHolding}" Margin="10,0,0,0" ToolTip.Tip="{Binding PnlText}">
+                  <TextBlock Text="{Binding PnlAmountText}" Classes="mono" HorizontalAlignment="Right"
+                             Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
+                  <TextBlock Text="{Binding PnlPercentText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
+                             Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
+                </StackPanel>
+              </Grid>
             </Grid>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+      <Border Height="1" Margin="0,4,0,0" Background="{DynamicResource BorderBrush}" IsVisible="{Binding HasPortfolio}" />
+      <!-- The total of all holdings in the base currency. -->
+      <TextBlock Text="{Binding PortfolioText}" IsVisible="{Binding HasPortfolio}" Classes="mono" FontSize="11" FontWeight="SemiBold"
+                 HorizontalAlignment="Right" Margin="0,6,0,0"
+                 Classes.up="{Binding PortfolioIsProfit}" Classes.down="{Binding PortfolioIsLoss}" />
     </StackPanel>
   </Border>
 </Window>

@@ -297,6 +297,7 @@ public sealed partial class MainWindow : Window
             _observed.SettingsRequested -= OnSettingsRequested;
             _observed.AddAssetRequested -= OnAddAssetRequested;
             _observed.AlertsRequested -= OnAlertsRequested;
+            _observed.HoldingRequested -= OnHoldingRequested;
             _observed.FullScreenExitRequested -= OnFullScreenExitRequested;
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged -= OnLayoutPropertyChanged;
@@ -308,6 +309,7 @@ public sealed partial class MainWindow : Window
             _observed.SettingsRequested += OnSettingsRequested;
             _observed.AddAssetRequested += OnAddAssetRequested;
             _observed.AlertsRequested += OnAlertsRequested;
+            _observed.HoldingRequested += OnHoldingRequested;
             _observed.FullScreenExitRequested += OnFullScreenExitRequested;
             _observed.PropertyChanged += OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged += OnLayoutPropertyChanged;
@@ -708,6 +710,28 @@ public sealed partial class MainWindow : Window
         }
 
         await ShowToolWindowAsync(viewModel, ToolWindowKind.Alerts, new AlertEditorWindow { DataContext = viewModel.AlertEditor });
+    }
+
+    /// <summary>
+    /// Opens the holding window of an instrument modally; it closes itself once the holding is saved or cleared.
+    /// </summary>
+    /// <param name="sender">
+    /// The view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private async void OnHoldingRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var window = new HoldingEditorWindow { DataContext = viewModel.HoldingEditor };
+        void Finish(object? s, EventArgs a) => window.Close();
+        viewModel.HoldingEditor.Completed += Finish;
+        await ShowToolWindowAsync(viewModel, ToolWindowKind.Holding, window, () => viewModel.HoldingEditor.Completed -= Finish);
     }
 
     /// <summary>

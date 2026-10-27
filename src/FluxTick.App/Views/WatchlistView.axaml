@@ -72,6 +72,9 @@
                   <MenuItem Header="{loc:T Watch_Alert}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditAlertsCommand}"
                             CommandParameter="{Binding}" />
+                  <MenuItem Header="{loc:T Watch_Holding}"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditHoldingCommand}"
+                            CommandParameter="{Binding}" />
                   <!-- The tray list is only offered where the tray popup can show it. -->
                   <MenuItem Header="{loc:T Watch_AddToTray}" IsVisible="{Binding CanAddToTray}"
                             ToolTip.Tip="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.AddTip}" ToolTip.ShowOnDisabled="True"
@@ -93,7 +96,7 @@
     </ScrollViewer>
 
     <!-- The card layout: one section per group, each a wrapping flow of fixed-size cards. -->
-    <ScrollViewer Name="CardsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="3,0,3,0"
+    <ScrollViewer Name="CardsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{x:Static views:CardLayout.ListPadding}"
                   IsVisible="{Binding IsCardLayout}">
       <!-- The canvas lies over the sections, scrolls with them and carries the drop indicator of a card drag. -->
       <Grid RowDefinitions="Auto,Auto">
@@ -154,6 +157,9 @@
                                     CommandParameter="{Binding}" />
                           <MenuItem Header="{loc:T Watch_Alert}"
                                     Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditAlertsCommand}"
+                                    CommandParameter="{Binding}" />
+                          <MenuItem Header="{loc:T Watch_Holding}"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).EditHoldingCommand}"
                                     CommandParameter="{Binding}" />
                           <MenuItem Header="{loc:T Watch_AddToTray}" IsVisible="{Binding CanAddToTray}"
                                     ToolTip.Tip="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.AddTip}" ToolTip.ShowOnDisabled="True"

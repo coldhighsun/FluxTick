@@ -901,6 +901,29 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies moving an instrument to another data source keeps what the user holds of it.
+    /// </summary>
+    [Fact]
+    public async Task ChangeSource_KeepsTheHoldingOfTheInstrument()
+    {
+        var settings = Harness.WatchlistOf(new Asset(Harness.Stocks, "A", "A", AssetClass.Equity), new Asset(Harness.Stocks, "B", "B", AssetClass.Equity));
+        settings.Watchlist[1].CostPrice = 12.5m;
+        settings.Watchlist[1].Quantity = 40m;
+        settings.Watchlist[1].HoldingCurrency = "HKD";
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[1]);
+        await h.AddAsset.AddCommand.ExecuteAsync(new Asset(Harness.Plain, "B", "B", AssetClass.Equity));
+
+        var moved = h.Store.Stored!.Watchlist.Single(e => e.ProviderId == Harness.Plain);
+        moved.CostPrice.Should().Be(12.5m);
+        moved.Quantity.Should().Be(40m);
+        moved.HoldingCurrency.Should().Be("HKD");
+        h.Store.Stored.Watchlist.Single(e => e.Symbol == "A").HasHolding.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies changing the data source is refused while the alerts would clash with those the instrument already has at
     /// the new source, with a message that names the condition; once the clash is deleted, the change goes through.
     /// </summary>

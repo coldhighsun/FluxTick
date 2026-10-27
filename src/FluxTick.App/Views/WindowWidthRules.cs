@@ -32,9 +32,9 @@ internal static class WindowWidthRules
     public const double ListWidthCompact = 280;
 
     /// <summary>
-    /// The smallest width of the card layout.
+    /// The smallest width of the card layout: just wide enough for one large card, so that no space is left beside it.
     /// </summary>
-    public const double CardsMinWidth = 330;
+    public static readonly double CardsMinWidth = CardLayout.OneLargeCardWindowWidth;
 
     /// <summary>
     /// How long the window takes to change its width.

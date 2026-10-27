@@ -99,6 +99,12 @@ public sealed partial class App : Application
     private TrayPopupWindow? _trayPopup;
 
     /// <summary>
+    /// Writes the tooltip of the tray icon once a second at most: the total changes with every price, and the icon
+    /// takes every new text from the system.
+    /// </summary>
+    private DispatcherTimer? _trayTooltipTimer;
+
+    /// <summary>
     /// Tells a click on the tray icon from the first half of a double-click.
     /// </summary>
     private TrayClickInterpreter? _trayClicks;
@@ -331,6 +337,40 @@ public sealed partial class App : Application
     }
 
     /// <summary>
+    /// Writes the tooltip of the tray icon soon, and once a second at most.
+    /// </summary>
+    private void ScheduleTrayTooltip()
+    {
+        if (_trayTooltipTimer is { IsEnabled: true })
+        {
+            return;
+        }
+
+        _trayTooltipTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _trayTooltipTimer.Tick -= OnTrayTooltipTick;
+        _trayTooltipTimer.Tick += OnTrayTooltipTick;
+        _trayTooltipTimer.Start();
+    }
+
+    /// <summary>
+    /// Writes the tooltip of the tray icon and waits for the next change.
+    /// </summary>
+    /// <param name="sender">
+    /// The timer.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnTrayTooltipTick(object? sender, EventArgs e)
+    {
+        _trayTooltipTimer?.Stop();
+        if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } icon)
+        {
+            icon.ToolTipText = TrayTooltip();
+        }
+    }
+
+    /// <summary>
     /// Starts the view model and honors the developer option <c>--page=add|settings|about</c>, which opens that page on startup.
     /// </summary>
     /// <param name="viewModel">
@@ -344,7 +384,18 @@ public sealed partial class App : Application
     /// </returns>
     private async Task StartAsync(MainViewModel viewModel, string[] args)
     {
+        _services!.GetRequiredService<ExchangeRateService>().Start();
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.PortfolioText))
+            {
+                ScheduleTrayTooltip();
+            }
+        };
         await viewModel.InitializeAsync();
+
+        // The total of the first prices may have been worked out before anything listened; show it on the icon too.
+        ScheduleTrayTooltip();
         var page = args.FirstOrDefault(a => a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))?["--page=".Length..];
         Dispatcher.UIThread.Post(() =>
         {
@@ -443,7 +494,7 @@ public sealed partial class App : Application
     {
         if (_trayPopup is null)
         {
-            _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services!.GetRequiredService<MainViewModel>().Rows) };
+            _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services!.GetRequiredService<MainViewModel>().Rows, _services!.GetRequiredService<MainViewModel>()) };
             _trayPopup.Dismissed += (_, _) => _trayClicks?.NotifyDismissed();
             ApplyTrayAssets();
         }
@@ -485,7 +536,8 @@ public sealed partial class App : Application
     /// <returns>
     /// The tooltip text.
     /// </returns>
-    private static string TrayTooltip() => $"FluxTick — {Loc.Get("Tagline")}";
+    private string TrayTooltip() =>
+        TrayTooltipText.Compose(_services?.GetService<MainViewModel>()?.PortfolioText, Loc.Get("Tagline"));
 
     /// <summary>
     /// Tells the user that a newer version exists and offers to install it, in a small window at the bottom right of

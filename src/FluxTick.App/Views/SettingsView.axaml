@@ -52,6 +52,13 @@
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_BaseCurrency}" />
+                    <TextBlock Text="{loc:T Settings_BaseCurrencyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding BaseCurrencies}" SelectedItem="{Binding BaseCurrency}" Width="100" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
                   <TextBlock Text="{loc:T Settings_KeepOnTop}" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
                 </Grid>

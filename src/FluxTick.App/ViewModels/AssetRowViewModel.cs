@@ -49,6 +49,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public AssetRowViewModel(Asset asset, string providerName)
     {
         Asset = asset;
+        TooltipContent = new RowTooltip(this);
         ProviderName = providerName;
         ClassLabel = LabelOf(asset.AssetClass);
         Sparkline = [];
@@ -104,10 +105,19 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string PreviousPriceText { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the tooltip with details.
+    /// Gets the content the views show as the tooltip. It asks for <see cref="Tooltip"/> only while the tooltip is open.
     /// </summary>
-    [ObservableProperty]
-    public partial string Tooltip { get; set; } = string.Empty;
+    public RowTooltip TooltipContent { get; }
+
+    /// <summary>
+    /// Gets the tooltip with details. It is worked out when it is read; every price only announces that it changed.
+    /// </summary>
+    public string Tooltip => _lastSnapshot switch
+    {
+        null => string.Empty,
+        { Quote: { } quote } snapshot => BuildTooltip(snapshot, quote),
+        _ => $"{Asset.DisplayName}\n{ProviderName}",
+    };
 
     /// <summary>
     /// Gets or sets the direction of the change against the reference price.
@@ -261,6 +271,139 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string HighText { get; set; } = PriceFormatter.Unavailable;
 
     /// <summary>
+    /// The price the user paid per unit, or <see langword="null"/> without a holding.
+    /// </summary>
+    private decimal? _costPrice;
+
+    /// <summary>
+    /// The number of units the user holds, or <see langword="null"/> without a holding.
+    /// </summary>
+    private decimal? _quantity;
+
+    /// <summary>
+    /// Gets the currency of the holding.
+    /// </summary>
+    public string HoldingCurrency { get; private set; } = CurrencyCodes.Pivot;
+
+    /// <summary>
+    /// Gets the profit and loss of the holding at the latest price, or <see langword="null"/> without a holding or a
+    /// price. It is in <see cref="HoldingCurrency"/>.
+    /// </summary>
+    public HoldingPnl? Pnl { get; private set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the user holds the instrument.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasHolding { get; set; }
+
+    /// <summary>
+    /// Gets what the user holds and paid, such as <c>100 × 10.00 CNY</c>.
+    /// </summary>
+    public string HoldingText =>
+        HasHolding ? $"{PriceFormatter.FormatQuantity(_quantity!.Value)} × {PriceFormatter.FormatPrice(_costPrice!.Value, Asset.AssetClass)} {HoldingCurrency}" : string.Empty;
+
+    /// <summary>
+    /// Gets the price paid per unit, such as <c>100.00</c>, for the large card. The currency is in the tooltip.
+    /// </summary>
+    public string CostPriceText => HasHolding ? PriceFormatter.FormatPrice(_costPrice!.Value, Asset.AssetClass) : string.Empty;
+
+    /// <summary>
+    /// Gets the profit or loss of the holding in money only, such as <c>+1,200.00</c>, for the small card.
+    /// </summary>
+    public string PnlAmountText => Pnl is { } pnl ? PriceFormatter.FormatSignedMoney(pnl.Amount) : PriceFormatter.Unavailable;
+
+    /// <summary>
+    /// Gets the profit or loss of the holding in percent only, such as <c>+20.00%</c>, for the tray popup.
+    /// </summary>
+    public string PnlPercentText => Pnl is { } pnl ? PriceFormatter.FormatPercent(pnl.Percent) : PriceFormatter.Unavailable;
+
+    /// <summary>
+    /// Gets the profit or loss of the holding in money and percent without the currency, such as
+    /// <c>+1,200.00 (+20.00%)</c>, for the other cards, which have little room.
+    /// </summary>
+    public string PnlCompactText => Pnl is null ? PriceFormatter.Unavailable : $"{PnlAmountText} ({PnlPercentText})";
+
+    /// <summary>
+    /// Gets the profit or loss of the holding in money and percent, such as <c>+1,200.00 CNY (+20.00%)</c>.
+    /// </summary>
+    public string PnlText => Pnl is null ? PriceFormatter.Unavailable : $"{PnlAmountText} {HoldingCurrency} ({PnlPercentText})";
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the holding is in profit.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsProfit { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the holding is at a loss.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLoss { get; set; }
+
+    /// <summary>
+    /// Sets what the user holds of the instrument.
+    /// </summary>
+    /// <param name="costPrice">
+    /// The price paid per unit, or <see langword="null"/> for no holding.
+    /// </param>
+    /// <param name="quantity">
+    /// The number of units held, or <see langword="null"/> for no holding.
+    /// </param>
+    /// <param name="currency">
+    /// The currency of the cost price.
+    /// </param>
+    public void SetHolding(decimal? costPrice, decimal? quantity, string currency)
+    {
+        if (_costPrice == costPrice && _quantity == quantity && HoldingCurrency == currency)
+        {
+            return;
+        }
+
+        _costPrice = costPrice;
+        _quantity = quantity;
+        HoldingCurrency = currency;
+        ApplyHolding(CurrentPrice, force: true);
+        RefreshTooltip();
+    }
+
+    /// <summary>
+    /// Works out the profit and loss at a price and the texts that show them.
+    /// </summary>
+    /// <param name="price">
+    /// The latest price, or <see langword="null"/> before the first quote.
+    /// </param>
+    /// <param name="force">
+    /// Whether the texts are announced as changed even when the figures are the same, because the holding itself changed.
+    /// </param>
+    private void ApplyHolding(decimal? price, bool force = false)
+    {
+        // The texts are worked out where they are read, so a price that moves only costs what is on screen. Here only
+        // the flags are set and the bindings are told what changed.
+        var before = Pnl;
+        var hadHolding = HasHolding;
+        if (!force && !hadHolding && !HoldingPnl.IsUsable(_costPrice, _quantity))
+        {
+            // Most instruments are not held: nothing to work out for them on every price.
+            return;
+        }
+
+        HasHolding = HoldingPnl.IsUsable(_costPrice, _quantity);
+        Pnl = HasHolding ? HoldingPnl.Compute(price, _costPrice, _quantity) : null;
+        IsProfit = Pnl is { Amount: > 0m };
+        IsLoss = Pnl is { Amount: < 0m };
+        if (force || before != Pnl || hadHolding != HasHolding)
+        {
+            OnPropertyChanged(nameof(HoldingText));
+            OnPropertyChanged(nameof(CostPriceText));
+            OnPropertyChanged(nameof(PnlAmountText));
+            OnPropertyChanged(nameof(PnlPercentText));
+            OnPropertyChanged(nameof(PnlCompactText));
+            OnPropertyChanged(nameof(PnlText));
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating whether the card is small.
     /// </summary>
     public bool IsSmallCard => CardSize == CardSize.Small;
@@ -300,14 +443,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     partial void OnAlertBelowChanged(decimal? value) => RefreshTooltip();
 
     /// <summary>
-    /// Builds the tooltip again from the last snapshot.
+    /// Announces that the tooltip changed, after something it tells changed.
     /// </summary>
     private void RefreshTooltip()
     {
-        if (_lastSnapshot is { Quote: { } quote } snapshot)
-        {
-            Tooltip = BuildTooltip(snapshot, quote);
-        }
+        OnPropertyChanged(nameof(Tooltip));
+        TooltipContent.Refresh();
     }
 
     /// <summary>
@@ -337,6 +478,13 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// switched off), which the sparkline shows as a gray dashed line from the last price on.
     /// </summary>
     public bool IsStopped => Health is not (AssetHealth.Live or AssetHealth.Waiting);
+
+    /// <summary>
+    /// Gets a value indicating whether the last price is too old to count in a total: the prices went stale, the source
+    /// failed or is off or missing. A source that is reconnecting is not outdated yet, so that a short break does not
+    /// make the holdings of a whole source drop out of the total and come back.
+    /// </summary>
+    public bool IsPriceOutdated => Health is AssetHealth.Stale or AssetHealth.StaleReconnecting or AssetHealth.Failed or AssetHealth.ProviderDisabled or AssetHealth.ProviderMissing;
 
     /// <summary>
     /// Gets a value indicating whether the displayed data is not trustworthy and should be dimmed, which it is while the
@@ -394,7 +542,8 @@ public sealed partial class AssetRowViewModel : ObservableObject
                 < 0m => PriceDirection.Down,
                 _ => PriceDirection.Flat,
             };
-            Tooltip = BuildTooltip(snapshot, quote);
+            ApplyHolding(quote.Price);
+            RefreshTooltip();
 
             // A change that does not show in the text, because of the rounding, has nothing to roll.
             if (RollEnabled && CurrentPrice is { } previous && previous != quote.Price && shownBefore != PriceText)
@@ -409,7 +558,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         }
         else
         {
-            Tooltip = $"{Asset.DisplayName}\n{ProviderName}";
+            RefreshTooltip();
         }
     }
 
@@ -460,6 +609,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     partial void OnHealthChanged(AssetHealth value)
     {
         OnPropertyChanged(nameof(IsStopped));
+        OnPropertyChanged(nameof(IsPriceOutdated));
         OnPropertyChanged(nameof(IsDimmed));
     }
 
@@ -475,6 +625,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     private static string StatusOf(AssetSnapshot snapshot) => snapshot.Health switch
     {
         AssetHealth.Stale => Loc.Get("Status_Stale"),
+        AssetHealth.StaleReconnecting => Loc.Get("Status_StaleReconnecting"),
         AssetHealth.Reconnecting => Loc.Get("Provider_Reconnecting"),
         AssetHealth.Failed => Loc.Get("Status_SourceError"),
         AssetHealth.ProviderDisabled => Loc.Get("Status_SourceOff"),
@@ -508,6 +659,15 @@ public sealed partial class AssetRowViewModel : ObservableObject
         if (quote.Change is { } change)
         {
             lines.Add(Loc.Get("Row_Change", PriceFormatter.FormatPrice(change, Asset.AssetClass), PriceFormatter.FormatPercent(quote.ChangePercent)));
+        }
+
+        if (HasHolding)
+        {
+            lines.Add(Loc.Get("Row_HoldingTip", HoldingText));
+            if (Pnl is { } pnl)
+            {
+                lines.Add(Loc.Get("Row_PnlTip", PriceFormatter.FormatMoney(pnl.MarketValue), HoldingCurrency, PnlText));
+            }
         }
 
         if (small && snapshot.Health != AssetHealth.Live && StatusOf(snapshot) is { Length: > 0 } status)

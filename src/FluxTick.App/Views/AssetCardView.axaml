@@ -9,8 +9,9 @@
   <!-- The size comes from the tile styles. Three sizes share this one layout: the small card shows only the symbol and
        the price (what the styles hide has the class "detail"), the large one also shows what has the class "largeonly".
        Nothing that the styles show or hide has a visibility of its own, as a value on the element would win. -->
-  <Border Classes="tile" Classes.small="{Binding IsSmallCard}" Classes.large="{Binding IsLargeCard}" Classes.dimmed="{Binding IsDimmed}"
-          ToolTip.Tip="{Binding Tooltip}">
+  <!-- The tooltip is built when it opens, not for every price (see RowTooltip). -->
+  <Border Name="TipHost" Classes="tile" Classes.small="{Binding IsSmallCard}" Classes.large="{Binding IsLargeCard}" Classes.dimmed="{Binding IsDimmed}"
+          ToolTip.Tip="{Binding TooltipContent}">
     <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
 
       <!-- Tick flash: briefly tints the card in the direction of the last move. Its margin is the padding of the card. -->
@@ -18,7 +19,7 @@
 
       <!-- The symbol gives way (with an ellipsis) so the class chip always stays inside the card. -->
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-        <TextBlock Classes="symbol" Text="{Binding Symbol}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <TextBlock Classes="symbol" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
         <StackPanel Grid.Column="1" Classes="detail" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="6,0,0,0">
           <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
             StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center"
@@ -30,9 +31,15 @@
       </Grid>
 
       <Grid Grid.Row="1" Classes="detail" ColumnDefinitions="*,Auto">
-        <TextBlock Classes="muted name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Column="1" Classes="muted largeonly" Text="{Binding ProviderName}" FontSize="10" TextTrimming="CharacterEllipsis"
-                   MaxWidth="110" Margin="6,0,0,0" VerticalAlignment="Center" />
+        <TextBlock Classes="muted name" Text="{Binding Symbol}" TextTrimming="CharacterEllipsis" />
+        <!-- With a holding, the profit or loss takes the place of the data source here, so that no row is added and nothing
+             is squeezed. Like the rest, what the size shows has a class of its own on a panel around it. -->
+        <Panel Grid.Column="1" Classes="largeonly" Margin="6,0,0,0" VerticalAlignment="Center">
+          <TextBlock Classes="muted" Text="{Binding ProviderName}" FontSize="10" TextTrimming="CharacterEllipsis"
+                     MaxWidth="110" IsVisible="{Binding !HasHolding}" />
+        </Panel>
+        <TextBlock Grid.Column="1" Text="{Binding PnlCompactText}" Classes="mono" FontSize="10" Margin="6,0,0,0" VerticalAlignment="Center"
+                   IsVisible="{Binding HasHolding}" Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
       </Grid>
 
       <controls:SparklineControl Grid.Row="2" Classes="detail chart" Margin="0,4"
@@ -75,10 +82,15 @@
                        Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
           </Panel>
         </StackPanel>
+        <!-- The small card has no change beside the price; it shows the profit or loss in money there instead. -->
+        <Panel Grid.Column="1" Classes="smallonly" VerticalAlignment="Bottom" Margin="6,0,0,1">
+          <TextBlock Text="{Binding PnlAmountText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
+                     IsVisible="{Binding HasHolding}" Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
+        </Panel>
       </Grid>
 
       <!-- Large card only: the reference price the change is measured against, and the range of the chart. -->
-      <Grid Grid.Row="4" Classes="largeonly" ColumnDefinitions="*,*,*" Margin="0,8,0,0">
+      <Grid Grid.Row="4" Classes="largeonly" ColumnDefinitions="*,*,*,Auto" Margin="0,8,0,0">
         <StackPanel>
           <TextBlock Text="{loc:T Row_Reference}" Classes="muted" FontSize="9" />
           <TextBlock Text="{Binding ReferenceText}" Classes="mono" FontSize="11" TextTrimming="CharacterEllipsis" />
@@ -91,7 +103,13 @@
           <TextBlock Text="{loc:T Row_RangeHigh}" Classes="muted" FontSize="9" />
           <TextBlock Text="{Binding HighText}" Classes="mono" FontSize="11" TextTrimming="CharacterEllipsis" />
         </StackPanel>
+        <!-- The price paid, when the user holds the instrument; the column has no width otherwise. -->
+        <StackPanel Grid.Column="3" IsVisible="{Binding HasHolding}" Margin="8,0,0,0">
+          <TextBlock Text="{loc:T Row_Cost}" Classes="muted" FontSize="9" />
+          <TextBlock Text="{Binding CostPriceText}" Classes="mono" FontSize="11" />
+        </StackPanel>
       </Grid>
+
     </Grid>
   </Border>
 </UserControl>

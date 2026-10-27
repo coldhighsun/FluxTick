@@ -61,6 +61,11 @@ public static class AppPaths
     public static string UpdateStateFile => Path.Combine(DataDirectory, "update-state.json");
 
     /// <summary>
+    /// Gets the path of the file that keeps the latest exchange rates for offline use.
+    /// </summary>
+    public static string ExchangeRatesFile => Path.Combine(DataDirectory, "rates.json");
+
+    /// <summary>
     /// Gets the rolling log file path pattern.
     /// </summary>
     public static string LogFile => Path.Combine(DataDirectory, "logs", "fluxtick-.log");
@@ -161,4 +166,37 @@ public static class PriceFormatter
     /// </returns>
     public static string FormatPercent(decimal? percent) =>
         percent is null ? Unavailable : percent.Value.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>
+    /// Formats an amount of money with two decimals and a thousands separator.
+    /// </summary>
+    /// <param name="amount">
+    /// The amount.
+    /// </param>
+    /// <returns>
+    /// Text such as <c>12,345.60</c>.
+    /// </returns>
+    public static string FormatMoney(decimal amount) => amount.ToString("#,##0.00", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Formats an amount of money with an explicit sign.
+    /// </summary>
+    /// <param name="amount">
+    /// The amount.
+    /// </param>
+    /// <returns>
+    /// Text such as <c>+12,345.60</c> or <c>-5.00</c>.
+    /// </returns>
+    public static string FormatSignedMoney(decimal amount) => amount.ToString("+#,##0.00;-#,##0.00;0.00", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Formats a quantity without trailing zeros.
+    /// </summary>
+    /// <param name="quantity">
+    /// The quantity.
+    /// </param>
+    /// <returns>
+    /// Text such as <c>1,000</c> or <c>0.5</c>.
+    /// </returns>
+    public static string FormatQuantity(decimal quantity) => quantity.ToString("#,##0.########", CultureInfo.InvariantCulture);
 }

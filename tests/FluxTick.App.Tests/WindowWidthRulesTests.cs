@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Xml.Linq;
 using FluxTick.App.Views;
 using FluxTick.Core.Application;
 
@@ -26,7 +28,7 @@ public class WindowWidthRulesTests
     [InlineData(true)]
     public void For_CardLayout_IsFreeAboveMinimum(bool compact)
     {
-        WindowWidthRules.For(WatchlistLayout.Cards, compact).Should().Be(new WidthRule(330, double.PositiveInfinity));
+        WindowWidthRules.For(WatchlistLayout.Cards, compact).Should().Be(new WidthRule(328, double.PositiveInfinity));
     }
 
     /// <summary>
@@ -51,8 +53,8 @@ public class WindowWidthRulesTests
     /// </param>
     [Theory]
     [InlineData(555, 555)]
-    [InlineData(330, 330)]
-    [InlineData(100, 330)]
+    [InlineData(328, 328)]
+    [InlineData(100, 328)]
     public void TargetWidth_CardLayout_UsesRememberedWidthAboveMinimum(double remembered, double expected)
     {
         WindowWidthRules.TargetWidth(WatchlistLayout.Cards, compact: false, remembered).Should().Be(expected);
@@ -143,5 +145,41 @@ public class WindowWidthRulesTests
             previousStep = value - previous;
             previous = value;
         }
+    }
+
+    /// <summary>
+    /// Verifies that the minimum width of the card layout fits one large card exactly, with the same space left and right.
+    /// </summary>
+    [Fact]
+    public void CardsMinWidth_OneLargeCard_FitsExactlyWithEqualSides()
+    {
+        var space = CardLayout.ListPadding.Left + CardLayout.ListPadding.Right + (2 * CardLayout.WindowFrame);
+
+        CardLayout.ListPadding.Left.Should().Be(CardLayout.ListPadding.Right);
+        WindowWidthRules.CardsMinWidth.Should().Be(CardLayout.LargeCardWidth + (2 * CardLayout.CardMargin) + space);
+        WindowWidthRules.CardsMinWidth.Should().Be(328);
+    }
+
+    /// <summary>
+    /// Verifies that the XAML files take the sizes the minimum width is worked out from from <see cref="CardLayout"/> and
+    /// do not repeat them as numbers, which would let the two drift apart.
+    /// </summary>
+    [Fact]
+    public void Xaml_CardSizes_AreTakenFromCardLayout()
+    {
+        var theme = SourceFiles.LoadXaml("Styles", "Theme.axaml");
+        var values = theme.Descendants()
+            .Where(e => e.Name.LocalName == "Style" && (string?)e.Attribute("Selector") is "Border.tile" or "Border.tile.large")
+            .SelectMany(style => style.Elements())
+            .Where(setter => (string?)setter.Attribute("Property") is "Margin" or "Width")
+            .Select(setter => ((string?)setter.Attribute("Property"), (string?)setter.Attribute("Value")))
+            .ToList();
+        var list = SourceFiles.LoadXaml("Views", "WatchlistView.axaml").Descendants().Single(e => (string?)e.Attribute("Name") == "CardsScroller");
+        var window = SourceFiles.LoadXaml("Views", "MainWindow.axaml").Descendants().Single(e => (string?)e.Attribute("Name") == "ContentGrid");
+
+        values.Should().Contain(("Margin", "{x:Static views:CardLayout.CardMarginThickness}"));
+        values.Should().Contain(("Width", "{x:Static views:CardLayout.LargeCardWidth}"));
+        ((string?)list.Attribute("Padding")).Should().Be("{x:Static views:CardLayout.ListPadding}");
+        ((string?)window.Attribute("Margin")).Should().Be("{x:Static views:CardLayout.WindowFrameMargin}");
     }
 }

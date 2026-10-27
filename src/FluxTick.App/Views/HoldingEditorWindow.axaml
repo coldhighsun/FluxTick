@@ -1,0 +1,48 @@
+<views:ToolWindow xmlns="https://github.com/avaloniaui"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:loc="using:FluxTick.App.Localization"
+                  xmlns:vm="using:FluxTick.App.ViewModels"
+                  xmlns:views="using:FluxTick.App.Views"
+                  x:Class="FluxTick.App.Views.HoldingEditorWindow"
+                  x:DataType="vm:HoldingViewModel"
+                  Title="{Binding Title}"
+                  Icon="/Assets/fluxtick.png">
+
+  <views:ToolWindowFrame Title="{Binding Title}">
+    <StackPanel Margin="14,14,14,14" Spacing="10">
+
+      <StackPanel Spacing="3">
+        <TextBlock Text="{loc:T Holding_CostLabel}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <TextBox Text="{Binding CostText}" PlaceholderText="{loc:T Holding_CostPlaceholder}" MaxLength="24"
+                 TextAlignment="Right" views:NumericInput.Enabled="True">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding SaveCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+      </StackPanel>
+
+      <StackPanel Spacing="3">
+        <TextBlock Text="{loc:T Holding_QuantityLabel}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <TextBox Text="{Binding QuantityText}" PlaceholderText="{loc:T Holding_QuantityPlaceholder}" MaxLength="24"
+                 TextAlignment="Right" views:NumericInput.Enabled="True">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding SaveCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+      </StackPanel>
+
+      <StackPanel Spacing="3">
+        <TextBlock Text="{loc:T Holding_CurrencyLabel}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding Currencies}" SelectedItem="{Binding SelectedCurrency}" HorizontalAlignment="Stretch"
+                  ToolTip.Tip="{loc:T Holding_CurrencyTip}" />
+      </StackPanel>
+
+      <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" Classes="warn" FontSize="11" TextWrapping="Wrap" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Content="{loc:T Holding_Clear}" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" />
+        <Button Classes="primary" Content="{loc:T Holding_Save}" Command="{Binding SaveCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </views:ToolWindowFrame>
+</views:ToolWindow>

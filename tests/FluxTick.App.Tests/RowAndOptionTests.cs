@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
@@ -318,5 +319,24 @@ public class RowAndOptionTests
         row.RollEnabled = false;
 
         changes.Should().Equal(nameof(AssetRowViewModel.RollEnabled), nameof(AssetRowViewModel.RollEnabled));
+    }
+
+    /// <summary>
+    /// Verifies that the status of an instrument that is stale because its source keeps reconnecting says so, and that
+    /// one that is only stale does not, whatever detail the snapshot has.
+    /// </summary>
+    [Fact]
+    public void Update_StaleReconnecting_SaysItIsReconnecting()
+    {
+        var row = new AssetRowViewModel(Btc, "Crypto Co");
+        var quote = new Quote(Btc.Id, 110m, 100m, DateTimeOffset.UnixEpoch);
+
+        row.Update(new AssetSnapshot(Btc, quote, [100m, 110m], AssetHealth.Stale, "some detail"));
+        row.StatusText.Should().Be(Loc.Get("Status_Stale"));
+        row.IsPriceOutdated.Should().BeTrue();
+
+        row.Update(new AssetSnapshot(Btc, quote, [100m, 110m], AssetHealth.StaleReconnecting, "offline"));
+        row.StatusText.Should().Be(Loc.Get("Status_StaleReconnecting"));
+        row.IsPriceOutdated.Should().BeTrue();
     }
 }
