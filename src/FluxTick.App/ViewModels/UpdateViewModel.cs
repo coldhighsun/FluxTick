@@ -67,12 +67,12 @@ public sealed partial class UpdateViewModel : LocalizedViewModel
     /// Gets the running version as text.
     /// </summary>
     public string CurrentVersionText =>
-        _service.CurrentVersion is { } version ? UpdateService.FormatVersion(version) : Loc.Get("Update_UnknownVersion");
+        _service.CurrentVersionText ?? Loc.Get("Update_UnknownVersion");
 
     /// <summary>
     /// Gets the newer version as text, or an empty text when there is none.
     /// </summary>
-    private string LatestVersionText => _service.LatestVersion is { } version ? UpdateService.FormatVersion(version) : string.Empty;
+    private string LatestVersionText => _service.LatestVersionText ?? string.Empty;
 
     /// <summary>
     /// Gets the sentence that says where the check stands, or an empty text before the first check.
