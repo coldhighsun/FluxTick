@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluxTick.Abstractions;
 using FluxTick.Core.Application;
 using FluxTick.Core.Infrastructure;
@@ -16,6 +17,22 @@ public sealed class RoutingAndSettingsTests : IDisposable
     /// A scratch directory unique to this test instance.
     /// </summary>
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"fluxtick-tests-{Guid.NewGuid():N}");
+
+    /// <summary>
+    /// The class each settings class is read into.
+    /// </summary>
+    private static readonly Dictionary<Type, Type> FileTypes = new()
+    {
+        [typeof(AppSettings)] = typeof(SettingsFile),
+        [typeof(WatchlistEntry)] = typeof(WatchlistEntryFile),
+        [typeof(WatchGroup)] = typeof(WatchGroupFile),
+        [typeof(AlertRule)] = typeof(AlertRuleFile),
+        [typeof(ProviderSettings)] = typeof(ProviderSettingsFile),
+        [typeof(AppearanceSettings)] = typeof(AppearanceFile),
+        [typeof(GeneralSettings)] = typeof(GeneralFile),
+        [typeof(UpdateSettings)] = typeof(UpdatesFile),
+        [typeof(WindowSettings)] = typeof(WindowFile),
+    };
 
     /// <summary>
     /// Removes the scratch directory.
@@ -284,26 +301,80 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies a file with explicit nulls loads and is repaired instead of crashing.
+    /// Verifies a file with explicit nulls loads with the defaults instead of being set aside.
     /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
     [Fact]
-    public async Task LoadAsync_WithNullCollections_NormalizesInsteadOfThrowing()
+    public async Task LoadAsync_WithNullProperties_UsesDefaults()
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "settings.json");
-        await File.WriteAllTextAsync(path, """{ "watchlist": null, "groups": null, "alerts": null, "appearance": null }""");
-        var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
+        await File.WriteAllTextAsync(path, """{ "watchlist": null, "appearance": null, "general": { "trayAssets": null, "closeToTray": null }, "window": null }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
 
-        await manager.LoadAsync(new AppSettings());
+        var loaded = await store.LoadAsync();
 
-        manager.Current.Groups.Should().NotBeEmpty();
-        manager.Current.Alerts.Should().NotBeNull();
-        manager.Current.Appearance.Should().NotBeNull();
+        loaded!.Watchlist.Should().BeEmpty();
+        loaded.Appearance.AutoHideAtEdge.Should().BeTrue();
+        loaded.General.TrayAssets.Should().BeEmpty();
+        loaded.General.CloseToTray.Should().BeTrue();
+        loaded.Window.Width.Should().Be(new WindowSettings().Width);
+        File.Exists($"{path}.bad").Should().BeFalse();
     }
 
     /// <summary>
-    /// Verifies null entries inside collections are dropped instead of failing the start.
+    /// Verifies settings that are saved load back the same.
     /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTrips()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "G", Collapsed = true });
+        settings.Watchlist.Add(new WatchlistEntry { ProviderId = "p", Symbol = "S", DisplayName = "D", AssetClass = AssetClass.Crypto, GroupId = "g", CostPrice = 2, Quantity = 3, HoldingCurrency = "USD" });
+        settings.Alerts.Add(new AlertRule { Id = "r", ProviderId = "p", Symbol = "S", Condition = AlertCondition.PriceBelow, Threshold = 5, Enabled = false, Repeat = true });
+        settings.Providers["p"] = new ProviderSettings { Enabled = false, Options = { ["k"] = "v" } };
+        settings.Routing[AssetClass.Crypto] = ["p"];
+        settings.Appearance = new AppearanceSettings
+        {
+            Opacity = 0.5,
+            AlwaysOnTop = false,
+            Compact = true,
+            Locked = true,
+            RollPriceOnUpdate = true,
+            AutoHideAtEdge = false,
+            ColorConvention = ColorConvention.RedUp,
+            ThemeMode = ThemeMode.Dark,
+            Language = LanguageMode.En,
+            Layout = WatchlistLayout.Cards,
+            CardSize = CardSize.Large,
+            Grouping = CardGrouping.Custom,
+            CollapsedTypes = [AssetClass.Crypto],
+            CollapsedProviders = ["p"],
+            TypeOrder = [AssetClass.Crypto],
+        };
+        settings.General = new GeneralSettings { StartMinimized = true, CloseToTray = false, TrayAssets = ["p|S"], BaseCurrency = "EUR" };
+        settings.Updates.AutoCheck = false;
+        settings.Window = new WindowSettings { X = 1, Y = 2, Width = 3, Height = 4, FullScreen = true };
+
+        await store.SaveAsync(settings);
+        var loaded = await store.LoadAsync();
+
+        loaded.Should().BeEquivalentTo(settings);
+    }
+
+    /// <summary>
+    /// Verifies null elements inside collections are dropped.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
     [Fact]
     public async Task LoadAsync_WithNullEntries_DropsThem()
     {
@@ -320,6 +391,106 @@ public sealed class RoutingAndSettingsTests : IDisposable
         manager.Current.Providers.Should().BeEmpty();
         manager.Current.Routing.Should().BeEmpty();
         manager.Current.Groups.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// Verifies a file that needed repairs is written again by the manager, so that identifiers made up for it stay the
+    /// same.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithRepairs_WritesTheRepairedFile()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "groups": [null, { "name": "No id" }], "alerts": [null] }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+        var saved = await store.LoadAsync();
+
+        manager.Current.Groups.Should().ContainSingle().Which.Id.Should().NotBeNullOrEmpty();
+        saved!.Groups.Single().Id.Should().Be(manager.Current.Groups.Single().Id);
+        saved.Normalize().Should().BeFalse("the file was written in its repaired state");
+    }
+
+    /// <summary>
+    /// Verifies a repair made while reading is reported once by <see cref="AppSettings.Normalize"/>, and a file that only
+    /// lacks values, as one from an older version does, is no repair.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task Normalize_ReportsARepairFromReadingOnce()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        await File.WriteAllTextAsync(path, """{ "groups": [{ "id": "g", "name": "G" }], "appearance": { "opacity": 0.8 } }""");
+        (await store.LoadAsync())!.Normalize().Should().BeFalse();
+
+        await File.WriteAllTextAsync(path, """{ "groups": [{ "id": "g", "name": "G" }], "alerts": [null] }""");
+        var repaired = (await store.LoadAsync())!;
+        repaired.Normalize().Should().BeTrue();
+        repaired.Normalize().Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies every setting that is written can be read back: each public property of the settings classes has one of
+    /// the same name and the same type, apart from nullability and the file classes, in the class it is read into, so that a new setting is not lost at the next start.
+    /// </summary>
+    /// <param name="settingsType">
+    /// The settings class.
+    /// </param>
+    /// <param name="fileType">
+    /// The class it is read into.
+    /// </param>
+    [Theory]
+    [InlineData(typeof(AppSettings), typeof(SettingsFile))]
+    [InlineData(typeof(WatchlistEntry), typeof(WatchlistEntryFile))]
+    [InlineData(typeof(WatchGroup), typeof(WatchGroupFile))]
+    [InlineData(typeof(AlertRule), typeof(AlertRuleFile))]
+    [InlineData(typeof(ProviderSettings), typeof(ProviderSettingsFile))]
+    [InlineData(typeof(AppearanceSettings), typeof(AppearanceFile))]
+    [InlineData(typeof(GeneralSettings), typeof(GeneralFile))]
+    [InlineData(typeof(UpdateSettings), typeof(UpdatesFile))]
+    [InlineData(typeof(WindowSettings), typeof(WindowFile))]
+    public void SettingsFile_HasEveryWrittenSetting(Type settingsType, Type fileType)
+    {
+        var written = settingsType.GetProperties()
+            .Where(p => p.SetMethod is { IsPublic: true } && p.GetCustomAttribute<System.Text.Json.Serialization.JsonIgnoreAttribute>() is null)
+            .Select(p => (p.Name, Type: ReadAs(p.PropertyType)));
+        var read = fileType.GetProperties().Select(p => (p.Name, Type: Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType));
+
+        read.Should().BeEquivalentTo(written);
+    }
+
+    /// <summary>
+    /// Gets the type a setting is read as: the file class for a settings class, and the same with its type arguments
+    /// replaced for a collection of those. Nullability does not matter.
+    /// </summary>
+    /// <param name="type">
+    /// The type of the setting.
+    /// </param>
+    /// <returns>
+    /// The type of the property that reads it.
+    /// </returns>
+    private static Type ReadAs(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (FileTypes.TryGetValue(type, out var fileType))
+        {
+            return fileType;
+        }
+
+        return type.IsGenericType
+            ? type.GetGenericTypeDefinition().MakeGenericType([.. type.GetGenericArguments().Select(ReadAs)])
+            : type;
     }
 
     /// <summary>
@@ -545,13 +716,19 @@ public sealed class RoutingAndSettingsTests : IDisposable
     /// Verifies the cards are of the usual size by default, also for a settings file from before there was a size, and a
     /// chosen size survives a copy of the settings.
     /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
     [Fact]
-    public void CardSize_DefaultsToMediumAndSurvivesCloning()
+    public async Task CardSize_DefaultsToMediumAndSurvivesCloning()
     {
         new AppSettings().Appearance.CardSize.Should().Be(CardSize.Medium);
 
-        var legacy = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"appearance\":{\"opacity\":0.5}}", AppSettings.JsonOptions)!;
-        legacy.Appearance.CardSize.Should().Be(CardSize.Medium);
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "appearance": { "opacity": 0.5 } }""");
+        var legacy = await new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance).LoadAsync();
+        legacy!.Appearance.CardSize.Should().Be(CardSize.Medium);
 
         var settings = new AppSettings();
         settings.Appearance.CardSize = CardSize.Large;

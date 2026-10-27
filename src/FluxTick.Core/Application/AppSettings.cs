@@ -138,7 +138,7 @@ public sealed class WatchGroup
     /// <summary>
     /// Gets or sets the stable identifier that watchlist entries refer to.
     /// </summary>
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Id { get; set; } = Identifier.New();
 
     /// <summary>
     /// Gets or sets the display name.
@@ -449,7 +449,8 @@ public sealed class WindowSettings
 public sealed class AppSettings
 {
     /// <summary>
-    /// The serializer options used to persist and clone settings.
+    /// The serializer options used to persist and clone settings. A file is read through <c>SettingsFile</c>, which
+    /// takes care of values that are missing or null.
     /// </summary>
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -504,6 +505,13 @@ public sealed class AppSettings
     public WindowSettings Window { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets a value indicating whether reading the settings from a file had to drop or make up something, such
+    /// as a null inside a collection or a missing identifier. <see cref="Normalize"/> reports that once, so that the
+    /// settings get written again.
+    /// </summary>
+    internal bool Repaired { get; set; }
+
+    /// <summary>
     /// The name of the group that is created when there is none.
     /// </summary>
     public const string DefaultGroupName = "Default";
@@ -516,50 +524,12 @@ public sealed class AppSettings
     /// so that an old state does not come back months later when an instrument of that kind is added again.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> when something had to be changed.
+    /// <see langword="true"/> when something had to be changed, which includes a repair made while reading the file.
     /// </returns>
     public bool Normalize()
     {
-        // A file may hold an explicit null for any of these, which the deserializer stores as is.
-        var changed = false;
-        if (Watchlist is null || Groups is null || Alerts is null || Providers is null || Routing is null
-            || Appearance is null || General is null || Updates is null || Window is null
-            || Appearance.CollapsedProviders is null || Appearance.CollapsedTypes is null)
-        {
-            Watchlist ??= [];
-            Groups ??= [];
-            Alerts ??= [];
-            Providers ??= [];
-            Routing ??= [];
-            Appearance ??= new();
-            General ??= new();
-            Updates ??= new();
-            Window ??= new();
-            Appearance.CollapsedProviders ??= [];
-            Appearance.CollapsedTypes ??= [];
-            changed = true;
-        }
-
-        // The same for entries inside the collections: an explicit null there would fail further down.
-        changed |= Watchlist.RemoveAll(e => e is null) > 0;
-        changed |= Groups.RemoveAll(g => g is null) > 0;
-        changed |= Alerts.RemoveAll(a => a is null) > 0;
-        changed |= RemoveNullValues(Providers);
-        changed |= RemoveNullValues(Routing);
-        foreach (var provider in Providers.Values)
-        {
-            if (provider.Options is null)
-            {
-                provider.Options = [];
-                changed = true;
-            }
-        }
-
-        foreach (var order in Routing.Values)
-        {
-            changed |= order.RemoveAll(id => id is null) > 0;
-        }
-
+        var changed = Repaired;
+        Repaired = false;
         if (Groups.Count == 0)
         {
             Groups.Add(new WatchGroup { Name = DefaultGroupName });
@@ -588,12 +558,6 @@ public sealed class AppSettings
             || !conditions.Add((rule.ProviderId, rule.Symbol, rule.Condition))) > 0;
 
         // The tray list forgets instruments that left the watchlist and keys that repeat.
-        if (General.TrayAssets is null)
-        {
-            General.TrayAssets = [];
-            changed = true;
-        }
-
         changed |= TrayAssetSelection.Sanitize(General.TrayAssets, Watchlist);
 
         // A holding needs both a cost and a quantity above zero, otherwise it is not one. A currency is one the app has rates for.
@@ -620,47 +584,6 @@ public sealed class AppSettings
         }
 
         return changed;
-    }
-
-    /// <summary>
-    /// Removes the entries of a dictionary whose value is <see langword="null"/>.
-    /// </summary>
-    /// <typeparam name="TKey">
-    /// The key type.
-    /// </typeparam>
-    /// <typeparam name="TValue">
-    /// The value type.
-    /// </typeparam>
-    /// <param name="dictionary">
-    /// The dictionary to clean.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> when an entry was removed.
-    /// </returns>
-    private static bool RemoveNullValues<TKey, TValue>(Dictionary<TKey, TValue> dictionary)
-        where TKey : notnull
-    {
-        // Normalize runs with every settings change, and nothing is null almost always: look before building a list.
-        List<TKey>? nulls = null;
-        foreach (var (key, value) in dictionary)
-        {
-            if (value is null)
-            {
-                (nulls ??= []).Add(key);
-            }
-        }
-
-        if (nulls is null)
-        {
-            return false;
-        }
-
-        foreach (var key in nulls)
-        {
-            dictionary.Remove(key);
-        }
-
-        return true;
     }
 
     /// <summary>

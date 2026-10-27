@@ -60,10 +60,11 @@ public sealed class JsonSettingsStore(string path, ILogger<JsonSettingsStore> lo
     /// </returns>
     private async Task<AppSettings?> ReadAsync(CancellationToken cancellationToken)
     {
+        SettingsFile? file;
         try
         {
             await using var stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, AppSettings.JsonOptions, cancellationToken)
+            file = await JsonSerializer.DeserializeAsync<SettingsFile>(stream, AppSettings.JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (JsonException ex)
@@ -81,6 +82,13 @@ public sealed class JsonSettingsStore(string path, ILogger<JsonSettingsStore> lo
 
             return null;
         }
+
+        if (file is null)
+        {
+            return null;
+        }
+
+        return file.ToSettings();
     }
 
     /// <inheritdoc />
