@@ -1,4 +1,3 @@
-using System.Net;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
 using Microsoft.Extensions.Logging;
@@ -56,10 +55,9 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
     {
         var baseUri = EndpointOptions.GetHttpUri(context.Options, Descriptor, BaseUrlKey);
 
-        var handler = new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All };
-        var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36");
+        var http = AppHttpClient.Create(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+            decompress: true);
 
         return new YahooProvider(
             Descriptor,
