@@ -26,12 +26,66 @@ public sealed partial class TrayPopupViewModel : ObservableObject
     /// <param name="rows">
     /// The rows of the watchlist. Nothing is listed until <see cref="SetSelection"/> says which instruments.
     /// </param>
-    public TrayPopupViewModel(ObservableCollection<AssetRowViewModel> rows)
+    /// <param name="main">
+    /// The main view model, whose total of the holdings the popup shows, or <see langword="null"/> for none.
+    /// </param>
+    public TrayPopupViewModel(ObservableCollection<AssetRowViewModel> rows, MainViewModel? main = null)
     {
         _rows = rows;
         _selection = [];
         _rows.CollectionChanged += OnRowsChanged;
+        if (main is not null)
+        {
+            _main = main;
+            main.PropertyChanged += OnMainPropertyChanged;
+        }
+
         Refresh();
+    }
+
+    /// <summary>
+    /// The main view model, or <see langword="null"/> when the popup shows no total.
+    /// </summary>
+    private readonly MainViewModel? _main;
+
+    /// <summary>
+    /// Gets the total of the holdings in the base currency, or an empty text when there is none.
+    /// </summary>
+    public string PortfolioText => _main?.PortfolioText ?? string.Empty;
+
+    /// <summary>
+    /// Gets a value indicating whether the popup shows the total of the holdings.
+    /// </summary>
+    public bool HasPortfolio => PortfolioText.Length > 0;
+
+    /// <summary>
+    /// Gets a value indicating whether the total is a profit.
+    /// </summary>
+    public bool PortfolioIsProfit => _main?.PortfolioIsProfit ?? false;
+
+    /// <summary>
+    /// Gets a value indicating whether the total is a loss.
+    /// </summary>
+    public bool PortfolioIsLoss => _main?.PortfolioIsLoss ?? false;
+
+    /// <summary>
+    /// Passes on the change of the total of the holdings.
+    /// </summary>
+    /// <param name="sender">
+    /// The main view model.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnMainPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainViewModel.PortfolioText) or nameof(MainViewModel.PortfolioIsProfit) or nameof(MainViewModel.PortfolioIsLoss))
+        {
+            OnPropertyChanged(nameof(PortfolioText));
+            OnPropertyChanged(nameof(HasPortfolio));
+            OnPropertyChanged(nameof(PortfolioIsProfit));
+            OnPropertyChanged(nameof(PortfolioIsLoss));
+        }
     }
 
     /// <summary>

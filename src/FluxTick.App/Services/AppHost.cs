@@ -5,6 +5,7 @@ using FluxTick.Core.Infrastructure;
 using FluxTick.Providers.Binance;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.Common;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
@@ -139,6 +140,19 @@ public static class AppHost
         services.AddSingleton<AddAssetViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<AlertsViewModel>();
+        services.AddSingleton<HoldingViewModel>();
+
+        // The demo mode is offline: it converts with fixed rates and keeps nothing on disk. The provider owns its client, which
+        // lives as long as the app, so its connections are renewed now and then to follow a change of the address of the
+        // server.
+        services.AddSingleton<IExchangeRateProvider>(_ => demo
+            ? new DemoRateProvider()
+            : new FrankfurterRateProvider(AppHttpClient.Create("FluxTick", decompress: true, connectionLifetime: TimeSpan.FromMinutes(5))));
+        services.AddSingleton(sp => new ExchangeRateService(
+            sp.GetRequiredService<IExchangeRateProvider>(),
+            sp.GetRequiredService<ILogger<ExchangeRateService>>(),
+            sp.GetRequiredService<TimeProvider>(),
+            new ExchangeRateOptions { CachePath = demo ? null : AppPaths.ExchangeRatesFile }));
         services.AddSingleton<MainViewModel>();
 
         return services.BuildServiceProvider();

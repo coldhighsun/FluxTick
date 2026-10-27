@@ -63,4 +63,18 @@ public class FormattingTests
         ThemeModeResolver.ToVariant(ThemeMode.Light).Should().Be(Avalonia.Styling.ThemeVariant.Light);
         ThemeModeResolver.ToVariant(ThemeMode.Dark).Should().Be(Avalonia.Styling.ThemeVariant.Dark);
     }
+
+    /// <summary>
+    /// Verifies the formatting helpers of money and quantities.
+    /// </summary>
+    [Fact]
+    public void Format_MoneyAndQuantity_UsesSignsAndSeparators()
+    {
+        PriceFormatter.FormatSignedMoney(1234.5m).Should().Be("+1,234.50");
+        PriceFormatter.FormatSignedMoney(-5m).Should().Be("-5.00");
+        PriceFormatter.FormatSignedMoney(0m).Should().Be("0.00");
+        PriceFormatter.FormatMoney(1234.567m).Should().Be("1,234.57");
+        PriceFormatter.FormatQuantity(1000m).Should().Be("1,000");
+        PriceFormatter.FormatQuantity(0.5m).Should().Be("0.5");
+    }
 }

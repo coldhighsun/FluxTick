@@ -874,6 +874,17 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool CloseToTray { get; set; } = true;
 
     /// <summary>
+    /// Gets the currencies the total of the holdings can be shown in.
+    /// </summary>
+    public IReadOnlyList<string> BaseCurrencies { get; } = CurrencyCodes.Supported;
+
+    /// <summary>
+    /// Gets or sets the currency the total of the holdings is shown in.
+    /// </summary>
+    [ObservableProperty]
+    public partial string BaseCurrency { get; set; } = CurrencyCodes.Pivot;
+
+    /// <summary>
     /// Gets the tooltip of the window's close button, which says what it does under the current setting.
     /// </summary>
     public string CloseButtonTip => Loc.Get(CloseToTray && HasTray ? "Main_HideToTray" : "Common_Close");
@@ -1002,6 +1013,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             LaunchAtLogin = IsAutoStartSupported && _autoStart!.IsEnabled();
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
+            BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Compact = current.Appearance.Compact;
@@ -1084,6 +1096,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new value.
     /// </param>
     partial void OnStartMinimizedChanged(bool value) => SaveSetting(s => s.General.StartMinimized = value);
+
+    /// <summary>
+    /// Saves the currency of the total of the holdings.
+    /// </summary>
+    /// <param name="value">
+    /// The new currency.
+    /// </param>
+    partial void OnBaseCurrencyChanged(string value) => SaveSetting(s => s.General.BaseCurrency = value);
 
     /// <summary>
     /// Saves the close-to-tray flag.

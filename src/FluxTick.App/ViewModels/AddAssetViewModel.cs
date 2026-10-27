@@ -303,6 +303,7 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
                 {
                     // Changing the data source keeps the instrument where the user put it, group included, and its alerts.
                     entry.GroupId = s.Watchlist[index].GroupId;
+                    entry.CopyHoldingFrom(s.Watchlist[index]);
                     s.Watchlist[index] = entry;
                     moved = AlertMigration.Move(s.Alerts, replacing!.Id, asset.Id);
                 }

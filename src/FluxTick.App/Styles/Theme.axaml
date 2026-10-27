@@ -250,11 +250,11 @@
 
   <!-- Cards of the card layout. The size is fixed and set by the card size setting: small (the symbol and the price only),
        medium (the base style) and large (a taller chart and more figures). What the small card leaves out has the class
-       "detail" and what only the large card shows has "largeonly"; the visibility is set here, never on the elements. -->
+       "detail", what only the large card shows has "largeonly" and what only the small one shows has "smallonly"; the visibility is set here, never on the elements. -->
   <Style Selector="Border.tile">
     <Setter Property="Width" Value="176" />
     <Setter Property="Height" Value="96" />
-    <Setter Property="Margin" Value="3" />
+    <Setter Property="Margin" Value="{x:Static views:CardLayout.CardMarginThickness}" />
     <Setter Property="Padding" Value="10,8" />
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="BorderThickness" Value="1" />
@@ -267,7 +267,7 @@
     <Setter Property="Padding" Value="10,7" />
   </Style>
   <Style Selector="Border.tile.large">
-    <Setter Property="Width" Value="264" />
+    <Setter Property="Width" Value="{x:Static views:CardLayout.LargeCardWidth}" />
     <Setter Property="Height" Value="176" />
     <Setter Property="Padding" Value="12,10" />
   </Style>
@@ -327,6 +327,9 @@
     <Setter Property="IsVisible" Value="False" />
   </Style>
   <Style Selector="Border.tile:not(.large) :is(Control).largeonly">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Border.tile:not(.small) :is(Control).smallonly">
     <Setter Property="IsVisible" Value="False" />
   </Style>
   <Style Selector="UserControl.dragging Border.tile">

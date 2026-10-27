@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -34,6 +35,11 @@ public enum ToolWindowKind
     /// The price alerts window of an instrument.
     /// </summary>
     Alerts,
+
+    /// <summary>
+    /// The holding window of an instrument.
+    /// </summary>
+    Holding,
 }
 
 /// <summary>
@@ -111,6 +117,28 @@ public sealed partial class MainViewModel : LocalizedViewModel
     private readonly ProviderRegistry _registry;
 
     /// <summary>
+    /// Converts the holdings to the currency of the portfolio total.
+    /// </summary>
+    private readonly ExchangeRateService _rates;
+
+    /// <summary>
+    /// The holdings of the total being worked out, kept to avoid building a list for every price.
+    /// </summary>
+    private readonly List<(HoldingPnl Pnl, string Currency)> _holdings = [];
+
+    /// <summary>
+    /// Converts an amount between two currencies with the exchange rates; made once, as a method group would make a new
+    /// delegate for every price.
+    /// </summary>
+    private readonly Func<decimal, string, string, decimal?> _convert;
+
+    /// <summary>
+    /// How old the exchange rates may be before the total says so. The rates change on weekdays, so a weekend or a
+    /// holiday is no reason to mention it.
+    /// </summary>
+    private static readonly TimeSpan OldRatesAfter = TimeSpan.FromDays(7);
+
+    /// <summary>
     /// Hands the prices to the UI thread, keeping only the latest one of each instrument while it is busy.
     /// </summary>
     private readonly SnapshotCoalescer _snapshots;
@@ -154,6 +182,12 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <param name="alerts">
     /// The price alerts of the instrument whose alerts window is open.
     /// </param>
+    /// <param name="holding">
+    /// The holding of the instrument whose holding window is open.
+    /// </param>
+    /// <param name="rates">
+    /// The exchange rates, which the portfolio total is converted with.
+    /// </param>
     /// <param name="logger">
     /// The logger.
     /// </param>
@@ -165,6 +199,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
         AddAssetViewModel addAsset,
         SettingsViewModel settingsPage,
         AlertsViewModel alerts,
+        HoldingViewModel holding,
+        ExchangeRateService rates,
         ILogger<MainViewModel> logger)
         : base(ui)
     {
@@ -176,6 +212,9 @@ public sealed partial class MainViewModel : LocalizedViewModel
         AddAsset = addAsset;
         Settings = settingsPage;
         AlertEditor = alerts;
+        HoldingEditor = holding;
+        _rates = rates;
+        _convert = rates.Convert;
         Tray = new TrayListViewModel(settings, Rows, ui);
 
         // The window sizes itself after the layout, so the layout must be right before the first rows exist.
@@ -302,6 +341,42 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public AlertsViewModel AlertEditor { get; }
 
     /// <summary>
+    /// Gets the holding of the instrument whose holding window is open.
+    /// </summary>
+    public HoldingViewModel HoldingEditor { get; }
+
+    /// <summary>
+    /// Gets the profit and loss of all holdings in the base currency, such as <c>Total +1,200.00 CNY (+5.60%)</c>, or an
+    /// empty text when there is no holding to count.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPortfolio))]
+    public partial string PortfolioText { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets the tooltip of the total, which says when the exchange rates were fetched, or an empty text before that.
+    /// </summary>
+    [ObservableProperty]
+    public partial string PortfolioTip { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets a value indicating whether the total of the holdings is shown in profit.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool PortfolioIsProfit { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the total of the holdings is shown at a loss.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool PortfolioIsLoss { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the total of the holdings is shown.
+    /// </summary>
+    public bool HasPortfolio => PortfolioText.Length > 0;
+
+    /// <summary>
     /// Gets the modal tool window that is currently open. The view reports it through
     /// <see cref="BeginToolWindow"/> and <see cref="EndToolWindow"/>.
     /// </summary>
@@ -334,6 +409,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public event EventHandler? AlertsRequested;
 
     /// <summary>
+    /// Raised when the holding window of an instrument should be shown.
+    /// </summary>
+    public event EventHandler? HoldingRequested;
+
+    /// <summary>
     /// Raised when the window should leave full screen, because the list layout was chosen: the list does not fill a
     /// screen, so it is shown in the normal window.
     /// </summary>
@@ -355,6 +435,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         _market.SnapshotChanged += OnMarketSnapshotChanged;
         _market.ProviderStatusChanged += OnProviderStatusChanged;
         _settings.Changed += OnSettingsChanged;
+        _rates.RatesChanged += OnRatesChanged;
         _logger.LogInformation("FluxTick started with {Count} instruments", _settings.Current.Watchlist.Count);
         await ApplySettingsAsync();
     }
@@ -367,6 +448,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         _market.SnapshotChanged -= OnMarketSnapshotChanged;
         _market.ProviderStatusChanged -= OnProviderStatusChanged;
         _settings.Changed -= OnSettingsChanged;
+        _rates.RatesChanged -= OnRatesChanged;
         Tray.Dispose();
     }
 
@@ -427,6 +509,30 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// The event data.
     /// </param>
     private void OnSettingsChanged(object? sender, EventArgs e) => _ = ApplySettingsAsync();
+
+    /// <summary>
+    /// Works out the total of the holdings again after new exchange rates came in.
+    /// </summary>
+    /// <param name="sender">
+    /// The exchange rate service.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnRatesChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        RefreshPortfolioTip();
+        RefreshPortfolio();
+    });
+
+    /// <summary>
+    /// Writes the tooltip of the total, which says when the exchange rates were fetched. It changes with the rates and
+    /// the language, not with every price.
+    /// </summary>
+    private void RefreshPortfolioTip() =>
+        PortfolioTip = _rates.UpdatedAt is { } updated
+            ? Loc.Get("Portfolio_RatesAt", updated.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))
+            : string.Empty;
 
     /// <summary>
     /// Notifies bindings of the derived flags when the open tool window changes.
@@ -520,6 +626,91 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// </param>
     public void FlashAlert(AlertTriggeredEventArgs alert) =>
         Rows.FirstOrDefault(r => r.Asset.Id == alert.Asset.Id)?.FlashAlert(alert.Rule.Condition == AlertCondition.PriceAbove);
+
+    /// <summary>
+    /// Requests the holding window of an instrument, which is shown by the view.
+    /// </summary>
+    /// <param name="row">
+    /// The instrument.
+    /// </param>
+    [RelayCommand]
+    public void EditHolding(AssetRowViewModel? row)
+    {
+        if (row is null || IsToolWindowOpen)
+        {
+            return;
+        }
+
+        // A price that is not coming in any more is no price to suggest as the cost.
+        HoldingEditor.Begin(row.Asset, row.IsPriceOutdated ? null : row.CurrentPrice);
+        HoldingRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Works out the total of all holdings in the base currency and the text that shows it.
+    /// </summary>
+    public void RefreshPortfolio()
+    {
+        // A holding whose last price is outdated is left out of the total, and the total says so.
+        _holdings.Clear();
+        var stale = 0;
+        foreach (var row in Rows)
+        {
+            if (row.Pnl is not { } pnl)
+            {
+                continue;
+            }
+
+            if (row.IsPriceOutdated)
+            {
+                stale++;
+            }
+            else
+            {
+                _holdings.Add((pnl, row.HoldingCurrency));
+            }
+        }
+
+        var staleNote = stale > 0 ? Loc.Get("Portfolio_Stale", stale) : null;
+        var ageNote = _rates.Age is { } age && age > OldRatesAfter ? Loc.Get("Portfolio_RatesOld", (int)age.TotalDays) : null;
+        var notes = staleNote is null ? ageNote : Append(staleNote, ageNote);
+        var baseCurrency = CurrencyCodes.EffectiveBase(_settings.Current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
+        if (PortfolioPnl.Sum(_holdings, baseCurrency, _convert) is not { } total)
+        {
+            PortfolioText = staleNote ?? string.Empty;
+            PortfolioIsProfit = false;
+            PortfolioIsLoss = false;
+            return;
+        }
+
+        if (total.Counted == 0)
+        {
+            // Before the first rates came in they are on their way; after that, what is missing is the rate of a currency.
+            PortfolioText = Append(_rates.UpdatedAt is null ? Loc.Get("Portfolio_NoRates") : Loc.Get("Portfolio_Skipped", total.Skipped), notes);
+            PortfolioIsProfit = false;
+            PortfolioIsLoss = false;
+            return;
+        }
+
+        var text = Loc.Get("Portfolio_Total", PriceFormatter.FormatSignedMoney(total.Amount), baseCurrency, PriceFormatter.FormatPercent(total.Percent));
+        PortfolioText = Append(total.Skipped > 0 ? Append(text, Loc.Get("Portfolio_Skipped", total.Skipped)) : text, notes);
+        PortfolioIsProfit = total.Amount > 0m;
+        PortfolioIsLoss = total.Amount < 0m;
+    }
+
+    /// <summary>
+    /// Adds a note to a text, separated by a dot.
+    /// </summary>
+    /// <param name="text">
+    /// The text.
+    /// </param>
+    /// <param name="note">
+    /// The note, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>
+    /// The text, followed by the note if there is one.
+    /// </returns>
+    private static string Append(string text, string? note) => note is null ? text : $"{text} · {note}";
 
     /// <summary>
     /// Requests the price alerts window of an instrument, which is shown by the view.
@@ -1097,6 +1288,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
             row.HasAlert = alerts.Count > 0;
             row.AlertAbove = alerts.Find(a => a.Condition == AlertCondition.PriceAbove)?.Threshold;
             row.AlertBelow = alerts.Find(a => a.Condition == AlertCondition.PriceBelow)?.Threshold;
+            var entry = entries[i];
+            row.SetHolding(
+                entry.HasHolding ? entry.CostPrice : null,
+                entry.HasHolding ? entry.Quantity : null,
+                entry.HoldingCurrency ?? CurrencyGuesser.Guess(entry.ProviderId, entry.Symbol));
 
             if (snapshots.TryGetValue(asset.Id, out var snapshot))
             {
@@ -1106,6 +1302,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
 
         Tray.Refresh();
         RebuildSections();
+        RefreshPortfolioTip();
+        RefreshPortfolio();
         OnPropertyChanged(nameof(IsEmpty));
     }
 
@@ -1330,8 +1528,19 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <param name="snapshot">
     /// The snapshot.
     /// </param>
-    private void OnSnapshot(AssetSnapshot snapshot) =>
-        Rows.FirstOrDefault(r => r.Asset.Id == snapshot.Asset.Id)?.Update(snapshot);
+    private void OnSnapshot(AssetSnapshot snapshot)
+    {
+        if (Rows.FirstOrDefault(r => r.Asset.Id == snapshot.Asset.Id) is not { } row)
+        {
+            return;
+        }
+
+        row.Update(snapshot);
+        if (row.HasHolding)
+        {
+            RefreshPortfolio();
+        }
+    }
 
     /// <summary>
     /// Gives every row the size of the cards.
@@ -1382,6 +1591,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
         Chips.Clear();
         RefreshChips();
         RebuildSections();
+        RefreshPortfolioTip();
+        RefreshPortfolio();
     }
 
     /// <summary>

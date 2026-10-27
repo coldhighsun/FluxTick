@@ -156,4 +156,32 @@ public class TrayPopupViewModelTests
 
         model.Items.Should().Equal(before);
     }
+
+    /// <summary>
+    /// Verifies that the popup shows the total of the holdings of the main window and follows it.
+    /// </summary>
+    [Fact]
+    public async Task PortfolioText_HeldInstrument_FollowsTheMainWindow()
+    {
+        var held = new Asset(Harness.Crypto, "BTC", "Bitcoin", AssetClass.Crypto);
+        var settings = Harness.WatchlistOf(held);
+        settings.General.BaseCurrency = "USD";
+        settings.Watchlist[0].CostPrice = 100m;
+        settings.Watchlist[0].Quantity = 1m;
+        settings.Watchlist[0].HoldingCurrency = "USD";
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+        var model = new TrayPopupViewModel(h.Main.Rows, h.Main);
+        var changed = new List<string?>();
+        model.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        model.HasPortfolio.Should().BeFalse();
+
+        h.Main.Rows.Single().Update(new AssetSnapshot(held, new Quote(held.Id, 110m, 100m, DateTimeOffset.UnixEpoch), [100m, 110m], AssetHealth.Live));
+        h.Main.RefreshPortfolio();
+
+        model.HasPortfolio.Should().BeTrue();
+        model.PortfolioText.Should().Be(h.Main.PortfolioText);
+        model.PortfolioIsProfit.Should().BeTrue();
+        changed.Should().Contain(nameof(TrayPopupViewModel.PortfolioText));
+    }
 }

@@ -14,5 +14,6 @@ public sealed partial class AssetRowView : UserControl
     {
         InitializeComponent();
         _ = new RowAnimator(this);
+        RowTooltipTracking.Attach(TipHost);
     }
 }
