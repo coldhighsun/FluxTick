@@ -30,6 +30,7 @@
     <Project Path="src/FluxTick.Providers.Kraken/FluxTick.Providers.Kraken.csproj" />
     <Project Path="src/FluxTick.Providers.Okx/FluxTick.Providers.Okx.csproj" />
     <Project Path="src/FluxTick.Providers.Simulated/FluxTick.Providers.Simulated.csproj" />
+    <Project Path="src/FluxTick.Providers.Sina/FluxTick.Providers.Sina.csproj" />
     <Project Path="src/FluxTick.Providers.Tencent/FluxTick.Providers.Tencent.csproj" />
     <Project Path="src/FluxTick.Providers.Yahoo/FluxTick.Providers.Yahoo.csproj" />
   </Folder>

@@ -8,6 +8,7 @@ using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
+using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
 using FluxTick.Providers.Yahoo;
 using GitHubReleaseUpdater.Versioning;
@@ -103,6 +104,7 @@ public static class AppHost
         services.AddMarketDataProvider<BinanceProviderFactory>();
         services.AddMarketDataProvider<YahooProviderFactory>();
         services.AddMarketDataProvider<TencentProviderFactory>();
+        services.AddMarketDataProvider<SinaProviderFactory>();
         services.AddMarketDataProvider<OkxProviderFactory>();
         services.AddMarketDataProvider<CoinbaseProviderFactory>();
         services.AddMarketDataProvider<KrakenProviderFactory>();
