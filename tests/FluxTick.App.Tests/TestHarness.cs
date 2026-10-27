@@ -218,7 +218,10 @@ public sealed class Harness : IAsyncDisposable
     /// <param name="trayProbe">
     /// Tells whether the desktop shows tray icons; defaults to yes, so no test asks the real desktop.
     /// </param>
-    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null, Func<bool>? trayProbe = null)
+    /// <param name="openFolder">
+    /// Opens a folder and tells whether that worked; defaults to a success, so no test starts the real file manager.
+    /// </param>
+    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null, Func<bool>? trayProbe = null, Func<string, bool>? openFolder = null)
     {
         CryptoFactory = new FakeFactory(Crypto, [AssetClass.Crypto]);
         StocksFactory = new FakeFactory(Stocks, [AssetClass.Equity, AssetClass.Index]);
@@ -232,7 +235,7 @@ public sealed class Harness : IAsyncDisposable
 
         var ui = new InlineDispatcher();
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
-        SettingsPage = new SettingsViewModel(Settings, registry, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true));
+        SettingsPage = new SettingsViewModel(Settings, registry, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true), openFolder: openFolder ?? (_ => true));
         Alerts = new AlertsViewModel(Settings, registry, ui);
         Holding = new HoldingViewModel(Settings, ui);
         Rates = new ExchangeRateService(new FixedRates(), NullLogger<ExchangeRateService>.Instance, Time, new ExchangeRateOptions());

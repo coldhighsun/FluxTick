@@ -1,10 +1,9 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
+using Microsoft.Extensions.Logging;
 
 namespace FluxTick.App.ViewModels;
 
@@ -23,6 +22,11 @@ public sealed partial class UpdateViewModel : LocalizedViewModel
     /// The settings store.
     /// </summary>
     private readonly SettingsManager _settings;
+
+    /// <summary>
+    /// The log, or <see langword="null"/> for none.
+    /// </summary>
+    private readonly ILogger<UpdateViewModel>? _logger;
 
     /// <summary>
     /// The status the properties were last raised for.
@@ -46,11 +50,15 @@ public sealed partial class UpdateViewModel : LocalizedViewModel
     /// <param name="ui">
     /// The UI thread dispatcher.
     /// </param>
-    public UpdateViewModel(UpdateService service, SettingsManager settings, IUiDispatcher ui)
+    /// <param name="logger">
+    /// Receives the reason when the downloaded package could not be shown, or <see langword="null"/> for none.
+    /// </param>
+    public UpdateViewModel(UpdateService service, SettingsManager settings, IUiDispatcher ui, ILogger<UpdateViewModel>? logger = null)
         : base(ui)
     {
         _service = service;
         _settings = settings;
+        _logger = logger;
         _loading = true;
         AutoCheck = settings.Current.Updates.AutoCheck;
         _loading = false;
@@ -213,32 +221,15 @@ public sealed partial class UpdateViewModel : LocalizedViewModel
             return;
         }
 
-        var info = new ProcessStartInfo { UseShellExecute = false };
-        if (OperatingSystem.IsWindows())
-        {
-            info.FileName = "explorer.exe";
-            // ArgumentList would quote the switch and the path together, which explorer does not understand.
-            info.Arguments = $"/select,\"{file}\"";
-        }
-        else if (OperatingSystem.IsMacOS())
-        {
-            info.FileName = "open";
-            info.ArgumentList.Add("-R");
-            info.ArgumentList.Add(file);
-        }
-        else
-        {
-            info.FileName = "xdg-open";
-            info.ArgumentList.Add(Path.GetDirectoryName(file) ?? file);
-        }
-
+        // Without a file manager there is nothing to show; the status text still names the download as done. A failure
+        // is only logged: a button must not end the app, whatever went wrong.
         try
         {
-            using var process = Process.Start(info);
+            FileManager.TryReveal(file, logger: _logger);
         }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        catch (Exception ex)
         {
-            // There is no file manager to show it in; the status text still names the download as done.
+            _logger?.LogError(ex, "Could not show the downloaded update {File}", file);
         }
     }
 

@@ -66,9 +66,14 @@ public static class AppPaths
     public static string ExchangeRatesFile => Path.Combine(DataDirectory, "rates.json");
 
     /// <summary>
+    /// Gets the directory that the log files are kept in.
+    /// </summary>
+    public static string LogDirectory => Path.Combine(DataDirectory, "logs");
+
+    /// <summary>
     /// Gets the rolling log file path pattern.
     /// </summary>
-    public static string LogFile => Path.Combine(DataDirectory, "logs", "fluxtick-.log");
+    public static string LogFile => Path.Combine(LogDirectory, "fluxtick-.log");
 }
 
 /// <summary>
