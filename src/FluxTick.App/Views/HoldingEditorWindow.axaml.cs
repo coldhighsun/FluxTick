@@ -6,9 +6,16 @@ namespace FluxTick.App.Views;
 public sealed partial class HoldingEditorWindow : ToolWindow
 {
     /// <summary>
+    /// The width in device independent pixels. The numbers and the currency are short, so the window is narrower than
+    /// the other tool windows.
+    /// </summary>
+    private const double NarrowWidth = 300;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="HoldingEditorWindow"/> class.
     /// </summary>
     public HoldingEditorWindow()
+        : base(NarrowWidth)
     {
         InitializeComponent();
 

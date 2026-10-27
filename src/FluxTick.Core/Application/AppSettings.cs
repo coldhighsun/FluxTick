@@ -486,9 +486,11 @@ public sealed class AppSettings
     public Dictionary<string, ProviderSettings> Providers { get; set; } = [];
 
     /// <summary>
-    /// Gets or sets, per asset class, the preferred provider ids in priority order.
+    /// Gets or sets the provider ids in the order the user arranged the data sources, which is also their priority: the
+    /// first enabled provider that supports an asset class serves it. A provider that is not in the list comes after those
+    /// that are.
     /// </summary>
-    public Dictionary<AssetClass, List<string>> Routing { get; set; } = [];
+    public List<string> ProviderOrder { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the appearance and behavior settings.

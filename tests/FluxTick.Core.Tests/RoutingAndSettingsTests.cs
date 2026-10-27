@@ -93,10 +93,10 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies the user's ranking wins and unranked providers follow in registration order.
+    /// Verifies the order of the data sources the user arranged wins and the others follow in registration order.
     /// </summary>
     [Fact]
-    public void GetProviders_WithRouting_PutsPreferredFirst()
+    public void GetProviders_WithProviderOrder_PutsArrangedFirst()
     {
         var registry = new ProviderRegistry(
         [
@@ -105,7 +105,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
             new FakeProviderFactory("c", [AssetClass.Crypto]),
         ]);
         var router = new ProviderRouter(registry);
-        var settings = new AppSettings { Routing = { [AssetClass.Crypto] = ["c", "missing", "a"] } };
+        var settings = new AppSettings { ProviderOrder = ["c", "missing", "a"] };
 
         var providers = router.GetProviders(AssetClass.Crypto, settings);
 
@@ -140,7 +140,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies settings survive a save/load round trip, including enum-keyed routing and option keys.
+    /// Verifies settings survive a save/load round trip, including the order of the data sources and option keys.
     /// </summary>
     [Fact]
     public async Task SaveAsync_ThenLoadAsync_RoundTripsSettings()
@@ -149,7 +149,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var settings = new AppSettings();
         settings.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC", DisplayName = "Bitcoin", AssetClass = AssetClass.Crypto });
         settings.Providers["a"] = new ProviderSettings { Enabled = false, Options = { ["PollInterval"] = "00:00:09" } };
-        settings.Routing[AssetClass.Equity] = ["a", "b"];
+        settings.ProviderOrder.AddRange(["b", "a"]);
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.ThemeMode = ThemeMode.Dark;
         settings.Appearance.Language = LanguageMode.ZhCN;
@@ -168,7 +168,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded!.Watchlist.Should().ContainSingle().Which.Symbol.Should().Be("BTC");
         loaded.Providers["a"].Enabled.Should().BeFalse();
         loaded.Providers["a"].Options["PollInterval"].Should().Be("00:00:09");
-        loaded.Routing[AssetClass.Equity].Should().Equal("a", "b");
+        loaded.ProviderOrder.Should().Equal("b", "a");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
         loaded.Appearance.Language.Should().Be(LanguageMode.ZhCN);
@@ -340,7 +340,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Watchlist.Add(new WatchlistEntry { ProviderId = "p", Symbol = "S", DisplayName = "D", AssetClass = AssetClass.Crypto, GroupId = "g", CostPrice = 2, Quantity = 3, HoldingCurrency = "USD" });
         settings.Alerts.Add(new AlertRule { Id = "r", ProviderId = "p", Symbol = "S", Condition = AlertCondition.PriceBelow, Threshold = 5, Enabled = false, Repeat = true });
         settings.Providers["p"] = new ProviderSettings { Enabled = false, Options = { ["k"] = "v" } };
-        settings.Routing[AssetClass.Crypto] = ["p"];
+        settings.ProviderOrder.Add("p");
         settings.Appearance = new AppearanceSettings
         {
             Opacity = 0.5,
@@ -370,6 +370,45 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies a disabled provider is skipped but keeps its place when it is switched on again.
+    /// </summary>
+    [Fact]
+    public void GetProviders_DisabledProviderInOrder_IsSkipped()
+    {
+        var registry = new ProviderRegistry(
+        [
+            new FakeProviderFactory("a", [AssetClass.Crypto]),
+            new FakeProviderFactory("b", [AssetClass.Crypto]),
+            new FakeProviderFactory("c", [AssetClass.Crypto]),
+        ]);
+        var router = new ProviderRouter(registry);
+        var settings = new AppSettings { ProviderOrder = ["c", "b", "a"] };
+        settings.Providers["c"] = new ProviderSettings { Enabled = false };
+
+        router.GetProviders(AssetClass.Crypto, settings).Select(p => p.Id).Should().Equal("b", "a");
+
+        settings.Providers["c"].Enabled = true;
+
+        router.GetProviders(AssetClass.Crypto, settings).Select(p => p.Id).Should().Equal("c", "b", "a");
+    }
+
+    /// <summary>
+    /// Verifies the per-class routing of older versions is ignored, and the data sources keep their default order.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithOldRouting_IgnoresIt()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "routing": { "Equity": ["b", "a"], "Crypto": ["c", "a", null] } }""");
+        var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
+
+        await manager.LoadAsync(new AppSettings());
+
+        manager.Current.ProviderOrder.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Verifies null elements inside collections are dropped.
     /// </summary>
     /// <returns>
@@ -382,14 +421,14 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var path = Path.Combine(_directory, "settings.json");
         await File.WriteAllTextAsync(
             path,
-            """{ "watchlist": [null], "groups": [null], "alerts": [null], "providers": { "binance": null }, "routing": { "Crypto": null } }""");
+            """{ "watchlist": [null], "groups": [null], "alerts": [null], "providers": { "binance": null }, "providerOrder": [null, "binance"] }""");
         var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
 
         await manager.LoadAsync(new AppSettings());
 
         manager.Current.Watchlist.Should().BeEmpty();
         manager.Current.Providers.Should().BeEmpty();
-        manager.Current.Routing.Should().BeEmpty();
+        manager.Current.ProviderOrder.Should().Equal("binance");
         manager.Current.Groups.Should().ContainSingle();
     }
 

@@ -232,7 +232,7 @@ public sealed class Harness : IAsyncDisposable
 
         var ui = new InlineDispatcher();
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
-        SettingsPage = new SettingsViewModel(Settings, registry, Router, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true));
+        SettingsPage = new SettingsViewModel(Settings, registry, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true));
         Alerts = new AlertsViewModel(Settings, registry, ui);
         Holding = new HoldingViewModel(Settings, ui);
         Rates = new ExchangeRateService(new FixedRates(), NullLogger<ExchangeRateService>.Instance, Time, new ExchangeRateOptions());

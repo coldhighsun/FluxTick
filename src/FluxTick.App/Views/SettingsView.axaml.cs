@@ -21,7 +21,23 @@ public sealed partial class SettingsView : UserControl
         // The controller listens to the list for as long as the page exists.
         _ = new ListDragController(GroupsList, GroupsScroller, MoveGroupAsync);
         _ = new ListDragController(TrayAssetsList, TrayAssetsScroller, MoveTrayAssetAsync);
+        _ = new ListDragController(ProvidersList, ProvidersScroller, MoveProviderAsync);
     }
+
+    /// <summary>
+    /// Moves the data source that was dragged from one position of the list to another.
+    /// </summary>
+    /// <param name="from">
+    /// The original position.
+    /// </param>
+    /// <param name="to">
+    /// The new position.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the new order is saved.
+    /// </returns>
+    private Task MoveProviderAsync(int from, int to) =>
+        DataContext is SettingsViewModel viewModel ? viewModel.MoveProviderAsync(from, to) : Task.CompletedTask;
 
     /// <summary>
     /// Moves the instrument that was dragged from one position of the tray list to another.

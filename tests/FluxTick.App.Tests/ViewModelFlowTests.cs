@@ -1007,23 +1007,6 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies the routing choice is persisted as the preferred source followed by the others.
-    /// </summary>
-    [Fact]
-    public async Task Routing_Selection_PersistsOrder()
-    {
-        await using var h = new Harness();
-        await h.Main.InitializeAsync();
-        var row = h.SettingsPage.Routing.Single(r => r.AssetClass == AssetClass.Equity);
-
-        row.Selected = row.Providers.Single(p => p.Id == Harness.Plain);
-
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Routing.ContainsKey(AssetClass.Equity));
-        h.Store.Stored!.Routing[AssetClass.Equity].Should().Equal(Harness.Plain, Harness.Stocks);
-        h.Router.GetPreferred(AssetClass.Equity, h.Settings.Current)!.Id.Should().Be(Harness.Plain);
-    }
-
-    /// <summary>
     /// Verifies a valid option edit is persisted and an invalid one is not.
     /// </summary>
     [Fact]

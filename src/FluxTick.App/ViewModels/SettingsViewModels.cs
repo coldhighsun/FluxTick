@@ -559,109 +559,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
 }
 
 /// <summary>
-/// The routing preference of one asset class: which data source new instruments of that class use by default.
-/// </summary>
-public sealed partial class RoutingRowViewModel : ObservableObject
-{
-    /// <summary>
-    /// Called when the user picked another data source.
-    /// </summary>
-    private readonly Action<RoutingRowViewModel> _changed;
-
-    /// <summary>
-    /// Suppresses change notifications while refreshing.
-    /// </summary>
-    private bool _loading;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RoutingRowViewModel"/> class.
-    /// </summary>
-    /// <param name="assetClass">
-    /// The asset class the row configures.
-    /// </param>
-    /// <param name="changed">
-    /// The callback invoked when the user changes the preference.
-    /// </param>
-    public RoutingRowViewModel(AssetClass assetClass, Action<RoutingRowViewModel> changed)
-    {
-        AssetClass = assetClass;
-        _changed = changed;
-    }
-
-    /// <summary>
-    /// Gets the asset class.
-    /// </summary>
-    public AssetClass AssetClass { get; }
-
-    /// <summary>
-    /// Gets the label of the asset class.
-    /// </summary>
-    public string Label => Loc.Instance.Find($"Routing_{AssetClass}") ?? EnumLabel.Of(AssetClass);
-
-    /// <summary>
-    /// Gets the enabled providers that support the class, best first.
-    /// </summary>
-    public ObservableCollection<ProviderDescriptor> Providers { get; } = [];
-
-    /// <summary>
-    /// Builds the texts that depend on the language again after the language changed.
-    /// </summary>
-    public void RefreshLanguage() => OnPropertyChanged(nameof(Label));
-
-    /// <summary>
-    /// Gets a value indicating whether at least one provider is available.
-    /// </summary>
-    public bool HasProviders => Providers.Count > 0;
-
-    /// <summary>
-    /// Gets or sets the preferred provider.
-    /// </summary>
-    [ObservableProperty]
-    public partial ProviderDescriptor? Selected { get; set; }
-
-    /// <summary>
-    /// Rebuilds the list of available providers.
-    /// </summary>
-    /// <param name="available">
-    /// The usable providers, best first.
-    /// </param>
-    public void Refresh(IReadOnlyList<ProviderDescriptor> available)
-    {
-        _loading = true;
-        try
-        {
-            Providers.Clear();
-            foreach (var descriptor in available)
-            {
-                Providers.Add(descriptor);
-            }
-
-            Selected = available.FirstOrDefault();
-            OnPropertyChanged(nameof(HasProviders));
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    /// <summary>
-    /// Notifies the owner when the user picks another provider.
-    /// </summary>
-    /// <param name="value">
-    /// The new selection.
-    /// </param>
-    partial void OnSelectedChanged(ProviderDescriptor? value)
-    {
-        if (!_loading && value is not null)
-        {
-            _changed(this);
-        }
-    }
-}
-
-/// <summary>
-/// The settings page: appearance, data sources and per-asset-class routing. Every change is applied and persisted
+/// The settings page: appearance and data sources. Every change is applied and persisted
 /// immediately.
 /// </summary>
 public sealed partial class SettingsViewModel : LocalizedViewModel
@@ -670,11 +568,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The settings store.
     /// </summary>
     private readonly SettingsManager _settings;
-
-    /// <summary>
-    /// The router that lists usable providers per class.
-    /// </summary>
-    private readonly ProviderRouter _router;
 
     /// <summary>
     /// Saves the opacity once the slider stops moving.
@@ -706,9 +599,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="registry">
     /// The available providers.
     /// </param>
-    /// <param name="router">
-    /// The provider router.
-    /// </param>
     /// <param name="market">
     /// The market data service, used for live provider status.
     /// </param>
@@ -730,7 +620,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
-        ProviderRouter router,
         MarketDataService market,
         IUiDispatcher ui,
         TimeProvider timeProvider,
@@ -742,7 +631,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         _settings = settings;
         _autoStart = autoStart;
         Updates = updates;
-        _router = router;
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
         Groups = new GroupsSettingsViewModel(settings);
@@ -750,8 +638,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         Alerts = new AlertsViewModel(settings, registry, ui);
         Providers = new ObservableCollection<ProviderSettingsViewModel>(
             registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p))));
-        Routing = new ObservableCollection<RoutingRowViewModel>(
-            Enum.GetValues<AssetClass>().Select(c => new RoutingRowViewModel(c, r => _ = SaveRoutingAsync(r))));
         market.ProviderStatusChanged += OnProviderStatusChanged;
         Reload();
         StartTrayProbe(trayProbe ?? TrayAvailability.Detect);
@@ -839,11 +725,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the data source entries.
     /// </summary>
     public ObservableCollection<ProviderSettingsViewModel> Providers { get; }
-
-    /// <summary>
-    /// Gets the routing rows, one per asset class.
-    /// </summary>
-    public ObservableCollection<RoutingRowViewModel> Routing { get; }
 
     /// <summary>
     /// Gets a value indicating whether the platform can start the app at sign-in.
@@ -1047,6 +928,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
             SelectedCardSize = current.Appearance.CardSize;
+            ApplyProviderOrder(current.ProviderOrder);
             foreach (var provider in Providers)
             {
                 provider.Load(current);
@@ -1060,7 +942,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         Groups.Reload();
         TrayAssets.Reload();
         Alerts.Reload(discardEdits: true);
-        RefreshRouting();
         RefreshStatuses();
     }
 
@@ -1251,11 +1132,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         {
             provider.RefreshLanguage();
         }
-
-        foreach (var row in Routing)
-        {
-            row.RefreshLanguage();
-        }
     }
 
     /// <summary>
@@ -1309,6 +1185,51 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     }
 
     /// <summary>
+    /// Puts the data sources in the saved order.
+    /// </summary>
+    /// <param name="saved">
+    /// The saved order of the provider ids.
+    /// </param>
+    private void ApplyProviderOrder(IReadOnlyList<string> saved)
+    {
+        var byId = Providers.ToDictionary(p => p.Descriptor.Id);
+        var sorted = ProviderOrdering.Sort(byId.Keys, saved);
+        for (var index = 0; index < sorted.Count; index++)
+        {
+            var current = Providers.IndexOf(byId[sorted[index]]);
+            if (current != index)
+            {
+                Providers.Move(current, index);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Moves the data source that was dragged from one position of the list to another and saves the order.
+    /// </summary>
+    /// <param name="from">
+    /// The original position.
+    /// </param>
+    /// <param name="to">
+    /// The new position; values outside the list are clamped to its ends.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the order is saved.
+    /// </returns>
+    public Task MoveProviderAsync(int from, int to)
+    {
+        var target = Math.Clamp(to, 0, Providers.Count - 1);
+        if (from < 0 || from >= Providers.Count || from == target)
+        {
+            return Task.CompletedTask;
+        }
+
+        Providers.Move(from, target);
+        var order = Providers.Select(p => p.Descriptor.Id).ToList();
+        return _settings.UpdateAsync(s => s.ProviderOrder = order);
+    }
+
+    /// <summary>
     /// Persists a provider's enabled state and options, then refreshes dependent views.
     /// </summary>
     /// <param name="provider">
@@ -1333,36 +1254,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             entry.Enabled = enabled;
             entry.Options = options;
         });
-        RefreshRouting();
-    }
-
-    /// <summary>
-    /// Persists the preferred provider of an asset class.
-    /// </summary>
-    /// <param name="row">
-    /// The routing row that changed.
-    /// </param>
-    /// <returns>
-    /// A task that completes once the change is saved.
-    /// </returns>
-    private Task SaveRoutingAsync(RoutingRowViewModel row)
-    {
-        var selected = row.Selected!.Id;
-        var order = new List<string> { selected };
-        order.AddRange(row.Providers.Select(p => p.Id).Where(id => id != selected));
-        return _settings.UpdateAsync(s => s.Routing[row.AssetClass] = order);
-    }
-
-    /// <summary>
-    /// Rebuilds each routing row from the enabled providers.
-    /// </summary>
-    private void RefreshRouting()
-    {
-        var current = _settings.Current;
-        foreach (var row in Routing)
-        {
-            row.Refresh(_router.GetProviders(row.AssetClass, current));
-        }
     }
 
     /// <summary>

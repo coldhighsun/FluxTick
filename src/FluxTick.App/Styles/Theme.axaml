@@ -253,7 +253,7 @@
        "detail", what only the large card shows has "largeonly" and what only the small one shows has "smallonly"; the visibility is set here, never on the elements. -->
   <Style Selector="Border.tile">
     <Setter Property="Width" Value="176" />
-    <Setter Property="Height" Value="96" />
+    <Setter Property="Height" Value="{x:Static views:CardLayout.MediumCardHeight}" />
     <Setter Property="Margin" Value="{x:Static views:CardLayout.CardMarginThickness}" />
     <Setter Property="Padding" Value="10,8" />
     <Setter Property="CornerRadius" Value="8" />
@@ -263,12 +263,12 @@
   </Style>
   <Style Selector="Border.tile.small">
     <Setter Property="Width" Value="128" />
-    <Setter Property="Height" Value="54" />
+    <Setter Property="Height" Value="{x:Static views:CardLayout.SmallCardHeight}" />
     <Setter Property="Padding" Value="10,7" />
   </Style>
   <Style Selector="Border.tile.large">
     <Setter Property="Width" Value="{x:Static views:CardLayout.LargeCardWidth}" />
-    <Setter Property="Height" Value="176" />
+    <Setter Property="Height" Value="{x:Static views:CardLayout.LargeCardHeight}" />
     <Setter Property="Padding" Value="12,10" />
   </Style>
   <Style Selector="Border.tile Border.flash">

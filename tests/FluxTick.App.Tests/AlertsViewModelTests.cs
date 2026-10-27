@@ -45,6 +45,49 @@ public class AlertsViewModelTests
     }
 
     /// <summary>
+    /// Verifies the form starts with the current price as the threshold, and with nothing when there is no usable price.
+    /// </summary>
+    [Theory]
+    [InlineData(123.45, "123.45")]
+    [InlineData(0.0, "")]
+    [InlineData(null, "")]
+    public async Task Begin_WithCurrentPrice_FillsTheThreshold(double? price, string expected)
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl));
+
+        h.Alerts.Begin(Btc, price is { } p ? (decimal)p : null);
+
+        h.Alerts.ThresholdText.Should().Be(expected);
+        h.Alerts.HasMessage.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the suggested price cannot be added as it is, but the same price typed by hand after a change can.
+    /// </summary>
+    [Fact]
+    public async Task Add_SuggestedThresholdUnchanged_IsRefused()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc, Aapl));
+        h.Alerts.Begin(Btc, 100m);
+
+        await h.Alerts.AddCommand.ExecuteAsync(null);
+
+        h.Store.Stored?.Alerts.Should().BeNullOrEmpty();
+        h.Alerts.HasMessage.Should().BeTrue();
+
+        // The same price spelled another way is still the suggestion.
+        h.Alerts.ThresholdText = " 100.0 ";
+        await h.Alerts.AddCommand.ExecuteAsync(null);
+
+        h.Store.Stored?.Alerts.Should().BeNullOrEmpty();
+
+        h.Alerts.ThresholdText = "101";
+        await h.Alerts.AddCommand.ExecuteAsync(null);
+
+        h.Store.Stored!.Alerts.Should().ContainSingle().Which.Threshold.Should().Be(101m);
+    }
+
+    /// <summary>
     /// Verifies a new alert repeats unless the user unchecks it, and that opening the editor again restores that.
     /// </summary>
     [Fact]
