@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
+using FluxTick.Abstractions;
 
 namespace FluxTick.Providers.Tests;
 
@@ -37,6 +38,34 @@ internal static class TestWait
 
             await Task.Delay(20);
         }
+    }
+
+    /// <summary>
+    /// Reads a number of quotes from a provider, failing on timeout.
+    /// </summary>
+    /// <param name="provider">
+    /// The provider to read from.
+    /// </param>
+    /// <param name="count">
+    /// The number of quotes to read.
+    /// </param>
+    /// <returns>
+    /// The quotes.
+    /// </returns>
+    public static async Task<List<Quote>> ReadQuotesAsync(IMarketDataProvider provider, int count)
+    {
+        using var timeout = new CancellationTokenSource(Patience);
+        var quotes = new List<Quote>();
+        await foreach (var quote in provider.ReadQuotesAsync(timeout.Token))
+        {
+            quotes.Add(quote);
+            if (quotes.Count == count)
+            {
+                break;
+            }
+        }
+
+        return quotes;
     }
 
     /// <summary>
@@ -79,6 +108,21 @@ internal sealed class StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessa
     /// </returns>
     public static HttpResponseMessage Json(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+
+    /// <summary>
+    /// Creates a successful response whose body is encoded in GBK, as the Chinese quote services send it.
+    /// </summary>
+    /// <param name="text">
+    /// The body.
+    /// </param>
+    /// <returns>
+    /// The response.
+    /// </returns>
+    public static HttpResponseMessage Gbk(string text)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Encoding.GetEncoding(936).GetBytes(text)) };
+    }
 
     /// <inheritdoc />
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

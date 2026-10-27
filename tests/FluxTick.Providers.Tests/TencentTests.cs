@@ -87,18 +87,6 @@ public class TencentTests
     }
 
     /// <summary>
-    /// Verifies GBK bytes are decoded to the Chinese text they carry.
-    /// </summary>
-    [Fact]
-    public void DecodeGbk_DecodesChineseNames()
-    {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        var bytes = Encoding.GetEncoding(936).GetBytes("v_sh600000=\"1~浦发银行~\";");
-
-        TencentParser.DecodeGbk(bytes).Should().Be("v_sh600000=\"1~浦发银行~\";");
-    }
-
-    /// <summary>
     /// Verifies symbols are built in the canonical form from search results.
     /// </summary>
     [Theory]
@@ -222,7 +210,7 @@ public class TencentTests
     [Fact]
     public async Task SetSubscriptionsAsync_QuoteEndpointWithPath_KeepsItsPrefix()
     {
-        var handler = new StubHttpHandler(_ => Gbk(QuoteLines));
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
         await using var provider = new TencentProvider(
             new TencentProviderFactory().Descriptor,
             new Uri("https://proxy.example.test/qt/"),
@@ -270,18 +258,18 @@ public class TencentTests
     [Fact]
     public async Task Provider_PublishesUnderTheSubscribedSymbol()
     {
-        var handler = new StubHttpHandler(_ => Gbk(QuoteLines));
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
         await using var provider = CreateProvider(handler, new FakeTimeProvider());
         var typed = new Asset("tencent", "SH600000", "浦发银行", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([typed]);
-        var quote = (await ReadAsync(provider, 1)).Single();
+        var quote = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
 
         quote.AssetId.Should().Be(typed.Id);
         quote.Price.Should().Be(9.62m);
         quote.Reference.Should().Be(9.66m);
         handler.Requests.Single().RequestUri!.AbsoluteUri.Should().EndWith("/q=sh600000");
-        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
     }
 
     /// <summary>
@@ -290,13 +278,13 @@ public class TencentTests
     [Fact]
     public async Task Provider_BatchesSubscriptionsIntoOneRequest()
     {
-        var handler = new StubHttpHandler(_ => Gbk(QuoteLines));
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
         await using var provider = CreateProvider(handler, new FakeTimeProvider());
         var tencent = new Asset("tencent", "hk00700", "腾讯控股", AssetClass.Equity);
         var apple = new Asset("tencent", "usAAPL", "苹果", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([Pufa, tencent, apple]);
-        var quotes = await ReadAsync(provider, 3);
+        var quotes = await TestWait.ReadQuotesAsync(provider, 3);
 
         quotes.Select(q => q.AssetId.Symbol).Should().BeEquivalentTo("sh600000", "hk00700", "usAAPL");
         handler.Requests.Should().ContainSingle();
@@ -309,14 +297,14 @@ public class TencentTests
     [Fact]
     public async Task Provider_UnknownSymbol_IsReportedButOthersContinue()
     {
-        var handler = new StubHttpHandler(_ => Gbk(QuoteLines + "\nv_pv_none_match=\"1\";"));
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines + "\nv_pv_none_match=\"1\";"));
         await using var provider = CreateProvider(handler, new FakeTimeProvider());
         var unknown = new Asset("tencent", "sh999999", "?", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([Pufa, unknown]);
-        await ReadAsync(provider, 1);
+        await TestWait.ReadQuotesAsync(provider, 1);
 
-        await EventuallyAsync(() => provider.Status.Message == "No data for sh999999");
+        await TestWait.EventuallyAsync(() => provider.Status.Message == "No data for sh999999");
         provider.Status.State.Should().Be(ProviderConnectionState.Connected);
     }
 
@@ -326,12 +314,12 @@ public class TencentTests
     [Fact]
     public async Task Provider_PollsAgainAfterTheInterval()
     {
-        var handler = new StubHttpHandler(_ => Gbk(QuoteLines));
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
         var time = new FakeTimeProvider();
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
-        await EventuallyAsync(() => handler.Requests.Count == 1);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
 
         await AdvanceUntilAsync(time, TimeSpan.FromSeconds(5), () => handler.Requests.Count >= 2);
     }
@@ -347,7 +335,7 @@ public class TencentTests
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
-        await EventuallyAsync(() => handler.Requests.Count == 1);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
         provider.Status.State.Should().NotBe(ProviderConnectionState.Failed);
 
         // Every failed cycle doubles the delay, so step the clock far enough to cross each wait.
@@ -363,15 +351,15 @@ public class TencentTests
     {
         var calls = 0;
         var handler = new StubHttpHandler(_ =>
-            Interlocked.Increment(ref calls) == 1 ? throw new InvalidOperationException("surprise") : Gbk(QuoteLines));
+            Interlocked.Increment(ref calls) == 1 ? throw new InvalidOperationException("surprise") : StubHttpHandler.Gbk(QuoteLines));
         var time = new FakeTimeProvider();
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
-        await EventuallyAsync(() => provider.Status is { State: ProviderConnectionState.Reconnecting, Message: "surprise" });
+        await TestWait.EventuallyAsync(() => provider.Status is { State: ProviderConnectionState.Reconnecting, Message: "surprise" });
 
         await AdvanceUntilAsync(time, TimeSpan.FromSeconds(10), () => provider.Status.State == ProviderConnectionState.Connected);
-        (await ReadAsync(provider, 1)).Single().Price.Should().Be(9.62m);
+        (await TestWait.ReadQuotesAsync(provider, 1)).Single().Price.Should().Be(9.62m);
     }
 
     /// <summary>
@@ -431,21 +419,6 @@ public class TencentTests
     }
 
     /// <summary>
-    /// Creates a successful response whose body is encoded in GBK, as the service sends it.
-    /// </summary>
-    /// <param name="text">
-    /// The body.
-    /// </param>
-    /// <returns>
-    /// The response.
-    /// </returns>
-    private static HttpResponseMessage Gbk(string text)
-    {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Encoding.GetEncoding(936).GetBytes(text)) };
-    }
-
-    /// <summary>
     /// Creates a successful JSON response.
     /// </summary>
     /// <param name="json">
@@ -456,34 +429,6 @@ public class TencentTests
     /// </returns>
     private static HttpResponseMessage Json(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
-
-    /// <summary>
-    /// Reads a number of quotes with a timeout.
-    /// </summary>
-    /// <param name="provider">
-    /// The provider to read from.
-    /// </param>
-    /// <param name="count">
-    /// The number of quotes to read.
-    /// </param>
-    /// <returns>
-    /// The quotes.
-    /// </returns>
-    private static async Task<List<Quote>> ReadAsync(IMarketDataProvider provider, int count)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var quotes = new List<Quote>();
-        await foreach (var quote in provider.ReadQuotesAsync(timeout.Token))
-        {
-            quotes.Add(quote);
-            if (quotes.Count == count)
-            {
-                break;
-            }
-        }
-
-        return quotes;
-    }
 
     /// <summary>
     /// Advances a fake clock in steps until a condition holds. Unlike a single advance after a fixed sleep, this does
@@ -502,7 +447,7 @@ public class TencentTests
     /// A task that completes when the condition holds.
     /// </returns>
     private static Task AdvanceUntilAsync(FakeTimeProvider time, TimeSpan step, Func<bool> condition) =>
-        EventuallyAsync(() =>
+        TestWait.EventuallyAsync(() =>
         {
             if (condition())
             {
@@ -512,27 +457,4 @@ public class TencentTests
             time.Advance(step);
             return false;
         });
-
-    /// <summary>
-    /// Waits until a condition holds, failing on timeout.
-    /// </summary>
-    /// <param name="condition">
-    /// The condition to wait for.
-    /// </param>
-    /// <returns>
-    /// A task that completes when the condition holds.
-    /// </returns>
-    private static async Task EventuallyAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline)
-            {
-                throw new TimeoutException("Condition was not met in time.");
-            }
-
-            await Task.Delay(10);
-        }
-    }
 }

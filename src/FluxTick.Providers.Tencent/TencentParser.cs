@@ -1,27 +1,10 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluxTick.Abstractions;
+using FluxTick.Providers.Common;
 
 namespace FluxTick.Providers.Tencent;
-
-/// <summary>
-/// A price line of the Tencent quote service.
-/// </summary>
-/// <param name="Key">
-/// The code the line answers, in the casing it was requested with.
-/// </param>
-/// <param name="Price">
-/// The last price.
-/// </param>
-/// <param name="PreviousClose">
-/// The previous close, or <see langword="null"/> when unknown.
-/// </param>
-/// <param name="Time">
-/// The quote time, or <see langword="null"/> when the line carries none that can be read.
-/// </param>
-internal sealed record TencentQuote(string Key, decimal Price, decimal? PreviousClose, DateTimeOffset? Time);
 
 /// <summary>
 /// Pure functions that build and parse payloads of the Tencent quote, search and history services.
@@ -57,26 +40,6 @@ internal static partial class TencentParser
     /// The US Eastern time zone, looked up once; <see langword="null"/> when the system knows neither id.
     /// </summary>
     private static readonly Lazy<TimeZoneInfo?> EasternTime = new(FindEasternTime);
-
-    /// <summary>
-    /// The quote services answer in GBK.
-    /// </summary>
-    private static readonly Lazy<Encoding> Gbk = new(() =>
-    {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        return Encoding.GetEncoding(936);
-    });
-
-    /// <summary>
-    /// Decodes a quote service response.
-    /// </summary>
-    /// <param name="bytes">
-    /// The response body.
-    /// </param>
-    /// <returns>
-    /// The text.
-    /// </returns>
-    public static string DecodeGbk(byte[] bytes) => Gbk.Value.GetString(bytes);
 
     /// <summary>
     /// Builds the canonical symbol of an instrument from the market and code a search result carries. The symbol is
@@ -127,31 +90,29 @@ internal static partial class TencentParser
     /// <returns>
     /// The quotes found.
     /// </returns>
-    public static IReadOnlyList<TencentQuote> ParseQuotes(string text)
+    public static IReadOnlyList<ParsedQuote> ParseQuotes(string text)
     {
-        var quotes = new List<TencentQuote>();
+        var quotes = new List<ParsedQuote>();
         foreach (var raw in text.Split('\n'))
         {
             var line = raw.Trim();
-            var equals = line.IndexOf("=\"", StringComparison.Ordinal);
-            var end = line.LastIndexOf('"');
-            if (!line.StartsWith("v_", StringComparison.Ordinal) || equals < 0 || end <= equals + 1)
+            if (!line.StartsWith("v_", StringComparison.Ordinal) || !QuoteText.TryGetQuotedBody(line, out var equals, out var body))
             {
                 continue;
             }
 
             var key = line[2..equals];
-            var fields = line[(equals + 2)..end].Split('~');
+            var fields = body.Split('~');
 
             // Field 3 is the last price and field 4 the previous close. Unknown codes answer with a one-field body.
-            if (fields.Length < 5 || !TryParsePrice(fields[3], out var price) || price <= 0m)
+            if (fields.Length < 5 || !QuoteText.TryParsePrice(fields[3], out var price) || price <= 0m)
             {
                 continue;
             }
 
-            decimal? previous = TryParsePrice(fields[4], out var close) && close > 0m ? close : null;
+            decimal? previous = QuoteText.TryParsePrice(fields[4], out var close) && close > 0m ? close : null;
             var time = fields.Length > 30 ? ParseTime(fields[0], fields[30]) : null;
-            quotes.Add(new TencentQuote(key, price, previous, time));
+            quotes.Add(new ParsedQuote(key, price, previous, time));
         }
 
         return quotes;
@@ -171,16 +132,14 @@ internal static partial class TencentParser
     /// </returns>
     public static IReadOnlyList<Asset> ParseSearch(string text, string providerId)
     {
-        var start = text.IndexOf("=\"", StringComparison.Ordinal);
-        var end = text.LastIndexOf('"');
-        if (start < 0 || end <= start + 1)
+        if (!QuoteText.TryGetQuotedBody(text, out _, out var body))
         {
             return [];
         }
 
         var assets = new List<Asset>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var entry in text[(start + 2)..end].Split('^'))
+        foreach (var entry in body.Split('^'))
         {
             var parts = entry.Split('~');
             if (parts.Length < 5 || !Markets.Contains(parts[0]) || parts[1].Length == 0)
@@ -253,7 +212,7 @@ internal static partial class TencentParser
             var fields = row.GetString()?.Split(' ');
             if (fields is { Length: > 1 }
                 && DateTimeOffset.TryParseExact(fields[0], "HHmm", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var clock)
-                && TryParsePrice(fields[1], out var price))
+                && QuoteText.TryParsePrice(fields[1], out var price))
             {
                 points.Add(new PricePoint(new DateTimeOffset(date.Ticks + clock.TimeOfDay.Ticks, AsiaOffset), price));
             }
@@ -282,21 +241,6 @@ internal static partial class TencentParser
         var dot = code.LastIndexOf('.');
         return dot > 0 ? code[..dot] : code;
     }
-
-    /// <summary>
-    /// Parses a price field.
-    /// </summary>
-    /// <param name="text">
-    /// The field text.
-    /// </param>
-    /// <param name="value">
-    /// The parsed value.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> when the text is a number.
-    /// </returns>
-    private static bool TryParsePrice(string text, out decimal value) =>
-        decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
     /// <summary>
     /// Parses the quote time of a line. Chinese and Hong Kong markets quote in UTC+8, US markets in Eastern time.

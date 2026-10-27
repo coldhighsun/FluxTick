@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
@@ -20,6 +21,18 @@ public class CommonHelpersTests
         [AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
         Options: ExchangeEndpoints.Options("wss://stream.example.test/ws", "ws hint", "https://api.example.test"));
+
+    /// <summary>
+    /// Verifies GBK bytes are decoded to the Chinese text they carry.
+    /// </summary>
+    [Fact]
+    public void GbkText_Decode_DecodesChineseNames()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var bytes = Encoding.GetEncoding(936).GetBytes("v_sh600000=\"1~浦发银行~\";");
+
+        GbkText.Decode(bytes).Should().Be("v_sh600000=\"1~浦发银行~\";");
+    }
 
     /// <summary>
     /// Verifies valid endpoints are used as configured.
