@@ -138,7 +138,10 @@ public sealed class FileManagerTests : IDisposable
         shown.Should().BeTrue();
         none.Should().BeFalse();
         started.Should().ContainSingle();
-        (started[0].Arguments + string.Join(' ', started[0].ArgumentList)).Should().Contain(file);
+
+        // Windows and macOS select the file itself; elsewhere only the folder that holds it can be opened.
+        var expected = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? file : _root;
+        (started[0].Arguments + string.Join(' ', started[0].ArgumentList)).Should().Contain(expected);
     }
 
     /// <summary>
