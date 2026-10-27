@@ -77,8 +77,6 @@ public sealed record ExchangeEndpoints(Uri WebSocket, Uri Rest)
     /// </returns>
     public static HttpClient CreateHttpClient()
     {
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxTick");
-        return http;
+        return AppHttpClient.Create("FluxTick");
     }
 }

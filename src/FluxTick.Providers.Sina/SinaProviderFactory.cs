@@ -1,4 +1,3 @@
-using System.Net;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
 using Microsoft.Extensions.Logging;
@@ -56,8 +55,7 @@ public sealed class SinaProviderFactory : IMarketDataProviderFactory
     public IMarketDataProvider Create(ProviderCreationContext context)
     {
         var quoteUri = EndpointOptions.GetHttpUri(context.Options, Descriptor, QuoteUrlKey);
-        var handler = new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All };
-        var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+        var http = AppHttpClient.Create(decompress: true);
         return new SinaProvider(
             Descriptor,
             quoteUri,
