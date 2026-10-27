@@ -27,7 +27,7 @@ public sealed class AlertRule
     /// <summary>
     /// Gets or sets the stable identifier of the rule.
     /// </summary>
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Id { get; set; } = Identifier.New();
 
     /// <summary>
     /// Gets or sets the provider that serves the instrument.

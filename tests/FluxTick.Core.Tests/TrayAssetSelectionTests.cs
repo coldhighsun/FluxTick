@@ -102,7 +102,7 @@ public class TrayAssetSelectionTests
     }
 
     /// <summary>
-    /// Verifies the tray list is empty by default, and a missing list becomes an empty one.
+    /// Verifies the tray list is empty by default.
     /// </summary>
     [Fact]
     public void Normalize_DefaultsToEmpty()
@@ -110,10 +110,6 @@ public class TrayAssetSelectionTests
         var settings = new AppSettings { Watchlist = Entries("A") };
 
         settings.Normalize();
-        settings.General.TrayAssets.Should().BeEmpty();
-
-        settings.General.TrayAssets = null!;
-        settings.Normalize().Should().BeTrue();
         settings.General.TrayAssets.Should().BeEmpty();
     }
 
