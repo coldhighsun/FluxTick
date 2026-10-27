@@ -202,6 +202,43 @@ public sealed class WatchlistEntry
     public string? GroupId { get; set; }
 
     /// <summary>
+    /// Gets or sets the price the user paid per unit, in <see cref="HoldingCurrency"/>, or <see langword="null"/> when
+    /// the user holds nothing of the instrument. It is set together with <see cref="Quantity"/>.
+    /// </summary>
+    public decimal? CostPrice { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of units the user holds, or <see langword="null"/> when the user holds nothing of the
+    /// instrument. It is set together with <see cref="CostPrice"/>.
+    /// </summary>
+    public decimal? Quantity { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ISO 4217 code of the currency of <see cref="CostPrice"/> and of the quoted price, or
+    /// <see langword="null"/> when the holding does not say and <see cref="CurrencyGuesser"/> decides.
+    /// </summary>
+    public string? HoldingCurrency { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the entry has a usable holding.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasHolding => HoldingPnl.IsUsable(CostPrice, Quantity);
+
+    /// <summary>
+    /// Copies the holding of another entry, for when an instrument moves to another data source.
+    /// </summary>
+    /// <param name="other">
+    /// The entry to copy the holding from.
+    /// </param>
+    public void CopyHoldingFrom(WatchlistEntry other)
+    {
+        CostPrice = other.CostPrice;
+        Quantity = other.Quantity;
+        HoldingCurrency = other.HoldingCurrency;
+    }
+
+    /// <summary>
     /// Converts an asset to a persisted entry.
     /// </summary>
     /// <param name="asset">
@@ -366,6 +403,12 @@ public sealed class GeneralSettings
     /// in the order they are listed. It is empty until the user adds instruments.
     /// </summary>
     public List<string> TrayAssets { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the ISO 4217 code of the currency the portfolio total is shown in, or <see langword="null"/> to
+    /// follow the interface language.
+    /// </summary>
+    public string? BaseCurrency { get; set; }
 }
 
 /// <summary>
@@ -552,6 +595,29 @@ public sealed class AppSettings
         }
 
         changed |= TrayAssetSelection.Sanitize(General.TrayAssets, Watchlist);
+
+        // A holding needs both a cost and a quantity above zero, otherwise it is not one. A currency is one the app has rates for.
+        foreach (var entry in Watchlist)
+        {
+            if (!entry.HasHolding && (entry.CostPrice is not null || entry.Quantity is not null || entry.HoldingCurrency is not null))
+            {
+                entry.CostPrice = null;
+                entry.Quantity = null;
+                entry.HoldingCurrency = null;
+                changed = true;
+            }
+            else if (entry.HoldingCurrency is not null && CurrencyCodes.NormalizeSupported(entry.HoldingCurrency) is var code && code != entry.HoldingCurrency)
+            {
+                entry.HoldingCurrency = code;
+                changed = true;
+            }
+        }
+
+        if (General.BaseCurrency is not null && CurrencyCodes.NormalizeSupported(General.BaseCurrency) is var baseCode && baseCode != General.BaseCurrency)
+        {
+            General.BaseCurrency = baseCode;
+            changed = true;
+        }
 
         return changed;
     }
