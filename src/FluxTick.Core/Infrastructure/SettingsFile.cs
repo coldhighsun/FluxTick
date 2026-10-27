@@ -494,6 +494,11 @@ internal sealed class GeneralFile
     public string? BaseCurrency { get; set; }
 
     /// <summary>
+    /// Gets or sets the global hotkey that hides every window and the tray icon.
+    /// </summary>
+    public string? BossKey { get; set; }
+
+    /// <summary>
     /// Converts what was read to general settings.
     /// </summary>
     /// <param name="repaired">
@@ -511,6 +516,7 @@ internal sealed class GeneralFile
             CloseToTray = CloseToTray ?? defaults.CloseToTray,
             TrayAssets = SettingsFile.NotNull(TrayAssets, ref repaired),
             BaseCurrency = BaseCurrency,
+            BossKey = BossKey ?? defaults.BossKey,
         };
     }
 }

@@ -51,6 +51,13 @@
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}" />
                 </Grid>
+                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsBossKeySupported}">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_BossKey}" />
+                    <TextBlock Text="{loc:T Settings_BossKeyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" IsCapturing="{Binding IsRecordingBossKey}" Width="130" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
+                </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_BaseCurrency}" />

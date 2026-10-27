@@ -110,6 +110,31 @@ public sealed partial class App : Application
     private TrayClickInterpreter? _trayClicks;
 
     /// <summary>
+    /// The listener for the boss key, or <see langword="null"/> where the platform has none.
+    /// </summary>
+    private WindowsGlobalHotkey? _bossHotkey;
+
+    /// <summary>
+    /// The hotkey the settings asked for last.
+    /// </summary>
+    private readonly HotkeyRequest _bossRequest = new();
+
+    /// <summary>
+    /// The windows the boss key hid.
+    /// </summary>
+    private readonly BossKeyState<Window> _bossKey = new();
+
+    /// <summary>
+    /// Hides and restores the windows and the tray icon for the boss key, or <see langword="null"/> until it is first used.
+    /// </summary>
+    private BossKeyController<Window>? _bossController;
+
+    /// <summary>
+    /// Shows the notifications, or <see langword="null"/> until the alerts are set up.
+    /// </summary>
+    private AlertToastPresenter? _toasts;
+
+    /// <summary>
     /// How many times the desktop was asked for a tray while there was none; the tray host may start after the app.
     /// </summary>
     private int _taskbarAttempts;
@@ -197,6 +222,20 @@ public sealed partial class App : Application
             var viewModel = _services.GetRequiredService<MainViewModel>();
             _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
             _window.RestoreGeometry(_settings.Current.Window);
+            viewModel.Settings.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsViewModel.IsRecordingBossKey))
+                {
+                    ApplyBossKey();
+                }
+            };
+            viewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.IsSettingsOpen))
+                {
+                    ApplyBossKey();
+                }
+            };
             ApplyTaskbarButton();
             _window.GeometryChanged += OnGeometryChanged;
             _window.FullScreenChanged += OnFullScreenChanged;
@@ -219,12 +258,17 @@ public sealed partial class App : Application
                 ApplyTheme();
                 ApplyPalette();
                 ApplyTrayAssets();
+                ApplyBossKey();
             });
             ApplyPalette();
 
             desktop.Exit += (_, _) =>
             {
                 IsExiting = true;
+                if (OperatingSystem.IsWindows())
+                {
+                    _bossHotkey?.Dispose();
+                }
 
                 // A move or resize in the last moments is still waiting for its quiet period; save it now.
                 try
@@ -248,7 +292,7 @@ public sealed partial class App : Application
 
             _updates = _services.GetRequiredService<UpdateService>();
             _updates.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyUpdateTray);
-            _updates.UpdateFound += (_, _) => Dispatcher.UIThread.Post(ShowUpdatePrompt);
+            _updates.UpdateFound += (_, _) => Dispatcher.UIThread.Post(() => _bossKey.RunOrDefer("update", ShowUpdatePrompt));
 
             // The installer ends this process without its shutdown, so what is still waiting to be saved is saved first.
             _updates.PrepareForInstallAsync = InstallPreparation.Create(_geometrySave, _settings);
@@ -256,11 +300,18 @@ public sealed partial class App : Application
 
             // The alerts watch the prices whether or not a window shows them, so the notifications are not tied to one.
             var toasts = new AlertToastPresenter(ActivateWindow);
+            _toasts = toasts;
+
+            // After the notifications exist, so that a key another program holds is reported from the first start.
+            ApplyBossKey();
             var alerts = _services.GetRequiredService<AlertService>();
             alerts.AlertTriggered += (_, e) => Dispatcher.UIThread.Post(() =>
             {
                 viewModel.FlashAlert(e);
-                toasts.Show(e);
+
+                // A notification would give away that the app is running, and the boss key is meant to hide just that; it
+                // shows when the windows are back.
+                _bossKey.RunOrDefer(e.Rule.Id, () => toasts.Show(e));
             });
             alerts.Start();
 
@@ -719,8 +770,141 @@ public sealed partial class App : Application
     /// </summary>
     private void ActivateWindow()
     {
+        // Starting a second copy must not undo the boss key; the hotkey brings the windows back.
+        if (_bossKey.IsHidden)
+        {
+            return;
+        }
+
         ShowFromTray(_ => { });
         _window?.Activate();
+    }
+
+    /// <summary>
+    /// Registers the boss key the settings name, and gives back the one registered before. Only Windows has the hotkey.
+    /// </summary>
+    private void ApplyBossKey()
+    {
+        if (_settings is null || !OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // While the box records keys the boss key is let go of, or Windows would take the combination for it. A settings
+        // window that is closed records nothing, whatever the box last reported.
+        var main = _services?.GetService<MainViewModel>();
+        var recording = main is { IsSettingsOpen: true } && main.Settings.IsRecordingBossKey;
+        var wanted = HotkeyRequest.Wanted(_settings.Current.General.BossKey, recording);
+        if (!_bossRequest.Change(wanted))
+        {
+            return;
+        }
+
+        _bossHotkey?.Unregister();
+        if (wanted is not { } next)
+        {
+            return;
+        }
+
+        if (_bossHotkey is null)
+        {
+            _bossHotkey = new WindowsGlobalHotkey();
+            _bossHotkey.Pressed += (_, _) => Dispatcher.UIThread.Post(ToggleBossKey);
+        }
+
+        if (!_bossHotkey.Register(next))
+        {
+            _services?.GetService<ILogger<App>>()?.LogWarning("The boss key {Hotkey} is taken by another program", next);
+            _toasts?.Show(Loc.Get("BossKey_FailedTitle"), Loc.Get("BossKey_FailedBody", next));
+        }
+    }
+
+    /// <summary>
+    /// Hides every window and the tray icon, or brings back what was hidden.
+    /// </summary>
+    private void ToggleBossKey()
+    {
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop || IsExiting)
+        {
+            return;
+        }
+
+        _bossController ??= new BossKeyController<Window>(
+            _bossKey,
+            new BossKeyActions<Window>(
+                Visible: () => desktop.Windows.Where(w => w.IsVisible).ToList(),
+                RoleOf: BossKeyRoleOf,
+                IsVisible: w => w.IsVisible,
+
+                // A tool window is closed rather than hidden, as it is when the main window goes to the tray: it is a dialog
+                // of the main window, which closes it as soon as it is hidden, and a closed window cannot be shown again.
+                Close: w => w.Close(),
+                HideForGood: w => w.Hide(),
+
+                // Another window may close by itself while it is hidden; it is dropped from the list then, not shown again.
+                HideToRestore: w =>
+                {
+                    w.Closed += OnBossKeyWindowClosed;
+                    w.Hide();
+                },
+                Restore: w =>
+                {
+                    w.Closed -= OnBossKeyWindowClosed;
+                    if (w == _window)
+                    {
+                        _window.ToggleVisibility(showOnly: true);
+                    }
+                    else
+                    {
+                        w.Show();
+                    }
+                },
+                SetTrayVisible: SetTrayIconsVisible,
+                OnError: ex => _services?.GetService<ILogger<App>>()?.LogWarning(ex, "A step of the boss key failed")));
+        _bossController.Toggle();
+    }
+
+    /// <summary>
+    /// Tells what the boss key does to a visible window.
+    /// </summary>
+    /// <param name="window">
+    /// The window.
+    /// </param>
+    /// <returns>
+    /// The role of the window.
+    /// </returns>
+    private static BossKeyRole BossKeyRoleOf(Window window) => BossKeyRoles.Of(window.GetType());
+
+    /// <summary>
+    /// Drops a window that closed while the boss key had it hidden.
+    /// </summary>
+    /// <param name="sender">
+    /// The window.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnBossKeyWindowClosed(object? sender, EventArgs e)
+    {
+        if (sender is Window window)
+        {
+            window.Closed -= OnBossKeyWindowClosed;
+            _bossKey.Forget(window);
+        }
+    }
+
+    /// <summary>
+    /// Shows or hides the tray icon.
+    /// </summary>
+    /// <param name="visible">
+    /// Whether the icon shows.
+    /// </param>
+    private void SetTrayIconsVisible(bool visible)
+    {
+        foreach (var icon in TrayIcon.GetIcons(this) ?? [])
+        {
+            icon.IsVisible = visible;
+        }
     }
 
     /// <summary>
