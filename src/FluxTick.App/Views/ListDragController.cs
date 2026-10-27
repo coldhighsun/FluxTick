@@ -9,7 +9,7 @@ namespace FluxTick.App.Views;
 
 /// <summary>
 /// Lets the items of a vertical list be reordered by pressing and dragging them. The other items slide out of the
-/// way while one is dragged; the new position is reported when it is dropped. Text boxes and buttons inside an item
+/// way while one is dragged; the new position is reported when it is dropped. Text boxes, buttons, switches and drop downs inside an item
 /// keep working as usual, so only the rest of the item starts a drag.
 /// </summary>
 internal sealed class ListDragController
@@ -476,7 +476,7 @@ internal sealed class ListDragController
     {
         for (; visual is not null && !ReferenceEquals(visual, panel); visual = visual.GetVisualParent())
         {
-            if (visual is TextBox or Button)
+            if (visual is TextBox or Button or ToggleSwitch or ComboBox)
             {
                 return true;
             }

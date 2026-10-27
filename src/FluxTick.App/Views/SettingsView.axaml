@@ -236,16 +236,29 @@
       </TabItem>
 
       <TabItem Header="{loc:T Settings_TabSources}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Name="ProvidersScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
-            <ItemsControl ItemsSource="{Binding Providers}">
+            <!-- Press and drag a card (its grip, or any part that is not a button or a box) to reorder; the order is saved at once. -->
+            <ItemsControl Name="ProvidersList" ItemsSource="{Binding Providers}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ProviderSettingsViewModel">
-                  <Border Classes="card">
+                  <Border Classes="card" Cursor="SizeAll">
+                    <!-- The cursor is inherited, so the controls that take the pointer for themselves say what theirs is. -->
+                    <Border.Styles>
+                      <Style Selector="TextBox">
+                        <Setter Property="Cursor" Value="IBeam" />
+                      </Style>
+                      <Style Selector="Button, ComboBox, ToggleSwitch">
+                        <Setter Property="Cursor" Value="Arrow" />
+                      </Style>
+                    </Border.Styles>
                     <StackPanel Spacing="6">
                       <!-- Header: click to expand or collapse; the enable switch stays outside the button. -->
-                      <Grid ColumnDefinitions="*,Auto">
-                        <ToggleButton Classes="disclosure" IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Path Data="M4 3h.01M4 7h.01M4 11h.01M9 3h.01M9 7h.01M9 11h.01" Stroke="{DynamicResource MutedBrush}"
+                              StrokeThickness="2" StrokeLineCap="Round" Margin="2,0,8,0" VerticalAlignment="Center"
+                              ToolTip.Tip="{loc:T Settings_DragToReorder}" />
+                        <ToggleButton Grid.Column="1" Classes="disclosure" Cursor="Hand" IsChecked="{Binding IsExpanded, Mode=TwoWay}"
                                       AutomationProperties.Name="{Binding Name}">
                           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Path Classes="chevron" Classes.expanded="{Binding IsExpanded}" Data="M5 3l4 4-4 4" Width="14" Height="14" VerticalAlignment="Center" />
@@ -260,7 +273,7 @@
                             </StackPanel>
                           </StackPanel>
                         </ToggleButton>
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" />
+                        <ToggleSwitch Grid.Column="2" IsChecked="{Binding Enabled}" />
                       </Grid>
 
                       <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
@@ -293,28 +306,6 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-          </StackPanel>
-        </ScrollViewer>
-      </TabItem>
-
-      <TabItem Header="{loc:T Settings_TabRouting}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
-            <TextBlock Text="{loc:T Settings_DefaultSourcePerClass}" Classes="muted" FontSize="11" Margin="0,0,0,6" />
-            <Border Classes="card">
-              <ItemsControl ItemsSource="{Binding Routing}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:RoutingRowViewModel">
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,3">
-                      <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                      <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource ProviderNameTemplate}" ItemsSource="{Binding Providers}" SelectedItem="{Binding Selected}"
-                                IsVisible="{Binding HasProviders}" Width="170" />
-                      <TextBlock Grid.Column="1" Text="{loc:T Settings_NoSourceEnabled}" IsVisible="{Binding !HasProviders}" Classes="warn" FontSize="11" VerticalAlignment="Center" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>

@@ -15,7 +15,7 @@ public class ToolWindow : Window
     /// <summary>
     /// The fixed width in device independent pixels.
     /// </summary>
-    private const double FixedWidth = 420;
+    private const double DefaultWidth = 420;
 
     /// <summary>
     /// The share of the work area height the window may use.
@@ -23,13 +23,24 @@ public class ToolWindow : Window
     private const double MaxHeightShare = 0.9;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ToolWindow"/> class.
+    /// Initializes a new instance of the <see cref="ToolWindow"/> class with the usual width.
     /// </summary>
     public ToolWindow()
+        : this(DefaultWidth)
     {
-        Width = FixedWidth;
-        MinWidth = FixedWidth;
-        MaxWidth = FixedWidth;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ToolWindow"/> class.
+    /// </summary>
+    /// <param name="width">
+    /// The fixed width in device independent pixels.
+    /// </param>
+    protected ToolWindow(double width)
+    {
+        Width = width;
+        MinWidth = width;
+        MaxWidth = width;
         Height = 520;
         MinHeight = 400;
         CanMaximize = false;

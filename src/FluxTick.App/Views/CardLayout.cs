@@ -15,6 +15,31 @@ internal static class CardLayout
     public const double LargeCardWidth = 300;
 
     /// <summary>
+    /// The height of a small card.
+    /// </summary>
+    public const double SmallCardHeight = 54;
+
+    /// <summary>
+    /// The height of a medium card.
+    /// </summary>
+    public const double MediumCardHeight = 96;
+
+    /// <summary>
+    /// The height of a large card.
+    /// </summary>
+    public const double LargeCardHeight = 176;
+
+    /// <summary>
+    /// The height of the header of a group.
+    /// </summary>
+    public const double SectionHeaderHeight = 20;
+
+    /// <summary>
+    /// The margin of the header of a group.
+    /// </summary>
+    public static readonly Thickness SectionHeaderMargin = new(6, 8, 6, 2);
+
+    /// <summary>
     /// The space around a card on each side.
     /// </summary>
     public const double CardMargin = 3;

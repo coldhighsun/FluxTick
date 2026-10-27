@@ -63,7 +63,7 @@ commodities side by side, from the data sources *you* choose.
 | **Simulated** | Anything | Local random walk | For demos, screenshots and offline development. Off by default. |
 
 Sources that are off by default are enabled in **Settings → Data sources**. To show an instrument from one of them,
-pick it in the *Add instrument* window or make it the default for an asset class on the *Routing* tab.
+pick it in the *Add instrument* window or drag the sources into your order of preference on the *Data sources* tab: the first enabled source that supports an asset class is the default for it.
 
 > Market data may be delayed or inaccurate and is **not investment advice**. FluxTick is not affiliated with any of
 > the data providers. Respect each provider's terms of use.
@@ -114,7 +114,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Add an instrument | **+** in the header, or *Add instrument…* in the right-click menu of the empty area, opens a window; pick an asset class and a data source, search || Reorder | Drag a row up or down |
 | Remove, change source | Right-click a row |
 | Move the Settings / Add window | Drag its header; **Esc** closes it |
-| Settings | The gear icon in the header, *Settings* in the tray menu, or *Settings* at the bottom of the right-click menu of the empty area opens a window with the tabs *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Data sources*, *Routing* and *Updates*; expand a data source to edit its options, and manage your price alerts under *Alerts* |
+| Settings | The gear icon in the header, *Settings* in the tray menu, or *Settings* at the bottom of the right-click menu of the empty area opens a window with the tabs *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Data sources* and *Updates*; expand a data source to edit its options, and drag the data sources to set their priority, and manage your price alerts under *Alerts* |
 | Launch at startup | Windows only, off by default; turn on *Launch at startup* under Settings → General to start FluxTick when you sign in |
 | Start in the tray | Off by default; *Start in the tray* under Settings → General (or the `--minimized` command line option) keeps the window hidden at startup until you double-click the tray icon (click it where the system cannot list the instruments, which is anywhere but Windows) |
 | Single instance | Only one copy runs per user; starting FluxTick again brings the running window forward (even when it is hidden in the tray) instead of opening a second one |

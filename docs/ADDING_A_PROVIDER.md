@@ -211,5 +211,5 @@ use a stub `HttpMessageHandler` plus `FakeTimeProvider` for polling behavior (se
 ## Not supported yet
 
 - Loading providers from DLLs at runtime (a `plugins/` folder). The contract is designed for it; it is a follow-up.
-- Automatic failover to the next provider in the routing list.
+- Automatic failover to the next provider in the order of the data sources.
 - Secure storage for `Secret` options: values are currently stored in `settings.json` in plain text.

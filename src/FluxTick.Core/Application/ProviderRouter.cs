@@ -3,7 +3,7 @@ using FluxTick.Abstractions;
 namespace FluxTick.Core.Application;
 
 /// <summary>
-/// Decides which data source serves an asset class, based on the user's routing preference and the enabled providers.
+/// Decides which data source serves an asset class, based on the order of the data sources the user arranged and which are enabled.
 /// </summary>
 /// <param name="registry">
 /// The available providers.
@@ -11,8 +11,8 @@ namespace FluxTick.Core.Application;
 public sealed class ProviderRouter(ProviderRegistry registry)
 {
     /// <summary>
-    /// Lists the usable providers for an asset class in priority order. Providers the user ranked come first,
-    /// followed by every other enabled provider that supports the class.
+    /// Lists the usable providers for an asset class in priority order: the enabled providers that support the class, in
+    /// the order the user arranged the data sources.
     /// </summary>
     /// <param name="assetClass">
     /// The asset class.
@@ -27,23 +27,8 @@ public sealed class ProviderRouter(ProviderRegistry registry)
     {
         var usable = registry.Descriptors
             .Where(d => d.Supports(assetClass) && settings.IsProviderEnabled(d))
-            .ToList();
-
-        var ordered = new List<ProviderDescriptor>();
-        if (settings.Routing.TryGetValue(assetClass, out var preferred))
-        {
-            foreach (var id in preferred)
-            {
-                var match = usable.FirstOrDefault(d => d.Id == id);
-                if (match is not null && !ordered.Contains(match))
-                {
-                    ordered.Add(match);
-                }
-            }
-        }
-
-        ordered.AddRange(usable.Where(d => !ordered.Contains(d)));
-        return ordered;
+            .ToDictionary(d => d.Id);
+        return [.. ProviderOrdering.Sort(usable.Keys, settings.ProviderOrder).Select(id => usable[id])];
     }
 
     /// <summary>

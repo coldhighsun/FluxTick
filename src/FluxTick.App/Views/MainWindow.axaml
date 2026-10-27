@@ -57,14 +57,6 @@
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
-            <!-- Four corners pointing out mean "fill the screen"; pointing in they mean "go back". -->
-            <Button Classes="icon" Width="24" ToolTip.Tip="{Binding FullScreenTip}" Click="OnFullScreenClicked" Classes.active="{Binding IsFullScreen}"
-                    AutomationProperties.Name="{loc:T Main_FullScreen}">
-              <Panel>
-                <Path Data="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" IsVisible="{Binding !IsFullScreen}" />
-                <Path Data="M5 2v3H2M9 2v3h3M12 9H9v3M2 9h3v3" IsVisible="{Binding IsFullScreen}" />
-              </Panel>
-            </Button>
             <!-- Three squares growing in size read as "card size"; a drop down picks small, medium or large. -->
             <Button Name="CardSizeButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Settings_CardSize}" IsVisible="{Binding IsCardLayout}"
                     AutomationProperties.Name="{loc:T Settings_CardSize}">
@@ -83,13 +75,13 @@
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
-            <!-- A gear: eight teeth around a ring, with a hole in the middle. -->
-            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_Settings}" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}"
-                    AutomationProperties.Name="{loc:T Main_Settings}">
-              <Canvas Width="14" Height="14">
-                <Path Data="M5.70 2.48L6.01 0.78L7.99 0.78L8.30 2.48L9.28 2.89L10.70 1.90L12.10 3.30L11.11 4.72L11.52 5.70L13.22 6.01L13.22 7.99L11.52 8.30L11.11 9.28L12.10 10.70L10.70 12.10L9.28 11.11L8.30 11.52L7.99 13.22L6.01 13.22L5.70 11.52L4.72 11.11L3.30 12.10L1.90 10.70L2.89 9.28L2.48 8.30L0.78 7.99L0.78 6.01L2.48 5.70L2.89 4.72L1.90 3.30L3.30 1.90L4.72 2.89z" />
-                <Ellipse Canvas.Left="5.2" Canvas.Top="5.2" Width="3.6" Height="3.6" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" />
-              </Canvas>
+            <!-- Four corners pointing out mean "fill the screen"; pointing in they mean "go back". -->
+            <Button Classes="icon" Width="24" ToolTip.Tip="{Binding FullScreenTip}" Click="OnFullScreenClicked" Classes.active="{Binding IsFullScreen}"
+                    AutomationProperties.Name="{loc:T Main_FullScreen}">
+              <Panel>
+                <Path Data="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" IsVisible="{Binding !IsFullScreen}" />
+                <Path Data="M5 2v3H2M9 2v3h3M12 9H9v3M2 9h3v3" IsVisible="{Binding IsFullScreen}" />
+              </Panel>
             </Button>
             <!-- An arrow up to a bar at the top reads as "stay on top"; the padlock next to it is "lock position". -->
             <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_AlwaysOnTop}" Command="{Binding TogglePinCommand}" Classes.active="{Binding Settings.AlwaysOnTop}"
@@ -103,6 +95,14 @@
                 <Path Data="M5 6.5V5a2 2 0 0 1 4 0v1.5" />
               </Canvas>
             </Button>
+            <!-- A gear: eight teeth around a ring, with a hole in the middle. -->
+            <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_Settings}" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}"
+                    AutomationProperties.Name="{loc:T Main_Settings}">
+              <Canvas Width="14" Height="14">
+                <Path Data="M5.70 2.48L6.01 0.78L7.99 0.78L8.30 2.48L9.28 2.89L10.70 1.90L12.10 3.30L11.11 4.72L11.52 5.70L13.22 6.01L13.22 7.99L11.52 8.30L11.11 9.28L12.10 10.70L10.70 12.10L9.28 11.11L8.30 11.52L7.99 13.22L6.01 13.22L5.70 11.52L4.72 11.11L3.30 12.10L1.90 10.70L2.89 9.28L2.48 8.30L0.78 7.99L0.78 6.01L2.48 5.70L2.89 4.72L1.90 3.30L3.30 1.90L4.72 2.89z" />
+                <Ellipse Canvas.Left="5.2" Canvas.Top="5.2" Width="3.6" Height="3.6" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" />
+              </Canvas>
+            </Button>
             <Button Classes="icon" Width="24" ToolTip.Tip="{Binding Settings.CloseButtonTip}" Click="OnCloseClicked">
               <Path Data="M3 3l8 8M11 3l-8 8" />
             </Button>
@@ -111,7 +111,7 @@
       </Border>
 
       <!-- Watchlist; settings and add instrument open in their own windows. -->
-      <views:WatchlistView Grid.Row="1" />
+      <views:WatchlistView Name="Watchlist" Grid.Row="1" />
 
       <!-- The total profit or loss of all holdings, in the base currency. Shown only when there is a holding. -->
       <TextBlock Grid.Row="2" Text="{Binding PortfolioText}" IsVisible="{Binding HasPortfolio}" ToolTip.Tip="{Binding PortfolioTip}" Classes="mono" FontSize="11"

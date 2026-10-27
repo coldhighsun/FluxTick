@@ -106,7 +106,8 @@
             <StackPanel ClipToBounds="False">
               <Grid>
                 <ToggleButton Name="SectionHeader" Classes="disclosure" IsVisible="{Binding ShowHeader}"
-                              IsChecked="{Binding IsCollapsed, Mode=TwoWay}" Margin="6,8,6,2"
+                              IsChecked="{Binding IsCollapsed, Mode=TwoWay}" Margin="{x:Static views:CardLayout.SectionHeaderMargin}"
+                              Height="{x:Static views:CardLayout.SectionHeaderHeight}"
                               AutomationProperties.Name="{Binding Title}">
                   <ToggleButton.ContextMenu>
                     <!-- Only user-defined groups have this menu; OnSectionsContextRequested suppresses it for the others. -->

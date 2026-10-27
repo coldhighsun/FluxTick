@@ -33,9 +33,9 @@ internal sealed class SettingsFile
     public Dictionary<string, ProviderSettingsFile?>? Providers { get; set; }
 
     /// <summary>
-    /// Gets or sets the preferred provider ids per asset class.
+    /// Gets or sets the order of the data sources.
     /// </summary>
-    public Dictionary<AssetClass, List<string?>?>? Routing { get; set; }
+    public List<string?>? ProviderOrder { get; set; }
 
     /// <summary>
     /// Gets or sets the appearance and behavior settings.
@@ -89,18 +89,7 @@ internal sealed class SettingsFile
             }
         }
 
-        foreach (var (assetClass, order) in Routing ?? [])
-        {
-            if (order is null)
-            {
-                repaired = true;
-            }
-            else
-            {
-                settings.Routing[assetClass] = NotNull(order, ref repaired);
-            }
-        }
-
+        settings.ProviderOrder.AddRange(NotNull(ProviderOrder, ref repaired));
         settings.Appearance = (Appearance ?? new()).ToSettings(ref repaired);
         settings.General = (General ?? new()).ToSettings(ref repaired);
         settings.Updates = (Updates ?? new()).ToSettings();

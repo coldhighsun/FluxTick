@@ -248,6 +248,11 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     private readonly ProviderRegistry _registry;
 
     /// <summary>
+    /// The threshold the form was filled with, or <see langword="null"/>. It is a suggestion to change, not a rule to add.
+    /// </summary>
+    private decimal? _suggestedThreshold;
+
+    /// <summary>
     /// Whether a rule of the list was saved since the rules were checked against each other.
     /// </summary>
     private bool _needsRevalidation;
@@ -373,15 +378,19 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     public bool HasMessage => Message.Length > 0;
 
     /// <summary>
-    /// Limits the list to one instrument and clears the form.
+    /// Limits the list to one instrument and resets the form.
     /// </summary>
     /// <param name="asset">
     /// The instrument.
     /// </param>
-    public void Begin(Asset asset)
+    /// <param name="currentPrice">
+    /// The latest price, which fills the threshold of the form, or <see langword="null"/> when there is no price.
+    /// </param>
+    public void Begin(Asset asset, decimal? currentPrice = null)
     {
         Subject = asset;
-        ThresholdText = string.Empty;
+        _suggestedThreshold = currentPrice is > 0m ? currentPrice : null;
+        ThresholdText = currentPrice is > 0m ? NumberText.Format(currentPrice.Value) : string.Empty;
         Message = string.Empty;
         NewRepeat = true;
 
@@ -465,6 +474,13 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
             return;
         }
 
+        // An alert at the price it was suggested from would fire on the next move; the user has to pick a price of their own.
+        if (threshold == _suggestedThreshold)
+        {
+            Message = Loc.Get("Alert_ThresholdUnchanged");
+            return;
+        }
+
         var rule = new AlertRule
         {
             ProviderId = Subject.ProviderId,
@@ -473,6 +489,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
             Threshold = threshold,
             Repeat = NewRepeat,
         };
+        _suggestedThreshold = null;
         ThresholdText = string.Empty;
         Message = string.Empty;
         await _settings.UpdateAsync(s => s.Alerts.Add(rule));

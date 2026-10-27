@@ -726,7 +726,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
             return;
         }
 
-        AlertEditor.Begin(row.Asset);
+        // A price that is not coming in any more is no price to suggest as the threshold.
+        AlertEditor.Begin(row.Asset, row.IsPriceOutdated ? null : row.CurrentPrice);
         AlertsRequested?.Invoke(this, EventArgs.Empty);
     }
 

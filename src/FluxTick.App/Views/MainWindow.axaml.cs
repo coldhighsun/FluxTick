@@ -120,6 +120,7 @@ public sealed partial class MainWindow : Window
             }
         };
         Resized += OnResized;
+        Watchlist.SizeChanged += (_, _) => ApplyHeightRule();
         if (GroupButton.Flyout is MenuFlyout groupFlyout)
         {
             groupFlyout.Opening += (_, _) =>
@@ -317,6 +318,7 @@ public sealed partial class MainWindow : Window
 
         FollowAvailability();
         ApplyAutoHide();
+        ApplyHeightRule();
         base.OnDataContextChanged(e);
     }
 
@@ -541,6 +543,12 @@ public sealed partial class MainWindow : Window
         {
             ApplyWidthRule();
         }
+
+        // What the window needs around the list does not change with these, so the last measure is good enough.
+        if (e.PropertyName is nameof(MainViewModel.IsCardLayout) or nameof(MainViewModel.CardSize) or nameof(MainViewModel.Grouping))
+        {
+            ApplyHeightRule();
+        }
         else if (e.PropertyName is nameof(SettingsViewModel.AutoHideAtEdge) or nameof(SettingsViewModel.AlwaysOnTop))
         {
             ApplyAutoHide();
@@ -596,6 +604,29 @@ public sealed partial class MainWindow : Window
         else
         {
             AnimateWidth(current, target, rule);
+        }
+    }
+
+    /// <summary>
+    /// Keeps the window high enough for one whole card of the shown size in the card layout. What the window needs around
+    /// the list is measured, since the portfolio line comes and goes.
+    /// </summary>
+    private void ApplyHeightRule()
+    {
+        // Nothing is measured before the XAML is loaded and the first layout pass is done. The window needs no extra height
+        // while it fills the screen, but the limit is kept up to date so that the window is high enough when it goes back
+        // to normal.
+        if (_observed is not { } viewModel || Watchlist is null || Watchlist.Bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var chrome = ClientSize.Height - Watchlist.Bounds.Height;
+        var layout = viewModel.IsCardLayout ? WatchlistLayout.Cards : WatchlistLayout.List;
+        var minHeight = WindowHeightRules.MinHeight(layout, viewModel.CardSize, viewModel.Grouping != CardGrouping.None, chrome);
+        if (Math.Abs(MinHeight - minHeight) > 0.5)
+        {
+            MinHeight = minHeight;
         }
     }
 
