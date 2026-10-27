@@ -409,6 +409,12 @@ public sealed class GeneralSettings
     /// follow the interface language.
     /// </summary>
     public string? BaseCurrency { get; set; }
+
+    /// <summary>
+    /// Gets or sets the global hotkey that hides every window and the tray icon at once and brings them back,
+    /// written like <c>Ctrl+Alt+H</c>. It is empty when the boss key is off.
+    /// </summary>
+    public string BossKey { get; set; } = "Ctrl+Alt+H";
 }
 
 /// <summary>
@@ -581,6 +587,26 @@ public sealed class AppSettings
         {
             General.BaseCurrency = baseCode;
             changed = true;
+        }
+
+        // The boss key is a hotkey the app can register, written the usual way, or empty when the user turned it off. Any
+        // other text is the default again, as there is nothing to tell what it was meant to be.
+        if (General.BossKey is not { Length: > 0 } bossKey)
+        {
+            if (General.BossKey is null)
+            {
+                General.BossKey = new GeneralSettings().BossKey;
+                changed = true;
+            }
+        }
+        else
+        {
+            var spelled = HotkeyGesture.TryParse(bossKey, out var gesture) ? gesture.ToString() : new GeneralSettings().BossKey;
+            if (spelled != bossKey)
+            {
+                General.BossKey = spelled;
+                changed = true;
+            }
         }
 
         return changed;

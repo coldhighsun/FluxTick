@@ -874,6 +874,25 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool CloseToTray { get; set; } = true;
 
     /// <summary>
+    /// Gets a value indicating whether this platform has the boss key.
+    /// </summary>
+    public bool IsBossKeySupported => OperatingSystem.IsWindows();
+
+    /// <summary>
+    /// Gets or sets the boss key as the user typed it; the box hands it over when it loses the focus, so a half-typed key
+    /// such as <c>Ctrl+A</c> is never registered on the way. Text that is not a hotkey is shown but not saved.
+    /// </summary>
+    [ObservableProperty]
+    public partial string BossKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the boss key box has the focus and records keys. The app lets go of the boss
+    /// key meanwhile, because Windows would take the combination for it before the box could see it.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsRecordingBossKey { get; set; }
+
+    /// <summary>
     /// Gets the currencies the total of the holdings can be shown in.
     /// </summary>
     public IReadOnlyList<string> BaseCurrencies { get; } = CurrencyCodes.Supported;
@@ -1013,6 +1032,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             LaunchAtLogin = IsAutoStartSupported && _autoStart!.IsEnabled();
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
+            BossKey = _settings.Current.General.BossKey;
+            IsRecordingBossKey = false;
             BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
@@ -1104,6 +1125,45 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new currency.
     /// </param>
     partial void OnBaseCurrencyChanged(string value) => SaveSetting(s => s.General.BaseCurrency = value);
+
+    /// <summary>
+    /// Saves the boss key when it is empty (off) or a valid hotkey, showing it in its normal spelling. Text that is not a
+    /// hotkey is put back to the key in use, so the box never shows a key that does not work.
+    /// </summary>
+    /// <param name="value">
+    /// The new text.
+    /// </param>
+    partial void OnBossKeyChanged(string value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        // The box can hand over null when it is cleared.
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (value is not (null or ""))
+            {
+                BossKey = string.Empty;
+                return;
+            }
+
+            SaveSetting(s => s.General.BossKey = string.Empty);
+        }
+        else if (!HotkeyGesture.TryParse(value, out var gesture))
+        {
+            BossKey = _settings.Current.General.BossKey;
+        }
+        else if (gesture.ToString() != value)
+        {
+            BossKey = gesture.ToString();
+        }
+        else
+        {
+            SaveSetting(s => s.General.BossKey = value);
+        }
+    }
 
     /// <summary>
     /// Saves the close-to-tray flag.
