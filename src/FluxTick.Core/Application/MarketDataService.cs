@@ -1044,9 +1044,13 @@ public sealed class MarketDataService : IAsyncDisposable
             return (AssetHealth.Failed, status.Message);
         }
 
+        // A source that has been reconnecting for longer than the threshold has old data, and "reconnecting" alone would hide
+        // that for as long as the reconnecting goes on. The reason stays as the detail.
         if (status.State == ProviderConnectionState.Reconnecting)
         {
-            return (AssetHealth.Reconnecting, status.Message);
+            return state.LastReceivedAt is { } received && _timeProvider.GetUtcNow() - received > _options.StaleAfter
+                ? (AssetHealth.StaleReconnecting, status.Message)
+                : (AssetHealth.Reconnecting, status.Message);
         }
 
         if (state.LastReceivedAt is null)

@@ -595,6 +595,91 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a source that keeps reconnecting turns its instruments stale once the last quote is older than the
+    /// threshold, with the reason of the reconnecting as the detail, instead of staying "reconnecting" for good.
+    /// </summary>
+    [Fact]
+    public async Task Health_ReconnectingForLongerThanTheThreshold_BecomesStaleWithTheReason()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+
+        provider.ChangeStatus(ProviderConnectionState.Reconnecting, "offline");
+        service.GetSnapshots().Single().Health.Should().Be(AssetHealth.Reconnecting, "a short break is only a reconnect");
+
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.StaleReconnecting);
+        service.GetSnapshots().Single().HealthDetail.Should().Be("offline");
+    }
+
+    /// <summary>
+    /// Verifies a source that was reconnecting long enough to be stale makes its instruments live again with the next quote
+    /// once it is connected.
+    /// </summary>
+    [Fact]
+    public async Task Health_AfterLongReconnectingTheSourceReturns_IsLiveWithTheNextQuote()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+        provider.ChangeStatus(ProviderConnectionState.Reconnecting, "offline");
+        _time.Advance(TimeSpan.FromMinutes(2));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.StaleReconnecting);
+
+        provider.ChangeStatus(ProviderConnectionState.Connected);
+        provider.Emit(new Quote(Btc.Id, 2m, null, _time.GetUtcNow()));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+    }
+
+    /// <summary>
+    /// Verifies a source that reports it is connected again but sends nothing is plainly stale, not stale and reconnecting.
+    /// </summary>
+    [Fact]
+    public async Task Health_ConnectedAgainButSilent_IsStaleNotReconnecting()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+        provider.ChangeStatus(ProviderConnectionState.Reconnecting, "offline");
+        _time.Advance(TimeSpan.FromMinutes(2));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.StaleReconnecting);
+
+        provider.ChangeStatus(ProviderConnectionState.Connected);
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+        service.GetSnapshots().Single().HealthDetail.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Verifies a source that fails after reconnecting for long reports its instruments as failed.
+    /// </summary>
+    [Fact]
+    public async Task Health_FailsAfterLongReconnecting_IsFailed()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+        provider.ChangeStatus(ProviderConnectionState.Reconnecting, "offline");
+        _time.Advance(TimeSpan.FromMinutes(2));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.StaleReconnecting);
+
+        provider.ChangeStatus(ProviderConnectionState.Failed, "gave up");
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Failed);
+    }
+
+    /// <summary>
     /// Verifies an instrument is stale when quotes keep arriving but carry a time older than the threshold, and live
     /// again once a quote with a fresh time arrives.
     /// </summary>

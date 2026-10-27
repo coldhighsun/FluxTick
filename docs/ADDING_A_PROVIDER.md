@@ -81,7 +81,7 @@ Rules of thumb:
 
 - Do no network I/O in the constructor or in the factory; start lazily on the first subscription.
 - Expect empty and non-empty subscription sets to alternate. A provider gets an empty set while the watchlist has no instrument for it, and its instruments again when the user adds some. On an empty set close the connection, stop timers and report `Idle`; on the next non-empty set start from scratch, as on the first one. The base classes do this for you.
-- Report problems with `SetStatus(ProviderConnectionState.Reconnecting | Failed, message)` so the UI can show them. A listener of `StatusChanged` that throws is swallowed and passed to `OnStatusListenerFailed` (the polling and WebSocket base classes log it), so a broken listener never ends your loop.
+- Report problems with `SetStatus(ProviderConnectionState.Reconnecting | Failed, message)` so the UI can show them. While you report `Reconnecting` the instruments show as reconnecting; once nothing has been received for the stale threshold (one minute by default) they show as `Stale · reconnecting`, their holdings no longer count in the portfolio total, and price alerts, which are only checked on live prices, wait. A listener of `StatusChanged` that throws is swallowed and passed to `OnStatusListenerFailed` (the polling and WebSocket base classes log it), so a broken listener never ends your loop.
 - Observe `ShutdownToken` in every background loop.
 - Prefer `TimeProvider` over `DateTime.UtcNow` / `Task.Delay` so the provider is testable with `FakeTimeProvider`.
 
