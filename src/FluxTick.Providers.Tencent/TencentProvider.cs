@@ -7,13 +7,8 @@ namespace FluxTick.Providers.Tencent;
 /// <summary>
 /// Polls the Tencent quote service for every subscribed instrument, one request per batch of instruments.
 /// </summary>
-public sealed class TencentProvider : PollingProviderBase, IHistoryProvider, ISymbolSearchProvider
+public sealed class TencentProvider : BatchQuotePollingProviderBase, IHistoryProvider, ISymbolSearchProvider
 {
-    /// <summary>
-    /// The most codes asked for in one request, to keep the URL short.
-    /// </summary>
-    private const int BatchSize = 50;
-
     /// <summary>
     /// The number of search results returned.
     /// </summary>
@@ -113,99 +108,16 @@ public sealed class TencentProvider : PollingProviderBase, IHistoryProvider, ISy
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>
-    /// Fetches the given instruments in batches and publishes their quotes.
-    /// </summary>
-    /// <param name="assets">
-    /// The instruments to fetch.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// A token to cancel the cycle.
-    /// </param>
-    /// <returns>
-    /// How the cycle went; the next cycle backs off when no batch succeeded.
-    /// </returns>
-    protected override async Task<PollOutcome> PollOnceAsync(IReadOnlyCollection<Asset> assets, CancellationToken cancellationToken)
-    {
-        // A symbol may have been typed in another case than the service answers with; several subscriptions can
-        // share one code. Quotes are published under the symbol that was subscribed.
-        var byCode = new Dictionary<string, List<Asset>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var asset in assets)
-        {
-            var code = TencentParser.ToRequestCode(asset.Symbol);
-            if (!byCode.TryGetValue(code, out var list))
-            {
-                byCode[code] = list = [];
-            }
+    /// <inheritdoc />
+    protected override string ToRequestCode(string symbol) => TencentParser.ToRequestCode(symbol);
 
-            list.Add(asset);
-        }
-
-        var succeeded = 0;
-        var failed = 0;
-        string? lastError = null;
-        foreach (var batch in byCode.Keys.Chunk(BatchSize))
-        {
-            try
-            {
-                var answered = await FetchAsync(batch, byCode, cancellationToken).ConfigureAwait(false);
-                succeeded++;
-                foreach (var code in batch.Where(c => !answered.Contains(c)))
-                {
-                    lastError = $"No data for {byCode[code][0].Symbol}";
-                }
-            }
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                failed++;
-                lastError = ex.Message;
-                Logger.LogWarning(ex, "Tencent request failed");
-            }
-        }
-
-        return new PollOutcome(succeeded, failed, lastError, BackOff: succeeded == 0);
-    }
-
-    /// <summary>
-    /// Requests one batch of codes and publishes the quotes of the answer.
-    /// </summary>
-    /// <param name="codes">
-    /// The codes to request.
-    /// </param>
-    /// <param name="byCode">
-    /// The subscribed instruments by code.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// A token to cancel the request.
-    /// </param>
-    /// <returns>
-    /// The codes the service answered for.
-    /// </returns>
-    private async Task<HashSet<string>> FetchAsync(
-        string[] codes,
-        Dictionary<string, List<Asset>> byCode,
-        CancellationToken cancellationToken)
+    /// <inheritdoc />
+    protected override async Task<IReadOnlyList<ParsedQuote>> RequestQuotesAsync(string[] codes, CancellationToken cancellationToken)
     {
         var uri = EndpointOptions.Combine(_quoteBase, $"/q={string.Join(',', codes.Select(Uri.EscapeDataString))}");
         using var response = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-
-        var answered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var quote in TencentParser.ParseQuotes(TencentParser.DecodeGbk(bytes)))
-        {
-            if (!byCode.TryGetValue(quote.Key, out var subscribed))
-            {
-                continue;
-            }
-
-            answered.Add(quote.Key);
-            foreach (var asset in subscribed)
-            {
-                Publish(new Quote(asset.Id, quote.Price, quote.PreviousClose, quote.Time ?? TimeProvider.GetUtcNow()));
-            }
-        }
-
-        return answered;
+        return TencentParser.ParseQuotes(GbkText.Decode(bytes));
     }
 }
