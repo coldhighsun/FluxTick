@@ -7,6 +7,7 @@ using FluxTick.Abstractions;
 using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
+using Microsoft.Extensions.Logging;
 
 namespace FluxTick.App.ViewModels;
 
@@ -591,6 +592,22 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     private readonly IAutoStartService? _autoStart;
 
     /// <summary>
+    /// Opens a folder in the file manager and tells whether that worked.
+    /// </summary>
+    private readonly Func<string, bool> _openFolder;
+
+    /// <summary>
+    /// The log, or <see langword="null"/> for none.
+    /// </summary>
+    private readonly ILogger<SettingsViewModel>? _logger;
+
+    /// <summary>
+    /// Counts the clicks on the buttons that open a folder, so that only the outcome of the latest one is shown. It is
+    /// only touched on the UI thread: by the click, and by the outcome that is posted back.
+    /// </summary>
+    private int _openFolderTicket;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
     /// </summary>
     /// <param name="settings">
@@ -617,6 +634,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="trayProbe">
     /// Tells whether the desktop shows tray icons; by default the desktop is asked, which can take a moment.
     /// </param>
+    /// <param name="openFolder">
+    /// Opens a folder in the file manager and tells whether that worked; by default the real file manager is used.
+    /// </param>
+    /// <param name="logger">
+    /// Receives the reason when a folder could not be opened, or <see langword="null"/> for none.
+    /// </param>
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
@@ -625,11 +648,15 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         TimeProvider timeProvider,
         UpdateViewModel? updates = null,
         IAutoStartService? autoStart = null,
-        Func<bool>? trayProbe = null)
+        Func<bool>? trayProbe = null,
+        Func<string, bool>? openFolder = null,
+        ILogger<SettingsViewModel>? logger = null)
         : base(ui)
     {
         _settings = settings;
         _autoStart = autoStart;
+        _logger = logger;
+        _openFolder = openFolder ?? (directory => FileManager.TryOpen(directory, logger: logger));
         Updates = updates;
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
@@ -735,6 +762,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets a value indicating whether the platform can list the instruments when the tray icon is clicked.
     /// </summary>
     public bool IsTrayListSupported => TrayPopupAvailability.IsSupported;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the last attempt to open the settings or the log folder failed.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool FolderOpenFailed { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the app starts when the user signs in.
@@ -899,10 +932,64 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial CardSize SelectedCardSize { get; set; }
 
     /// <summary>
+    /// Opens the folder that holds the settings file.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the file manager was asked and the outcome is shown.
+    /// </returns>
+    [RelayCommand]
+    private Task OpenSettingsFolderAsync() => OpenFolderAsync(AppPaths.DataDirectory);
+
+    /// <summary>
+    /// Opens the folder that holds the log files.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the file manager was asked and the outcome is shown.
+    /// </returns>
+    [RelayCommand]
+    private Task OpenLogFolderAsync() => OpenFolderAsync(AppPaths.LogDirectory);
+
+    /// <summary>
+    /// Opens a folder off the UI thread, as making it and starting the file manager can take a moment on a redirected
+    /// profile, and shows whether that worked.
+    /// </summary>
+    /// <param name="directory">
+    /// The folder.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the outcome is shown.
+    /// </returns>
+    private async Task OpenFolderAsync(string directory)
+    {
+        // Only the latest click is shown: a slower, earlier one must not overwrite its outcome.
+        var ticket = ++_openFolderTicket;
+        bool opened;
+        try
+        {
+            opened = await Task.Run(() => _openFolder(directory));
+        }
+        catch (Exception ex)
+        {
+            // A button must not end the app, whatever went wrong; the log keeps the defect.
+            _logger?.LogError(ex, "Could not open the folder {Folder}", directory);
+            opened = false;
+        }
+
+        Ui.Post(() =>
+        {
+            if (ticket == _openFolderTicket)
+            {
+                FolderOpenFailed = !opened;
+            }
+        });
+    }
+
+    /// <summary>
     /// Reloads every control from the persisted settings. Call when the page is opened.
     /// </summary>
     public void Reload()
     {
+        FolderOpenFailed = false;
         _loading = true;
         try
         {

@@ -85,6 +85,20 @@
                 </Grid>
               </StackPanel>
             </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <StackPanel>
+                  <TextBlock Text="{loc:T Settings_DataAndLogs}" />
+                  <TextBlock Text="{loc:T Settings_DataAndLogsHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}" />
+                  <Button Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}" />
+                </StackPanel>
+                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding FolderOpenFailed}" />
+              </StackPanel>
+            </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>

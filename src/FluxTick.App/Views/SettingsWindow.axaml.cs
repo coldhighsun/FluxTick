@@ -6,10 +6,12 @@ namespace FluxTick.App.Views;
 public sealed partial class SettingsWindow : ToolWindow
 {
     /// <summary>
-    /// The height the window opens with, taller than the other tool windows because the Appearance page is long. On a
-    /// small screen the tool window limits it to its share of the screen.
+    /// The height the window opens with, taller than the other tool windows because the General and Appearance pages are
+    /// long. Measured in the real window, the General page needs about 650 in English and 600 in Chinese, and 700 leaves
+    /// room for the message that can appear under the folder buttons. The Data sources page needs about 745 and scrolls.
+    /// On a small screen the tool window limits the height to its share of the screen, and the page scrolls.
     /// </summary>
-    private const double InitialHeight = 560;
+    private const double InitialHeight = 700;
 
     /// <summary>
     /// The fixed width, wider than the other tool windows so that the lists of the settings have room.
