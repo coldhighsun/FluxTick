@@ -10,6 +10,7 @@ using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
 using FluxTick.Providers.Tencent;
 using FluxTick.Providers.Yahoo;
+using GitHubReleaseUpdater.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -120,13 +121,18 @@ public static class AppHost
             services.AddSingleton<IAutoStartService, NullAutoStartService>();
         }
 
-        services.AddSingleton(sp => new UpdateService(
-            AppPaths.UpdateStateFile,
-            sp.GetRequiredService<ILogger<UpdateService>>(),
-            UpdateService.ReadVersion(typeof(AppHost).Assembly),
-            UpdateService.ReadOfficialBuild(typeof(AppHost).Assembly),
-            AppPaths.UpdatesDirectory,
-            useSetup: OperatingSystem.IsWindows()));
+        services.AddSingleton(sp =>
+        {
+            var settings = sp.GetRequiredService<SettingsManager>();
+            return new UpdateService(
+                AppPaths.UpdateStateFile,
+                sp.GetRequiredService<ILogger<UpdateService>>(),
+                SemanticVersion.TryFromAssembly(typeof(AppHost).Assembly, out var version) ? version : null,
+                UpdateService.ReadOfficialBuild(typeof(AppHost).Assembly),
+                AppPaths.UpdatesDirectory,
+                useSetup: OperatingSystem.IsWindows(),
+                isAutoCheckEnabled: () => settings.Current.Updates.AutoCheck);
+        });
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<AddAssetViewModel>();
         services.AddSingleton<SettingsViewModel>();
