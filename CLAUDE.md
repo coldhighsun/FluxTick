@@ -1,6 +1,49 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+The SDK is pinned in `global.json` (.NET 10) and tests use xUnit v3 on Microsoft.Testing.Platform, so the `dotnet test` flags differ from the VSTest ones.
+
+```bash
+dotnet build FluxTick.slnx
+dotnet test --solution FluxTick.slnx                       # CI runs the same with -c Release
+dotnet test --project tests/FluxTick.Core.Tests            # one test project
+dotnet test --project tests/FluxTick.Core.Tests --filter-method "*AlertEvaluatorTests.*"   # xUnit v3 filters (--filter-class, --filter-method, --filter-trait)
+dotnet run --project src/FluxTick.App                      # run the app
+dotnet run --project src/FluxTick.App -- --demo            # offline, simulated data (also uses a separate single-instance name)
+```
+
+- `Directory.Build.props` sets `UseArtifactsOutput`; a local, untracked `Directory.Build.user` may redirect `ArtifactsPath`, so build output is not under `bin/` next to the projects.
+- `GenerateDocumentationFile` is on and `.editorconfig` makes file-scoped namespaces and braces warnings; every member carries an XML doc comment.
+
+## Architecture
+
+Layering is enforced by project references:
+
+- `FluxTick.Abstractions` — the only thing a data source references: `IMarketDataProvider`, `MarketDataProviderBase` (quote channel, status, subscription diffing, disposal), `ProviderDescriptor`/`ProviderOptionDefinition`, `Quote`, `Asset`.
+- `FluxTick.Core` — provider registry/router, `MarketDataService` (quote aggregation, stale detection), alerts, holdings P/L and exchange rates (`Frankfurter`), `SettingsManager` + JSON store, `SparklineSeries`. No UI dependency.
+- `FluxTick.Providers.Common` — shared bases: `WebSocketProviderBase`, `PollingProviderBase`, `BatchQuotePollingProviderBase`, `CryptoExchangeProvider`, symbol search and parsing helpers.
+- `FluxTick.Providers.*` — one project per source (Binance, Okx, Coinbase, Kraken, Bybit, Yahoo, Tencent, Sina, Simulated), each = Provider + ProviderFactory (+ messages/parser).
+- `FluxTick.App` — Avalonia desktop app and composition root (`Services/AppHost.cs`). Adding a data source is a project reference plus one `services.AddMarketDataProvider<TFactory>()` line there; nothing in Core or the UI changes. Full recipe, option semantics and contract tests: `docs/ADDING_A_PROVIDER.md`.
+
+Things that span several files:
+
+- **Provider contract.** `Quote`'s timestamp is the trade time, not receive time; the app uses it for `Stale` status and for placing sparkline points. `Publish` drops quotes whose `AssetId` is not exactly a subscribed id, so providers must publish under the subscribed symbol. Providers must start lazily (no I/O in ctor/factory) and go `Idle` on an empty subscription set.
+- **Provider options** are declared on the descriptor; the settings UI is generated from them. Values equal to their default are not written to `settings.json` (`ProviderOptionCleanup` strips them at startup), so changing a default reaches users who never customised it.
+- **Localization.** `App/Localization/Strings/en.json` and `zh-CN.json` are string tables looked up via `Loc` / the `{T ...}` markup extension; `LocalizationTests` fail if an English key lacks a Chinese one. Provider names/option labels use `Provider_{id}_Name`, `Option_{Key}_Label`, etc., which exist in `zh-CN.json` only.
+- **UI logic is split into pure "Math"/"Rules" classes** (`CardFlowMath`, `PopupSizeMath`, `EdgeDockRules`, `WindowHeightRules`, `TrayClickInterpreter`, ...) next to the views, so layout/behavior can be unit-tested without a window; view models live in `ViewModels/`. Compiled bindings are on by default (`AvaloniaUseCompiledBindingsByDefault`).
+- **Platform-specific pieces** (Windows tray popup, global boss-key hotkey, autostart, installer-based updater) are Windows-only and gated by availability classes (`TrayAvailability`, `TrayPopupAvailability`); the app must still run on Linux/macOS.
+- Settings and logs live in `%APPDATA%\FluxTick` (`~/.config/FluxTick` elsewhere).
+
+## Tests
+
+`tests/` has `FluxTick.Core.Tests`, `FluxTick.Providers.Tests` (a new provider adds a project reference and a contract test there) and `FluxTick.App.Tests`. In the App tests the whole assembly is one xUnit collection (`AssemblyInfo.cs`) because tests switch the shared `Loc` language; do not enable parallelism there. `XamlStyleRulesTests` reads the `.axaml` sources from disk and is skipped if they are not next to the build output.
+
 ## Quote providers
+
+- Design for future data sources. Put functionality shared by sources in a base class (`MarketDataProviderBase`, or the helpers in `FluxTick.Providers.Common`); leave source-specific behavior that does not extract cleanly to each source's own project. Do not add source-specific branches to `FluxTick.Core` or the UI.
 
 - Prefer a push transport (WebSocket or another streaming API) to fetch quotes. Fall back to polling only when the data source offers no streaming option.
 - When a source offers both, use the stream for live prices and polling only for what the stream does not carry (for example history or a snapshot on connect), or as a fallback while the stream is down.
