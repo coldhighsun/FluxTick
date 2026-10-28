@@ -143,7 +143,11 @@ public static class AppHost
         services.AddMarketDataProvider<KrakenProviderFactory>();
         services.AddMarketDataProvider<BybitProviderFactory>();
         services.AddMarketDataProvider<EulerpoolProviderFactory>();
-        services.AddMarketDataProvider<SimulatedProviderFactory>();
+        // The simulated source only exists for the offline demo mode; a normal install does not list it.
+        if (demo)
+        {
+            services.AddMarketDataProvider<SimulatedProviderFactory>();
+        }
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
 

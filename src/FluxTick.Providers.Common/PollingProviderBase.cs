@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluxTick.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -57,6 +58,11 @@ public abstract class PollingProviderBase : LoggingProviderBase
     private readonly BackgroundLoop _loop;
 
     /// <summary>
+    /// The instruments that have published a price, which may be skipped while their market is not trading.
+    /// </summary>
+    private readonly ConcurrentDictionary<AssetId, byte> _priced = new();
+
+    /// <summary>
     /// The number of consecutive cycles without a single success.
     /// </summary>
     private int _failedCycles;
@@ -107,12 +113,20 @@ public abstract class PollingProviderBase : LoggingProviderBase
     protected virtual ValueTask DisposeResourcesAsync() => ValueTask.CompletedTask;
 
     /// <inheritdoc />
+    protected override void OnQuotePublished(Quote quote) => _priced[quote.AssetId] = 0;
+
+    /// <inheritdoc />
     protected override async Task OnSubscriptionsChangedAsync(
         IReadOnlyCollection<Asset> current,
         IReadOnlyCollection<Asset> added,
         IReadOnlyCollection<Asset> removed,
         CancellationToken cancellationToken)
     {
+        foreach (var asset in removed)
+        {
+            _priced.TryRemove(asset.Id, out _);
+        }
+
         if (current.Count == 0)
         {
             await _loop.StopAsync().ConfigureAwait(false);
@@ -133,10 +147,9 @@ public abstract class PollingProviderBase : LoggingProviderBase
         }
     }
 
-    /// <inheritdoc />
     /// <summary>
-    /// Tells whether the market of an instrument is known not to be trading, so that polling it is pointless. The first
-    /// price of a new instrument is fetched regardless. Without a stream nothing else delivers the pre-market and after
+    /// Tells whether the market of an instrument is known not to be trading, so that polling it is pointless. An
+    /// instrument that has not published a price yet is polled regardless. Without a stream nothing else delivers the pre-market and after
     /// hours, so only a shut market or a break is skipped; see <see cref="TradingHoursPolicy"/>.
     /// </summary>
     /// <param name="asset">
@@ -167,14 +180,12 @@ public abstract class PollingProviderBase : LoggingProviderBase
     private async Task RunAsync(CancellationToken cancellationToken)
     {
         var delay = _interval;
-        var first = true;
         while (!cancellationToken.IsCancellationRequested)
         {
-            // A market that is shut has nothing new; the status stays as the last poll left it. The first poll gives every
-            // instrument its first price, shut or not; later ones are given theirs when they are added.
-            var assets = first ? CurrentSubscriptions : [.. CurrentSubscriptions.Where(a => !IsOutsideTrading(a))];
-            first = false;
-            var backOff = assets.Count > 0 && await PollAndReportAsync(assets, cancellationToken).ConfigureAwait(false);
+            // A market that is shut has nothing new; the status stays as the last poll left it. An instrument without a
+            // price yet is polled shut or not, until it has one.
+            var assets = CurrentSubscriptions.Where(a => !_priced.ContainsKey(a.Id) || !IsOutsideTrading(a)).ToArray();
+            var backOff = assets.Length > 0 && await PollAndReportAsync(assets, cancellationToken).ConfigureAwait(false);
             delay = backOff ? Backoff.Double(delay, MaxBackoff) : _interval;
             try
             {
