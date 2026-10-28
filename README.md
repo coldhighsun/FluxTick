@@ -53,9 +53,9 @@ commodities side by side, from the data sources *you* choose.
 | Source | Covers | Mode | Notes |
 | --- | --- | --- | --- |
 | **Binance** | Crypto spot pairs | WebSocket stream (~1 s) | No API key. If `binance.com` is blocked on your network, set the endpoints to `wss://data-stream.binance.vision/ws` and `https://data-api.binance.vision` in Settings. |
-| **Yahoo Finance** | Stocks, ETFs, indices, forex, futures | Polling (default 5 s) | Unofficial API; may be rate limited, delayed or change without notice. No API key. |
+| **Yahoo Finance** | Stocks, ETFs, indices, forex, futures, crypto | WebSocket stream | Unofficial API; may be rate limited, delayed or change without notice. No API key. A new instrument gets its first price from the chart API (a closed market pushes nothing), and the chart API is polled (default 5 s) while the stream is down. |
 | **Tencent Finance** | A-shares, Hong Kong and US stocks, ETFs, indices | Polling (default 5 s) | Unofficial API; may be delayed or change without notice. No API key. Search by name, code or pinyin. Minute history (the sparkline backfill) covers A-shares and Hong Kong only; US stocks fill their sparkline from live ticks. Off by default. |
-| **Sina Finance** | A-share stocks, ETFs, indices (Shanghai, Shenzhen, Beijing) | Polling (default 5 s) | Unofficial API; may be rate limited, delayed or change without notice. No API key. Symbols match Tencent's (`sh600000`), so the same code works in both, but an instrument stays with the source it was added from: add it again to use Sina. Search finds stocks and the main indices by name or code; type an ETF's code directly. No minute history, so the sparkline fills from live ticks. Off by default. |
+| **Sina Finance** | A-share stocks, ETFs, indices (Shanghai, Shenzhen, Beijing), currency pairs, international commodity futures | WebSocket stream | Unofficial API; may be rate limited, delayed or change without notice. No API key. Symbols match Tencent's (`sh600000`), so the same code works in both, but an instrument stays with the source it was added from: add it again to use Sina. Search finds stocks and the main indices by name or code, and a built-in list of common currency pairs and commodity futures (gold, silver, crude oil, copper, grains and more) by name or code; type an ETF's code directly. Other currency pairs (`fx_seurusd`) and futures (`hf_GC`) can be typed in as Sina's codes. No minute history, so the sparkline fills from live ticks. Off by default. |
 | **OKX** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
 | **Coinbase** | Crypto spot pairs | WebSocket stream | Coinbase Exchange. No API key. Off by default. |
 | **Kraken** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
@@ -155,9 +155,9 @@ src/FluxTick.Providers.Okx       OKX WebSocket source
 src/FluxTick.Providers.Coinbase  Coinbase WebSocket source
 src/FluxTick.Providers.Kraken    Kraken WebSocket source
 src/FluxTick.Providers.Bybit     Bybit WebSocket source
-src/FluxTick.Providers.Yahoo     Yahoo Finance polling source
+src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket source
 src/FluxTick.Providers.Tencent   Tencent Finance polling source
-src/FluxTick.Providers.Sina      Sina Finance polling source
+src/FluxTick.Providers.Sina      Sina Finance WebSocket source
 src/FluxTick.Providers.Simulated Deterministic demo source
 src/FluxTick.App                 Avalonia desktop app (FluxTick.exe), composition root
 tests/                           xUnit v3 + AwesomeAssertions

@@ -54,9 +54,9 @@
 | 数据源 | 覆盖范围 | 模式 | 说明 |
 | --- | --- | --- | --- |
 | **Binance** | 加密货币现货交易对 | WebSocket 推送（约 1 秒） | 无需 API Key。如果所在网络无法访问 `binance.com`，请在设置中把端点改为 `wss://data-stream.binance.vision/ws` 和 `https://data-api.binance.vision`。 |
-| **Yahoo Finance** | 股票、ETF、指数、外汇、期货 | 轮询（默认 5 秒） | 非官方 API，可能被限流、延迟，或在没有通知的情况下变更。无需 API Key。 |
+| **Yahoo Finance** | 股票、ETF、指数、外汇、期货、加密货币 | WebSocket 推送 | 非官方 API，可能被限流、延迟，或在没有通知的情况下变更。无需 API Key。新添加的标的先由图表 API 取得第一个价格（休市时不会有推送），推送中断期间改为轮询图表 API（默认 5 秒）。 |
 | **Tencent Finance（腾讯财经）** | A 股、港股、美股、ETF、指数 | 轮询（默认 5 秒） | 非官方 API，可能存在延迟，或在没有通知的情况下变更。无需 API Key。支持按名称、代码或拼音搜索。分时历史（走势图回填）仅覆盖 A 股和港股，美股的走势图只能由实时报价逐步填充。默认关闭。 |
-| **Sina Finance（新浪财经）** | 沪深北 A 股、ETF、指数 | 轮询（默认 5 秒） | 非官方 API，可能被限流、延迟，或在没有通知的情况下变更。无需 API Key。代码格式与腾讯相同（如 `sh600000`），同一代码两边都能用，但自选标的会固定在添加时的数据源，要改用新浪需重新添加。支持按名称或代码搜索股票和主要指数，ETF 需直接输入代码。没有分时历史，走势图由实时报价逐步填充。默认关闭。 |
+| **Sina Finance（新浪财经）** | 沪深北 A 股、ETF、指数、外汇、国际商品期货 | WebSocket 推送 | 非官方 API，可能被限流、延迟，或在没有通知的情况下变更。无需 API Key。代码格式与腾讯相同（如 `sh600000`），同一代码两边都能用，但自选标的会固定在添加时的数据源，要改用新浪需重新添加。支持按名称或代码搜索股票和主要指数，以及内置的常用外汇和商品期货清单（黄金、白银、原油、铜、粮食等）；ETF 需直接输入代码；其他外汇（`fx_seurusd`）和期货（`hf_GC`）可直接输入新浪的代码。没有分时历史，走势图由实时报价逐步填充。默认关闭。 |
 | **OKX** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
 | **Coinbase** | 加密货币现货交易对 | WebSocket 推送 | Coinbase Exchange。无需 API Key。默认关闭。 |
 | **Kraken** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
@@ -152,9 +152,9 @@ src/FluxTick.Providers.Okx       OKX WebSocket 数据源
 src/FluxTick.Providers.Coinbase  Coinbase WebSocket 数据源
 src/FluxTick.Providers.Kraken    Kraken WebSocket 数据源
 src/FluxTick.Providers.Bybit     Bybit WebSocket 数据源
-src/FluxTick.Providers.Yahoo     Yahoo Finance 轮询数据源
+src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket 数据源
 src/FluxTick.Providers.Tencent   腾讯财经轮询数据源
-src/FluxTick.Providers.Sina      新浪财经轮询数据源
+src/FluxTick.Providers.Sina      新浪财经 WebSocket 数据源
 src/FluxTick.Providers.Simulated 确定性的演示数据源
 src/FluxTick.App                 Avalonia 桌面应用（FluxTick.exe），组合根
 tests/                           xUnit v3 + AwesomeAssertions
