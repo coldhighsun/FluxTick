@@ -98,7 +98,8 @@ public class TencentTests
         await provider.SetSubscriptionsAsync([Pufa]);
         await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
 
-        await AdvanceUntilAsync(time, TimeSpan.FromSeconds(5), () => handler.Requests.Count >= 2);
+        // The open is up to half an hour away; a step of a few seconds would need hundreds of loop wake-ups within the patience.
+        await AdvanceUntilAsync(time, TimeSpan.FromMinutes(1), () => handler.Requests.Count >= 2);
     }
 
     /// <summary>
