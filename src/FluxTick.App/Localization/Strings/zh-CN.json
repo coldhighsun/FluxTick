@@ -229,6 +229,7 @@
   "Settings_OpenLogFolder": "打开日志文件夹",
   "Settings_OpenSettingsFolder": "打开设置文件夹",
   "Settings_RestoreDefaults": "恢复默认",
+  "Settings_Website": "官网",
   "Settings_RestoreDefaultsTip": "将此数据源的选项恢复为内置默认值（密钥等机密值会保留）",
   "Settings_StartMinimized": "启动时最小化到托盘",
   "Settings_StartMinimizedHint": "启动时不显示窗口，点击托盘图标即可显示",

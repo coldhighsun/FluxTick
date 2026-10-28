@@ -21,7 +21,7 @@ public sealed class OkxProviderFactory : IMarketDataProviderFactory
         "Real-time crypto spot prices pushed over a public WebSocket. No API key required.",
         [AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
-        Homepage: new Uri("https://www.okx.com/docs-v5/en/"),
+        Homepage: new Uri("https://www.okx.com/"),
         Options: ExchangeEndpoints.Options(
             "wss://ws.okx.com:8443/ws/v5/public",
             "Change this if okx.com is unreachable from your network.",

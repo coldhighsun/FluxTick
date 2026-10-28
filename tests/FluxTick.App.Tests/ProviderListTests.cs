@@ -472,4 +472,66 @@ public class ProviderListTests
 
         url.Text.Should().Be("https://saved");
     }
+
+    /// <summary>
+    /// Verifies the card links to the site of the data source and opens it when asked.
+    /// </summary>
+    [Fact]
+    public void OpenHomepage_DataSourceWithASite_OpensIt()
+    {
+        var opened = new List<string>();
+        var descriptor = new ProviderDescriptor(
+            "site",
+            "Site",
+            "Test",
+            [AssetClass.Equity],
+            ProviderUpdateMode.Streaming,
+            Homepage: new Uri("https://www.example.test/markets/"));
+        var provider = new ProviderSettingsViewModel(descriptor, _ => { }, openWebsite: url =>
+        {
+            opened.Add(url);
+            return true;
+        });
+
+        provider.HasHomepage.Should().BeTrue();
+        provider.HomepageHost.Should().Be("example.test", "the www. in front is not worth showing");
+        provider.OpenHomepageCommand.Execute(null);
+
+        opened.Should().Equal("https://www.example.test/markets/");
+    }
+
+    /// <summary>
+    /// Verifies a data source without a site, or with an address the app does not open, shows no link and opens nothing.
+    /// </summary>
+    /// <param name="homepage">
+    /// The address, or <see langword="null"/>.
+    /// </param>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("file:///C:/Windows/System32/calc.exe")]
+    [InlineData("ftp://example.test/")]
+    [InlineData("http://example.test/")]
+    [InlineData("/docs/markets")]
+    public void OpenHomepage_NoSiteOrUnsafeAddress_ShowsNoLinkAndOpensNothing(string? homepage)
+    {
+        var opened = new List<string>();
+        var descriptor = new ProviderDescriptor(
+            "site",
+            "Site",
+            "Test",
+            [AssetClass.Equity],
+            ProviderUpdateMode.Streaming,
+            Homepage: homepage is null ? null : new Uri(homepage, UriKind.RelativeOrAbsolute));
+        var provider = new ProviderSettingsViewModel(descriptor, _ => { }, openWebsite: url =>
+        {
+            opened.Add(url);
+            return true;
+        });
+
+        provider.HasHomepage.Should().BeFalse();
+        provider.HomepageHost.Should().BeEmpty();
+        provider.OpenHomepageCommand.Execute(null);
+
+        opened.Should().BeEmpty();
+    }
 }

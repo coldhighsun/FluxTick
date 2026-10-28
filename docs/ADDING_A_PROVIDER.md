@@ -154,7 +154,7 @@ Optional descriptor arguments:
 - `EnabledByDefault: false` keeps the source off on first run, so the user turns it on in **Settings → Data sources**
   (Tencent, OKX and Simulated do this). Use it for demo sources and for sources that only suit some users.
 - `RequiresApiKey` (read-only) is true when the source has a `Required` option, such as a key.
-- `Homepage` links to the data source or its terms of use.
+- `Homepage` is the official site of the data source (an https address). The settings page shows it as a link on the card of the source, so the user can open it; leave it out only for a source that makes up its data.
 
 Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The settings page generates the right editor
 and validates input from the definition. `ProviderOptions` always returns a valid value, falling back to the default

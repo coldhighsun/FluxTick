@@ -21,7 +21,7 @@ public sealed class BinanceProviderFactory : IMarketDataProviderFactory
         "Real-time crypto spot prices pushed over a public WebSocket. No API key required.",
         [AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
-        Homepage: new Uri("https://developers.binance.com/docs/binance-spot-api-docs"),
+        Homepage: new Uri("https://www.binance.com/"),
         Options: ExchangeEndpoints.Options(
             "wss://stream.binance.com:9443/ws",
             "Use wss://data-stream.binance.vision/ws if binance.com is unreachable from your network.",

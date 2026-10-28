@@ -42,7 +42,7 @@ public sealed class EulerpoolProviderFactory : IMarketDataProviderFactory
         "Stocks and ETFs (no indices) from the Eulerpool market data API, with the REST API as the first price and as a fallback while the stream is down. Needs an API key; a free key receives delayed one-second prices.",
         [AssetClass.Equity],
         ProviderUpdateMode.Streaming,
-        Homepage: new Uri("https://eulerpool.com/developers"),
+        Homepage: new Uri("https://eulerpool.com/"),
         Options:
         [
             new ProviderOptionDefinition(

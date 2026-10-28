@@ -21,7 +21,7 @@ public sealed class KrakenProviderFactory : IMarketDataProviderFactory
         "Real-time crypto spot prices pushed over a public WebSocket. No API key required.",
         [AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
-        Homepage: new Uri("https://docs.kraken.com/api/"),
+        Homepage: new Uri("https://www.kraken.com/"),
         Options: ExchangeEndpoints.Options(
             "wss://ws.kraken.com/v2",
             "Change this if kraken.com is unreachable from your network.",

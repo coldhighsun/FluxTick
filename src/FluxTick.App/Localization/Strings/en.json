@@ -178,6 +178,7 @@
   "Settings_OpenLogFolder": "Open log folder",
   "Settings_OpenSettingsFolder": "Open settings folder",
   "Settings_RestoreDefaults": "Restore defaults",
+  "Settings_Website": "Website",
   "Settings_RestoreDefaultsTip": "Put this source's options back to their built-in values (secret values such as keys are kept)",
   "Settings_StartMinimized": "Start in the tray",
   "Settings_StartMinimizedHint": "Keep the window hidden at startup; click the tray icon to show it",

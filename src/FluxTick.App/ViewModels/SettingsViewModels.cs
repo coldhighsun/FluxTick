@@ -429,6 +429,11 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     private readonly Action<Action> _later;
 
     /// <summary>
+    /// Opens a web page in the browser; reports whether it could.
+    /// </summary>
+    private readonly Func<string, bool> _openWebsite;
+
+    /// <summary>
     /// Whether an option was edited and not saved, as last announced.
     /// </summary>
     private bool _dirty;
@@ -460,11 +465,19 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// <param name="later">
     /// Runs an action after the input that is being handled, or <see langword="null"/> to run it at once.
     /// </param>
-    public ProviderSettingsViewModel(ProviderDescriptor descriptor, Action<ProviderSettingsViewModel> changed, Action<Action>? later = null)
+    /// <param name="openWebsite">
+    /// Opens a web page in the browser, or <see langword="null"/> to use the default browser.
+    /// </param>
+    public ProviderSettingsViewModel(
+        ProviderDescriptor descriptor,
+        Action<ProviderSettingsViewModel> changed,
+        Action<Action>? later = null,
+        Func<string, bool>? openWebsite = null)
     {
         Descriptor = descriptor;
         _changed = changed;
         _later = later ?? (action => action());
+        _openWebsite = openWebsite ?? (url => ExternalLinks.TryOpenWebsite(url));
         Options = new ObservableCollection<OptionViewModel>(
             descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, OnOptionEdited, descriptor)));
         foreach (var option in Options)
@@ -487,6 +500,38 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// Gets the description.
     /// </summary>
     public string Description => ProviderText.Description(Descriptor);
+
+    /// <summary>
+    /// Gets the address of the site of the data source, or <see langword="null"/> when it has none or the address is not
+    /// one the app opens (see <see cref="ExternalLinks.IsWebUrl"/>).
+    /// </summary>
+    public string? HomepageUrl => Descriptor.Homepage is { IsAbsoluteUri: true } homepage && ExternalLinks.IsWebUrl(homepage.AbsoluteUri)
+        ? homepage.AbsoluteUri
+        : null;
+
+    /// <summary>
+    /// Gets a value indicating whether the card shows a link to the site of the data source.
+    /// </summary>
+    public bool HasHomepage => HomepageUrl is not null;
+
+    /// <summary>
+    /// Gets the host of the site, without a leading <c>www.</c>, which is what the link shows.
+    /// </summary>
+    public string HomepageHost => HasHomepage && Descriptor.Homepage is { } homepage
+        ? (homepage.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? homepage.Host[4..] : homepage.Host)
+        : string.Empty;
+
+    /// <summary>
+    /// Opens the site of the data source in the browser.
+    /// </summary>
+    [RelayCommand]
+    private void OpenHomepage()
+    {
+        if (HomepageUrl is { } url)
+        {
+            _openWebsite(url);
+        }
+    }
 
     /// <summary>
     /// Gets a summary line of the mode and supported asset classes.

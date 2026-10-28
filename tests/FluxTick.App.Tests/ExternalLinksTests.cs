@@ -63,4 +63,45 @@ public sealed class ExternalLinksTests
 
         opened.Should().BeFalse();
     }
+
+    /// <summary>
+    /// Verifies a web page is accepted for https only, and never with credentials in the address.
+    /// </summary>
+    /// <param name="url">
+    /// The address.
+    /// </param>
+    /// <param name="expected">
+    /// Whether it may be opened.
+    /// </param>
+    [Theory]
+    [InlineData("https://finance.yahoo.com/", true)]
+    [InlineData("http://gu.qq.com/", false)]
+    [InlineData("https://user:password@example.test/", false)]
+    [InlineData("file:///C:/Windows/System32/calc.exe", false)]
+    [InlineData("javascript:alert(1)", false)]
+    [InlineData("ms-msdt:/id", false)]
+    [InlineData(@"C:\Windows\System32\calc.exe", false)]
+    [InlineData("finance.yahoo.com", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsWebUrl_Address_AcceptsOnlyHttps(string? url, bool expected) =>
+        ExternalLinks.IsWebUrl(url).Should().Be(expected);
+
+    /// <summary>
+    /// Verifies a web page is handed to the shell and a refused address never is.
+    /// </summary>
+    [Fact]
+    public void TryOpenWebsite_AcceptedAndRefusedAddress_StartsOnlyTheAccepted()
+    {
+        var started = new List<ProcessStartInfo>();
+
+        var opened = ExternalLinks.TryOpenWebsite("https://finance.yahoo.com/", started.Add);
+        var refused = ExternalLinks.TryOpenWebsite("file:///C:/Windows/System32/calc.exe", started.Add);
+
+        opened.Should().BeTrue();
+        refused.Should().BeFalse();
+        started.Should().ContainSingle();
+        started[0].FileName.Should().Be("https://finance.yahoo.com/");
+        started[0].UseShellExecute.Should().BeTrue();
+    }
 }

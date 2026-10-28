@@ -21,7 +21,7 @@ public sealed class BybitProviderFactory : IMarketDataProviderFactory
         "Real-time crypto spot prices pushed over a public WebSocket. No API key required.",
         [AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
-        Homepage: new Uri("https://bybit-exchange.github.io/docs/v5/intro"),
+        Homepage: new Uri("https://www.bybit.com/"),
         Options: ExchangeEndpoints.Options(
             "wss://stream.bybit.com/v5/public/spot",
             "Change this if bybit.com is unreachable from your network. Bybit does not serve some regions.",
