@@ -595,6 +595,237 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies the trading state is part of the snapshot, and that a snapshot is raised when the market opens even though
+    /// nothing else changed.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_WhenTheMarketOpens_RaisesASnapshotWithTheNewState()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 13, 29, 0, TimeSpan.Zero)); // 09:29 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        var raised = new List<AssetSnapshot>();
+        service.SnapshotChanged += (_, snapshot) =>
+        {
+            lock (raised)
+            {
+                raised.Add(snapshot);
+            }
+        };
+        await service.ApplyAsync(SettingsFor(apple));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.PreMarket);
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()));
+        time.Advance(TimeSpan.FromSeconds(30));
+
+        await WaitUntilAsync(() =>
+        {
+            lock (raised)
+            {
+                return raised.Any(s => s.MarketState == MarketState.Open);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Verifies the market state a source reports wins over the regular hours: Yahoo says the market is shut on a
+    /// weekday, a public holiday that the hours cannot know.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_WhenTheSourceReportsTheMarketShut_UsesItOverTheHours()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 26, 15, 0, 0, TimeSpan.Zero)); // Thanksgiving, 10:00 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromDays(1)) { Market = MarketState.Closed });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a report of a shut market is believed while the price only repeats, and not while it advances, which the
+    /// source may report late on the day after a holiday.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_WhenTheSourceReportsShutAndThePriceAdvances_UsesTheHoursUntilItStops()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var old = time.GetUtcNow() - TimeSpan.FromHours(1);
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, old) { Market = MarketState.Closed });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.1m, null, old + TimeSpan.FromMinutes(1)) { Market = MarketState.Closed });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Open);
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.1m, null, old + TimeSpan.FromMinutes(1)) { Market = MarketState.Closed });
+        time.Advance(TimeSpan.FromSeconds(40));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.1m, null, old + TimeSpan.FromMinutes(1)) { Market = MarketState.Closed });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a quote that is not newer than the one before does not count as the price advancing, so a source that
+    /// repeats an old price, or sends an older one, does not silence its report of a shut market.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task MarketState_WhenTheSourceRepeatsOrSendsAnOlderTime_StillBelievesTheShutReport(int minutesLater)
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var old = time.GetUtcNow() - TimeSpan.FromHours(1);
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, old) { Market = MarketState.Closed });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.2m, null, old + TimeSpan.FromMinutes(minutesLater)) { Market = MarketState.Closed });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 1.2m);
+
+        service.GetSnapshots().Single().MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies the hours' sign of a holiday (a session under way and no trade today) beats a report of an open market,
+    /// but only once the longer grace period for a source that lags behind the market is over.
+    /// </summary>
+    [Theory]
+    [InlineData(30, MarketState.Open)]
+    [InlineData(50, MarketState.Closed)]
+    public async Task MarketState_WhenTheSourceReportsOpenButNothingTradedToday_IsClosedAfterTheGrace(int minutesAfterTheOpen, MarketState expected)
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var open = new DateTimeOffset(2026, 11, 26, 14, 30, 0, TimeSpan.Zero); // Thanksgiving, 09:30 in New York
+        var time = new FakeTimeProvider(open + TimeSpan.FromMinutes(minutesAfterTheOpen));
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, open - TimeSpan.FromHours(17)) { Market = MarketState.Open });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == expected);
+    }
+
+    /// <summary>
+    /// Verifies a time that is only the time the quote was received does not count as the price advancing, as it moves on
+    /// with every quote.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_WhenTheQuoteTimesAreOnlyEstimated_StillBelievesTheShutReport()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()) { Market = MarketState.Closed, TimeIsEstimated = true });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.2m, null, time.GetUtcNow()) { Market = MarketState.Closed, TimeIsEstimated = true });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 1.2m);
+
+        service.GetSnapshots().Single().MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies the pre-market and after-hours states a source reports reach the snapshot.
+    /// </summary>
+    [Theory]
+    [InlineData(MarketState.PreMarket)]
+    [InlineData(MarketState.AfterHours)]
+    public async Task MarketState_WhenTheSourceReportsPreMarketOrAfterHours_UsesIt(MarketState reported)
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()) { Market = reported });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == reported);
+    }
+
+    /// <summary>
+    /// Verifies the midday break, which Yahoo reports as open, is taken from the hours.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_WhenTheSourceReportsOpenInTheMiddayBreak_IsBreak()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var share = new Asset("yahoo", "600000.SS", "SPDB", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 4, 0, 0, TimeSpan.Zero)); // 12:00 in Shanghai
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(share));
+
+        yahoo.Created.Single().Emit(new Quote(share.Id, 1m, null, time.GetUtcNow()) { Market = MarketState.Open });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Break);
+    }
+
+    /// <summary>
+    /// Verifies the time between two polls of a source is not taken for silence: the state of the market stays until the
+    /// longer of the usual time and the poll interval plus half of it has passed, which grows evenly with the interval.
+    /// </summary>
+    [Theory]
+    [InlineData("00:00:05", "00:00:55", "00:01:05")] // the usual minute
+    [InlineData("00:00:50", "00:01:15", "00:01:25")] // 50 seconds and half a minute: 80 seconds
+    [InlineData("00:01:01", "00:01:30", "00:01:32")] // 61 seconds and half a minute: 91 seconds, no jump at the minute
+    [InlineData("00:02:00", "00:02:20", "00:02:40")] // 150 seconds
+    public async Task MarketState_BetweenTwoPollsOfASlowSource_Stays(string interval, string stays, string gone)
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity], pollInterval: interval);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromHours(20)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+
+        time.Advance(TimeSpan.Parse(stays));
+
+        service.GetSnapshots().Single().MarketState.Should().Be(MarketState.Closed);
+
+        time.Advance(TimeSpan.Parse(gone) - TimeSpan.Parse(stays));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Unknown);
+    }
+
+    /// <summary>
+    /// Verifies a source that went quiet says nothing about the market, so a feed that died is not taken for a shut market.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_WhenNothingIsReceivedAnymore_IsUnknown()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromHours(20)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Unknown);
+    }
+
+    /// <summary>
     /// Verifies a source that keeps reconnecting turns its instruments stale once the last quote is older than the
     /// threshold, with the reason of the reconnecting as the detail, instead of staying "reconnecting" for good.
     /// </summary>

@@ -312,6 +312,12 @@ public sealed class AppearanceSettings
     public bool RollPriceOnUpdate { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the rows tell whether the market of an instrument is trading (pre-market,
+    /// after hours, break, closed) and say "closed" instead of "stale" when the prices stopped because the market is shut.
+    /// </summary>
+    public bool ShowMarketStatus { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the window hides at the screen edge it is dragged to and slides out when
     /// the pointer comes near.
     /// </summary>
