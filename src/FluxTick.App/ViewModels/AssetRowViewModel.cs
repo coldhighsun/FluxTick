@@ -245,6 +245,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAddToTray))]
     [NotifyPropertyChangedFor(nameof(CanRemoveFromTray))]
+    [NotifyPropertyChangedFor(nameof(ShowTrayMarker))]
     public partial bool InTray { get; set; }
 
     /// <summary>
@@ -257,6 +258,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// Gets a value indicating whether the menu offers to take the instrument off the tray list.
     /// </summary>
     public bool CanRemoveFromTray => TrayPopupAvailability.IsSupported && InTray;
+
+    /// <summary>
+    /// Gets a value indicating whether the row and the card mark the instrument as shown in the tray list. It is kept apart
+    /// from <see cref="CanRemoveFromTray"/>, which only says what the menu offers.
+    /// </summary>
+    public bool ShowTrayMarker => TrayPopupAvailability.IsSupported && InTray;
 
     /// <summary>
     /// Gets or sets the price of the enabled alert that fires when the price rises to it, or <see langword="null"/> for

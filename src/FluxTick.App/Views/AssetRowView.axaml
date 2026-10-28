@@ -16,7 +16,7 @@
       <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="1">
         <!-- The name is the title and the symbol the subtitle. The name gives way (with an ellipsis) so that the class chip
              and the bell always stay in view. -->
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
           <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center" Margin="6,0,0,0">
             <TextBlock Text="{Binding ClassLabel}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
@@ -28,6 +28,10 @@
           <Path Grid.Column="3" Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
                 StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center" Margin="6,0,0,0"
                 IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
+          <!-- The instrument is on the list the tray popup shows. -->
+          <Path Grid.Column="4" Data="M1.5 1.5h7v7h-7zM3 4h4M3 6h3" Stroke="{DynamicResource MutedBrush}"
+                StrokeThickness="1" StrokeJoin="Round" Width="10" Height="10" Stretch="None" VerticalAlignment="Center" Margin="6,0,0,0"
+                IsVisible="{Binding ShowTrayMarker}" ToolTip.Tip="{loc:T Row_TrayTip}" />
         </Grid>
         <TextBlock Text="{Binding Symbol}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
       </StackPanel>
