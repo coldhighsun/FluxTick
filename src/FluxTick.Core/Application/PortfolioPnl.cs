@@ -47,9 +47,8 @@ public readonly record struct PortfolioPnl(decimal CostTotal, decimal MarketValu
         var value = 0m;
         var counted = 0;
         var skipped = 0;
-        for (var i = 0; i < holdings.Count; i++)
+        foreach (var (pnl, currency) in holdings)
         {
-            var (pnl, currency) = holdings[i];
             if (convert(pnl.CostTotal, currency, baseCurrency) is not { } c || convert(pnl.MarketValue, currency, baseCurrency) is not { } v)
             {
                 skipped++;

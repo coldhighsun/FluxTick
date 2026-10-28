@@ -16,7 +16,7 @@ public sealed class FrankfurterRateProvider(HttpClient http) : IExchangeRateProv
     /// <summary>
     /// The address of the latest rates against the pivot currency.
     /// </summary>
-    public static readonly Uri LatestUri = new($"https://api.frankfurter.dev/v1/latest?base={CurrencyCodes.Pivot}");
+    private static readonly Uri LatestUri = new($"https://api.frankfurter.dev/v1/latest?base={CurrencyCodes.Pivot}");
 
     /// <inheritdoc/>
     public void Dispose() => http.Dispose();
@@ -33,12 +33,12 @@ public sealed class FrankfurterRateProvider(HttpClient http) : IExchangeRateProv
     /// <summary>
     /// The shape of the service's answer.
     /// </summary>
-    private sealed class LatestResponse
+    private sealed record LatestResponse
     {
         /// <summary>
         /// Gets or sets the rates keyed by currency code.
         /// </summary>
         [JsonPropertyName("rates")]
-        public Dictionary<string, decimal>? Rates { get; set; }
+        public Dictionary<string, decimal>? Rates { get; init; }
     }
 }

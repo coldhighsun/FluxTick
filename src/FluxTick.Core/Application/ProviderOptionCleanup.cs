@@ -5,7 +5,7 @@ namespace FluxTick.Core.Application;
 /// <summary>
 /// Removes stored provider option values that equal the declared default.
 /// Only options that differ from the default are kept in the settings file, so a default declared by a newer version
-/// reaches every user who never customised the option. Earlier versions wrote every option explicitly; this brings
+/// reaches every user who never customized the option. Earlier versions wrote every option explicitly; this brings
 /// such files in line with the current rule.
 /// </summary>
 public static class ProviderOptionCleanup

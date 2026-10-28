@@ -54,7 +54,7 @@ public enum AssetHealth
 public sealed class SparklineTimeline
 {
     /// <summary>
-    /// How long two neighbouring prices may be apart, at least, before the stretch between them counts as without prices.
+    /// How long two neighboring prices may be apart, at least, before the stretch between them counts as without prices.
     /// </summary>
     private static readonly TimeSpan MinGap = TimeSpan.FromMinutes(2);
 
@@ -105,7 +105,7 @@ public sealed class SparklineTimeline
     public TimeSpan Window { get; }
 
     /// <summary>
-    /// Gets how far two neighbouring prices, or the last price and <see cref="AsOf"/>, have to be apart for the stretch
+    /// Gets how far two neighboring prices, or the last price and <see cref="AsOf"/>, have to be apart for the stretch
     /// between them to count as without prices: more than <see cref="MinGap"/>, and more than a few times the usual
     /// distance between the latest prices. It is <see cref="TimeSpan.MaxValue"/> while there are not two prices to take
     /// a distance from, so that nothing counts as a gap yet.

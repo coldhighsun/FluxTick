@@ -243,7 +243,7 @@ public static class MarketCalendar
 
         // The letter A, B or C after the dot is the share class of a US company, such as BRK.B. Other single letters name
         // exchanges, such as L for London.
-        return suffix.Length == 1 && suffix[0] is 'A' or 'B' or 'C' or 'a' or 'b' or 'c'
+        return suffix is ['A' or 'B' or 'C' or 'a' or 'b' or 'c']
             ? Us
             : suffix.ToUpperInvariant() switch
             {

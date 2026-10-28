@@ -56,7 +56,7 @@ public sealed class AlertRule
 
     /// <summary>
     /// Gets or sets a value indicating whether the rule fires again after the condition stopped and came true once more.
-    /// Otherwise the rule disables itself after it fired.
+    /// Otherwise, the rule disables itself after it fired.
     /// </summary>
     public bool Repeat { get; set; }
 

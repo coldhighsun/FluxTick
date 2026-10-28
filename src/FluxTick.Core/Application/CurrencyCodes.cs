@@ -25,7 +25,7 @@ public static class CurrencyCodes
     /// The code to normalize.
     /// </param>
     /// <returns>
-    /// The upper case code, or <see langword="null"/> when the text is not a three letter code.
+    /// The upper case code, or <see langword="null"/> when the text is not a three-letter code.
     /// </returns>
     public static string? Normalize(string? code)
     {
