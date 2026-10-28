@@ -591,13 +591,11 @@ public class YahooTests
     }
 
     /// <summary>
-    /// Verifies nothing is polled while the market is not open, whether the stream is down: on a weekend, in the
-    /// pre-market, in after hours; the first price of a new instrument is still fetched.
+    /// Verifies nothing is polled while the market is shut, even though the stream is down: on a weekend; the first price
+    /// of a new instrument is still fetched.
     /// </summary>
     [Theory]
     [InlineData(2023, 11, 18, 15, 0)] // Saturday
-    [InlineData(2023, 11, 15, 13, 0)] // Wednesday 08:00 in New York, the pre-market
-    [InlineData(2023, 11, 14, 22, 0)] // Tuesday 17:00 in New York, after hours
     public async Task Fallback_MarketNotOpen_DoesNotPoll(int year, int month, int day, int hour, int minute)
     {
         var handler = new StubHandler(_ => Json(ChartJson));
@@ -655,6 +653,27 @@ public class YahooTests
     }
 
     /// <summary>
+    /// Verifies the pre-market and after hours are polled while the stream is down, since only the stream would deliver them.
+    /// </summary>
+    /// <param name="hour">
+    /// The hour in UTC on 2023-11-15.
+    /// </param>
+    [Theory]
+    [InlineData(13)] // 08:00 in New York, the pre-market
+    [InlineData(22)] // 17:00 in New York, after hours
+    public async Task Fallback_PreMarketOrAfterHoursWithStreamDown_StillPolls(int hour)
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 15, hour, 0, 0, TimeSpan.Zero));
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await AdvanceUntilRequestsAsync(handler, time, 2);
+    }
+
+    /// <summary>
     /// Verifies polling starts again once the market opens.
     /// </summary>
     [Fact]
@@ -663,13 +682,13 @@ public class YahooTests
         var handler = new StubHandler(_ => Json(ChartJson));
         var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
-        time.SetUtcNow(new DateTimeOffset(2023, 11, 15, 14, 0, 0, TimeSpan.Zero)); // 09:00 in New York, the pre-market
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 18, 15, 0, 0, TimeSpan.Zero)); // Saturday
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => handler.Requests.Count == 1);
         await StepAsync(time, TimeSpan.FromMinutes(1));
         handler.Requests.Should().HaveCount(1);
 
-        time.SetUtcNow(new DateTimeOffset(2023, 11, 15, 14, 31, 0, TimeSpan.Zero)); // 09:31, the market is open
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 20, 14, 31, 0, TimeSpan.Zero)); // Monday 09:31, the market is open
 
         await AdvanceUntilRequestsAsync(handler, time, 2);
     }

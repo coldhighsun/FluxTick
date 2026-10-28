@@ -49,6 +49,8 @@ public class SourceExchangeTests
     [InlineData("BRK.B", "Us")]
     [InlineData("BF.B", "Us")]
     [InlineData("BRK-B", "Us")]
+    [InlineData("BTC-USD", null)]
+    [InlineData("ETH-USD", null)]
     [InlineData("VFIAX", null)]
     [InlineData("VOD.L", null)]
     [InlineData("GC=F", null)]

@@ -126,7 +126,10 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
         {
             // A symbol with an equals sign is a forex pair or a future; a five letter one that ends in X is a mutual fund,
             // which is priced once a day.
-            return symbol.Contains('=') || (symbol.Length == 5 && symbol.EndsWith('X')) ? null : ExchangeHours.Us;
+            // A hyphen followed by more than one letter is a crypto pair (BTC-USD); one letter is a share class (BRK-B).
+            var hyphen = symbol.LastIndexOf('-');
+            var cryptoPair = hyphen >= 0 && symbol.Length - hyphen - 1 > 1;
+            return cryptoPair || symbol.Contains('=') || (symbol.Length == 5 && symbol.EndsWith('X')) ? null : ExchangeHours.Us;
         }
 
         var suffix = symbol[(dot + 1)..];

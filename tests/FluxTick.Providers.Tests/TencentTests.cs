@@ -60,6 +60,33 @@ public class TencentTests
     }
 
     /// <summary>
+    /// Verifies an instrument whose first poll failed is polled again although its market is shut, until it has a price.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MarketShutAndFirstPollFailed_KeepsPollingUntilPriced()
+    {
+        var calls = 0;
+        var handler = new StubHttpHandler(_ => Interlocked.Increment(ref calls) == 1
+            ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            : StubHttpHandler.Gbk(QuoteLines));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 2, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var provider = CreateProvider(handler, time);
+
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count >= 1);
+
+        await AdvanceUntilAsync(time, TimeSpan.FromSeconds(5), () => handler.Requests.Count >= 2);
+        var afterPrice = handler.Requests.Count;
+        for (var i = 0; i < 6; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromMilliseconds(30));
+        }
+
+        handler.Requests.Count.Should().BeLessThanOrEqualTo(afterPrice + 1, "once priced, a shut market is not polled");
+    }
+
+    /// <summary>
     /// Verifies polling goes on once the market opens.
     /// </summary>
     [Fact]

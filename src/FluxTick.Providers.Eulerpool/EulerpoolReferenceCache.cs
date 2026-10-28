@@ -16,9 +16,15 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     private const int MaxConcurrency = 4;
 
     /// <summary>
-    /// How long to wait before asking again for a ticker whose previous close could not be fetched.
+    /// How long to wait before asking again for a ticker whose previous close could not be fetched. Every fetch counts
+    /// against the request limit of the key, so a failure is not retried quickly.
     /// </summary>
-    private static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// How long to wait before asking again for a ticker that has no earlier candle, which a new request will not change soon.
+    /// </summary>
+    private static readonly TimeSpan RetryAfterEmpty = TimeSpan.FromHours(6);
 
     /// <summary>
     /// Fetches the previous close of a ticker, or <see langword="null"/> when there is none.
@@ -49,6 +55,11 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     /// Ends the fetches that are under way when the cache is disposed.
     /// </summary>
     private readonly CancellationTokenSource _shutdown = new();
+
+    /// <summary>
+    /// Whether the cache was disposed; a late call then starts no fetch.
+    /// </summary>
+    private volatile bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EulerpoolReferenceCache"/> class.
@@ -82,7 +93,7 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     public decimal? Get(string symbol)
     {
         _entries.TryGetValue(symbol, out var entry);
-        if (NeedsRefresh(symbol, entry))
+        if (!_disposed && NeedsRefresh(symbol, entry))
         {
             _ = Refresh(symbol);
         }
@@ -104,6 +115,11 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     /// </returns>
     public Task EnsureAsync(IEnumerable<string> symbols, CancellationToken cancellationToken)
     {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+
         var missing = symbols
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(s => NeedsRefresh(s, _entries.TryGetValue(s, out var entry) ? entry : null))
@@ -117,6 +133,7 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _disposed = true;
         _shutdown.Cancel();
         _shutdown.Dispose();
     }
@@ -190,12 +207,17 @@ internal sealed class EulerpoolReferenceCache : IDisposable
         _entries.TryGetValue(symbol, out var previous);
         try
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             var value = await _fetch(symbol, _shutdown.Token).ConfigureAwait(false);
             _entries[symbol] = value is null
-                ? new Entry(previous?.Value, previous?.Day ?? default, _time.GetUtcNow() + RetryAfter)
+                ? new Entry(previous?.Value, previous?.Day ?? default, _time.GetUtcNow() + RetryAfterEmpty)
                 : new Entry(value, DayOf(symbol), null);
         }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        catch (Exception) when (_disposed)
         {
             // The provider is shutting down.
         }

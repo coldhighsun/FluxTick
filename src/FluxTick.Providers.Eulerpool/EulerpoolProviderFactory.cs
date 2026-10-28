@@ -24,7 +24,6 @@ public sealed class EulerpoolProviderFactory : IMarketDataProviderFactory
     /// </summary>
     public const string PollIntervalKey = ProviderOptionDefinition.PollIntervalKey;
 
-
     /// <summary>
     /// The key of the WebSocket endpoint option.
     /// </summary>

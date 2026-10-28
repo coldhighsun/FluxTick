@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using FluxTick.App.Services;
 
 namespace FluxTick.App.Tests;
@@ -5,6 +6,7 @@ namespace FluxTick.App.Tests;
 /// <summary>
 /// Tests for the protector that uses the Windows Data Protection API; they run on Windows only.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class DpapiSecretProtectorTests
 {
     /// <summary>

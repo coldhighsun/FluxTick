@@ -19,7 +19,6 @@ public sealed class SinaProviderFactory : IMarketDataProviderFactory
     /// </summary>
     public const string PollIntervalKey = ProviderOptionDefinition.PollIntervalKey;
 
-
     /// <summary>
     /// The option key of the stream endpoint.
     /// </summary>

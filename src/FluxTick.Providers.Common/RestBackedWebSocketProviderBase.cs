@@ -160,8 +160,8 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
 
     /// <summary>
     /// Tells whether the market of an instrument is known not to be trading, so that polling REST for it is pointless: it
-    /// is shut, at midday break, or in the pre-market or after hours, when the stream delivers what trades. The hours
-    /// come from <see cref="IMarketHoursProvider"/>; an instrument whose market is not known is polled as usual. The
+    /// is shut or at midday break, or, while the stream is connected, in the pre-market or after hours, when the stream
+    /// delivers what trades. While the stream is down, the pre-market and after hours are polled. The hours come from <see cref="IMarketHoursProvider"/>; an instrument whose market is not known is polled as usual. The
     /// first price of a new instrument is fetched regardless.
     /// </summary>
     /// <param name="asset">
@@ -171,7 +171,7 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// <see langword="true"/> when the market is known not to be open; see <see cref="TradingHoursPolicy"/>.
     /// </returns>
     protected virtual bool IsOutsideTrading(Asset asset) =>
-        TradingHoursPolicy.IsOutsideTrading(this as IMarketHoursProvider, asset, TimeProvider.GetUtcNow(), hasStream: true);
+        TradingHoursPolicy.IsOutsideTrading(this as IMarketHoursProvider, asset, TimeProvider.GetUtcNow(), hasStream: StreamConnected);
 
     /// <summary>
     /// Gets how many rounds in a row of polling a connected but quiet stream must find newer prices, with the stream
@@ -222,7 +222,8 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
         if (Volatile.Read(ref _outsideTrading))
         {
             // Nothing is polled while no market is open, so the lack of a recent REST success says nothing; the source is as
-            // available as it was, and the prices come back when a market opens or the stream does.
+            // available as it was, and the prices come back when a market opens or the stream does. The problem the stream
+            // reported, such as a rejected key, stays in the message.
             return new ProviderStatus(
                 ProviderConnectionState.Connected,
                 reason is null ? "Live stream unavailable; no market is open" : $"Live stream unavailable; no market is open ({reason})");
