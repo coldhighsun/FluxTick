@@ -1,3 +1,4 @@
+using FluxTick.App.Localization;
 using Avalonia.Input;
 using FluxTick.App.Views;
 
@@ -14,6 +15,56 @@ public sealed class HotkeyBoxTests
         var box = new HotkeyBox { Value = "Alt+2" };
 
         box.DisplayText.Should().Be("Alt+2");
+    }
+
+    /// <summary>
+    /// Verifies that a box without a hotkey shows its empty text rather than nothing, and the value once there is one.
+    /// </summary>
+    [Fact]
+    public void EmptyValue_ShowsTheEmptyText()
+    {
+        var box = new HotkeyBox { EmptyText = "None" };
+
+        box.DisplayText.Should().Be("None");
+
+        box.Value = "Alt+2";
+        box.DisplayText.Should().Be("Alt+2");
+
+        box.Value = string.Empty;
+        box.DisplayText.Should().Be("None");
+    }
+
+    /// <summary>
+    /// Verifies that a focused box without a hotkey asks for keys, that held modifiers win over the hint, and that the
+    /// empty text comes back when the focus leaves.
+    /// </summary>
+    [Fact]
+    public void EmptyValue_WhileRecording_ShowsTheRecordingText()
+    {
+        var box = new HotkeyBox { EmptyText = "None", RecordingText = "Press keys" };
+
+        box.FocusChanged(hasFocus: true);
+        box.DisplayText.Should().Be("Press keys");
+
+        Press(box, Key.LeftCtrl, KeyModifiers.Control);
+        box.DisplayText.Should().Be("Ctrl+");
+
+        Release(box, Key.LeftCtrl, KeyModifiers.Control);
+        box.DisplayText.Should().Be("Press keys");
+
+        box.FocusChanged(hasFocus: false);
+        box.DisplayText.Should().Be("None");
+    }
+
+    /// <summary>
+    /// Verifies that the boss key hint texts exist in both languages.
+    /// </summary>
+    [Theory]
+    [InlineData("Settings_BossKeyNone")]
+    [InlineData("Settings_BossKeyPress")]
+    public void BossKeyHints_AreTranslated(string key)
+    {
+        Loc.Instance[key].Should().NotBe(key);
     }
 
     /// <summary>

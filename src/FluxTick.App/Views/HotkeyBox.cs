@@ -24,6 +24,18 @@ public sealed class HotkeyBox : Border
         AvaloniaProperty.Register<HotkeyBox, string>(nameof(Value), string.Empty, defaultBindingMode: BindingMode.TwoWay);
 
     /// <summary>
+    /// Identifies <see cref="EmptyText"/>.
+    /// </summary>
+    public static readonly StyledProperty<string> EmptyTextProperty =
+        AvaloniaProperty.Register<HotkeyBox, string>(nameof(EmptyText), string.Empty);
+
+    /// <summary>
+    /// Identifies <see cref="RecordingText"/>.
+    /// </summary>
+    public static readonly StyledProperty<string> RecordingTextProperty =
+        AvaloniaProperty.Register<HotkeyBox, string>(nameof(RecordingText), string.Empty);
+
+    /// <summary>
     /// Identifies <see cref="IsCapturing"/>.
     /// </summary>
     public static readonly StyledProperty<bool> IsCapturingProperty =
@@ -57,7 +69,12 @@ public sealed class HotkeyBox : Border
     /// <summary>
     /// Initializes static members of the <see cref="HotkeyBox"/> class.
     /// </summary>
-    static HotkeyBox() => ValueProperty.Changed.AddClassHandler<HotkeyBox>((box, _) => box.ShowText());
+    static HotkeyBox()
+    {
+        ValueProperty.Changed.AddClassHandler<HotkeyBox>((box, _) => box.ShowText());
+        EmptyTextProperty.Changed.AddClassHandler<HotkeyBox>((box, _) => box.ShowText());
+        RecordingTextProperty.Changed.AddClassHandler<HotkeyBox>((box, _) => box.ShowText());
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HotkeyBox"/> class.
@@ -70,7 +87,6 @@ public sealed class HotkeyBox : Border
         CornerRadius = new CornerRadius(4);
         MinHeight = 32;
         Child = _text;
-        _text.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("TextControlForeground"));
         GotFocus += (_, _) => FocusChanged(hasFocus: true);
         LostFocus += (_, _) => FocusChanged(hasFocus: false);
         ApplyLook();
@@ -84,6 +100,25 @@ public sealed class HotkeyBox : Border
     {
         get => GetValue(ValueProperty) ?? string.Empty;
         set => SetValue(ValueProperty, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Gets or sets the text shown while there is no hotkey and no keys are held, for example "None".
+    /// </summary>
+    public string EmptyText
+    {
+        get => GetValue(EmptyTextProperty) ?? string.Empty;
+        set => SetValue(EmptyTextProperty, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Gets or sets the text shown while the box records keys and there is no hotkey and no keys are held, for example
+    /// "Press keys". When empty, <see cref="EmptyText"/> is shown instead.
+    /// </summary>
+    public string RecordingText
+    {
+        get => GetValue(RecordingTextProperty) ?? string.Empty;
+        set => SetValue(RecordingTextProperty, value ?? string.Empty);
     }
 
     /// <summary>
@@ -216,6 +251,7 @@ public sealed class HotkeyBox : Border
         {
             IsCapturing = true;
             ApplyLook();
+            ShowText();
         }
         else
         {
@@ -240,6 +276,7 @@ public sealed class HotkeyBox : Border
         {
             IsCapturing = true;
             ApplyLook();
+            ShowText();
         }
     }
 
@@ -256,9 +293,15 @@ public sealed class HotkeyBox : Border
     }
 
     /// <summary>
-    /// Shows the keys that are held, or else the hotkey.
+    /// Shows the keys that are held, or else the hotkey, or else a hint in the muted color of a text box placeholder.
     /// </summary>
-    private void ShowText() => _text.Text = _preview ?? Value;
+    private void ShowText()
+    {
+        var hint = _hasFocus && RecordingText.Length > 0 ? RecordingText : EmptyText;
+        var isHint = _preview is null && Value.Length == 0;
+        _text.Text = _preview ?? (isHint ? hint : Value);
+        _text.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable(isHint ? "TextControlPlaceholderForeground" : "TextControlForeground"));
+    }
 
     /// <summary>
     /// Takes the look of a text box from the theme, with the border of a box that has the focus.
