@@ -33,6 +33,7 @@ public class OkxMessagesTests
         quote.Price.Should().Be(81519.3m);
         quote.Reference.Should().Be(84593.9m);
         quote.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1792683280970));
+        quote.TimeIsEstimated.Should().BeFalse();
     }
 
     /// <summary>
@@ -62,6 +63,7 @@ public class OkxMessagesTests
         quote.Price.Should().Be(3000m);
         quote.Reference.Should().BeNull();
         quote.Timestamp.Should().Be(Fallback);
+        quote.TimeIsEstimated.Should().BeTrue();
     }
 
     /// <summary>

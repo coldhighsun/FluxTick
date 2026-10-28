@@ -31,6 +31,7 @@ public class KrakenMessagesTests
         quote.Price.Should().Be(81418.9m);
         quote.Reference.Should().Be(84559.1m);
         quote.Timestamp.Should().Be(new DateTimeOffset(2026, 10, 22, 15, 34, 43, TimeSpan.Zero).AddTicks(2297050));
+        quote.TimeIsEstimated.Should().BeFalse();
     }
 
     /// <summary>
@@ -46,6 +47,7 @@ public class KrakenMessagesTests
         quote.Price.Should().Be(0.0791286m);
         quote.Reference.Should().BeNull();
         quote.Timestamp.Should().Be(Fallback);
+        quote.TimeIsEstimated.Should().BeTrue();
     }
 
     /// <summary>
