@@ -61,4 +61,24 @@ internal static class WindowHeightRules
             chrome + CardLayout.ListPadding.Top + CardLayout.ListPadding.Bottom + (2 * CardLayout.CardMargin) + CardHeight(size) + (grouped ? SectionHeaderSpace : 0)),
         _ => ListMinHeight,
     };
+
+    /// <summary>
+    /// Gets the smallest height of the window in the list layout: the height at which every row is shown without a
+    /// scroll bar.
+    /// </summary>
+    /// <param name="content">
+    /// The height of all rows together.
+    /// </param>
+    /// <param name="chrome">
+    /// The height of the window around the list: the header, the footer and the frame.
+    /// </param>
+    /// <param name="limit">
+    /// The most the window can be high, which is the height of the screen it is on.
+    /// </param>
+    /// <returns>
+    /// The height that shows all rows, but at least <see cref="ListMinHeight"/>, and not more than <paramref name="limit"/>
+    /// once there are so many rows that they need a scroll bar anyway.
+    /// </returns>
+    public static double ListContentMinHeight(double content, double chrome, double limit) =>
+        Math.Max(ListMinHeight, Math.Min(chrome + content, limit));
 }

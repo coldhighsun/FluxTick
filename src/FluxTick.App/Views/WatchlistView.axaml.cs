@@ -44,11 +44,37 @@ public sealed partial class WatchlistView : UserControl
     private MainViewModel? _observed;
 
     /// <summary>
+    /// Occurs when the height of all rows of the list layout together changes.
+    /// </summary>
+    public event EventHandler? ListContentHeightChanged;
+
+    /// <summary>
+    /// Gets the height all rows of the list layout take together, whatever part of it is in view, or <see langword="null"/>
+    /// while the rows are not laid out (the list is hidden, or a change of layout has not reached it yet). The height is
+    /// reported through <see cref="ListContentHeightChanged"/> once it is known.
+    /// </summary>
+    public double? ListContentHeight =>
+        Scroller.IsEffectivelyVisible && RowsHost.IsMeasureValid && RowsHost.IsArrangeValid ? RowsHost.Bounds.Height : null;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="WatchlistView"/> class.
     /// </summary>
     public WatchlistView()
     {
         InitializeComponent();
+
+        // The rows are aligned to the top, so that their box is as high as they are and not as high as the viewport; the
+        // extent of the scroll viewer is never less than its viewport and could not tell that the rows got shorter.
+        RowsHost.SizeChanged += (_, _) => ListContentHeightChanged?.Invoke(this, EventArgs.Empty);
+        Scroller.PropertyChanged += (_, e) =>
+        {
+            // The rows have the same height as before when the list comes back unchanged, and then no size change tells so:
+            // report once the layout pass that shows the list is done.
+            if (e.Property == IsVisibleProperty && Scroller.IsVisible)
+            {
+                Dispatcher.UIThread.Post(() => ListContentHeightChanged?.Invoke(this, EventArgs.Empty), DispatcherPriority.Loaded);
+            }
+        };
         DataContextChanged += (_, _) =>
         {
             _observed?.PropertyChanged -= OnMainPropertyChanged;

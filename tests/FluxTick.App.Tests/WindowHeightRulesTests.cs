@@ -20,6 +20,33 @@ public class WindowHeightRulesTests
     }
 
     /// <summary>
+    /// Verifies the list layout needs the height of all rows and what is around them.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_FitsAllRows()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 400, chrome: 80, limit: 1000).Should().Be(480);
+    }
+
+    /// <summary>
+    /// Verifies a few rows never take the window below the smallest height of the list layout.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_NeverBelowListMinimum()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 40, chrome: 80, limit: 1000).Should().Be(WindowHeightRules.ListMinHeight);
+    }
+
+    /// <summary>
+    /// Verifies many rows stop at the height of the screen, where they scroll.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_CappedByScreen()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 5000, chrome: 80, limit: 900).Should().Be(900);
+    }
+
+    /// <summary>
     /// Verifies the card layout needs the card, its margin, the padding of the list and what is around the list.
     /// </summary>
     [Fact]

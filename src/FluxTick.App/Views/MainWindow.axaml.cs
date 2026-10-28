@@ -121,6 +121,7 @@ public sealed partial class MainWindow : Window
         };
         Resized += OnResized;
         Watchlist.SizeChanged += (_, _) => ApplyHeightRule();
+        Watchlist.ListContentHeightChanged += (_, _) => ApplyHeightRule();
         if (GroupButton.Flyout is MenuFlyout groupFlyout)
         {
             groupFlyout.Opening += (_, _) =>
@@ -177,7 +178,7 @@ public sealed partial class MainWindow : Window
         }
 
         // After the normal size and position are set: they are what the window returns to when it leaves full screen.
-        if (saved.FullScreen)
+        if (saved.FullScreen && layout == WatchlistLayout.Cards)
         {
             WindowState = WindowState.FullScreen;
         }
@@ -624,6 +625,18 @@ public sealed partial class MainWindow : Window
         var chrome = ClientSize.Height - Watchlist.Bounds.Height;
         var layout = viewModel.IsCardLayout ? WatchlistLayout.Cards : WatchlistLayout.List;
         var minHeight = WindowHeightRules.MinHeight(layout, viewModel.CardSize, viewModel.Grouping != CardGrouping.None, chrome);
+        if (layout == WatchlistLayout.List)
+        {
+            // Rows that are not laid out yet say nothing; the list reports its height when it has one.
+            if (Watchlist.ListContentHeight is not { } content)
+            {
+                return;
+            }
+
+            var limit = Screens.ScreenFromWindow(this)?.WorkingArea.Height / RenderScaling ?? double.PositiveInfinity;
+            minHeight = WindowHeightRules.ListContentMinHeight(content, chrome, limit);
+        }
+
         if (Math.Abs(MinHeight - minHeight) > 0.5)
         {
             MinHeight = minHeight;
@@ -1002,7 +1015,11 @@ public sealed partial class MainWindow : Window
     {
         if (WindowState == WindowState.Normal)
         {
-            WindowState = WindowState.FullScreen;
+            // The list is a narrow strip and has no full screen form; only the cards fill the screen.
+            if (CurrentLayout().Layout == WatchlistLayout.Cards)
+            {
+                WindowState = WindowState.FullScreen;
+            }
         }
         else
         {
