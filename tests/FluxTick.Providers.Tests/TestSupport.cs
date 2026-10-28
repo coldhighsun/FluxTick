@@ -153,6 +153,16 @@ internal sealed class LoopbackServer : IAsyncDisposable
     private readonly ConcurrentQueue<string> _received = new();
 
     /// <summary>
+    /// The path and query of every accepted connection, in arrival order.
+    /// </summary>
+    private readonly ConcurrentQueue<string> _requestUrls = new();
+
+    /// <summary>
+    /// The Origin header of every accepted connection, in arrival order; empty when the client sent none.
+    /// </summary>
+    private readonly ConcurrentQueue<string> _origins = new();
+
+    /// <summary>
     /// The most recently accepted connection.
     /// </summary>
     private WebSocket? _current;
@@ -210,6 +220,28 @@ internal sealed class LoopbackServer : IAsyncDisposable
     /// The running server.
     /// </returns>
     public static LoopbackServer Start() => new(TestWait.FreePort());
+
+    /// <summary>
+    /// Starts a server on a given port, for a test that needs to know the address before the server exists or after it
+    /// is gone.
+    /// </summary>
+    /// <param name="port">
+    /// The port to listen on.
+    /// </param>
+    /// <returns>
+    /// The running server.
+    /// </returns>
+    public static LoopbackServer Start(int port) => new(port);
+
+    /// <summary>
+    /// Gets the path and query of every accepted connection, in arrival order.
+    /// </summary>
+    public IReadOnlyList<string> RequestUrls => [.. _requestUrls];
+
+    /// <summary>
+    /// Gets the Origin header of every accepted connection, in arrival order; empty when the client sent none.
+    /// </summary>
+    public IReadOnlyList<string> Origins => [.. _origins];
 
     /// <summary>
     /// Counts how often a message was received.
@@ -336,6 +368,8 @@ internal sealed class LoopbackServer : IAsyncDisposable
                 continue;
             }
 
+            _requestUrls.Enqueue(context.Request.RawUrl ?? string.Empty);
+            _origins.Enqueue(context.Request.Headers["Origin"] ?? string.Empty);
             var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
             _current = socket;
             Interlocked.Increment(ref _connections);

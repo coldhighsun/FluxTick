@@ -461,6 +461,121 @@ public class WebSocketProviderBaseTests
 
 
     /// <summary>
+    /// Verifies the hook for socket options runs before connecting, so a source can send the headers its server insists on.
+    /// </summary>
+    [Fact]
+    public async Task ConfigureSocket_SetsHeadersOfTheHandshake()
+    {
+        await using var server = LoopbackServer.Start();
+        await using var provider = new UriProvider(server.Uri, TimeProvider.System);
+
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+
+        await TestWait.EventuallyAsync(() => server.Origins.Count == 1);
+        server.Origins[0].Should().Be("https://example.test");
+    }
+
+    /// <summary>
+    /// Verifies a source that names its instruments in the address connects to an address built from them and sends no
+    /// subscribe message.
+    /// </summary>
+    [Fact]
+    public async Task SubscribesByUri_Connect_UsesTheAddressOfTheInstrumentsAndSendsNothing()
+    {
+        await using var server = LoopbackServer.Start();
+        await using var provider = new UriProvider(server.Uri, TimeProvider.System);
+
+        await provider.SetSubscriptionsAsync([Coin("B"), Coin("A")]);
+        await TestWait.EventuallyAsync(() => server.RequestUrls.Count == 1);
+        await server.SendAsync("price:A:1.5");
+
+        server.RequestUrls[0].Should().Be("/?list=A,B");
+        (await ReadQuoteAsync(provider)).Price.Should().Be(1.5m);
+        provider.Status.State.Should().Be(ProviderConnectionState.Connected);
+    }
+
+    /// <summary>
+    /// Verifies a change of the instruments connects again with the new address, once for several changes in a row, and
+    /// without the status or the wait of a failure.
+    /// </summary>
+    [Fact]
+    public async Task SubscribesByUri_ChangesInARow_ReconnectOnceWithTheNewAddress()
+    {
+        await using var server = LoopbackServer.Start();
+        var time = new FakeTimeProvider();
+        await using var provider = new UriProvider(server.Uri, time);
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+        await TestWait.EventuallyAsync(() => server.ConnectionCount == 1);
+        var states = new List<ProviderConnectionState>();
+        provider.StatusChanged += (_, status) => states.Add(status.State);
+
+        await provider.SetSubscriptionsAsync([Coin("A"), Coin("B")]);
+        await provider.SetSubscriptionsAsync([Coin("A"), Coin("B"), Coin("C")]);
+        await AdvanceUntilConnectionsAsync(server, time, 2);
+
+        server.RequestUrls.Should().Equal("/?list=A", "/?list=A,B,C");
+        states.Should().NotContain(ProviderConnectionState.Reconnecting);
+        await Task.Delay(TimeSpan.FromMilliseconds(100));
+        server.ConnectionCount.Should().Be(2);
+    }
+
+    /// <summary>
+    /// Verifies a request to connect again that the stopped loop never acted on does not leak into the next loop: when
+    /// the server is then unreachable, the failure is reported and backed off like any other. The request and the stop
+    /// race, so this guards the fix rather than proving the bug every time.
+    /// </summary>
+    [Fact]
+    public async Task SubscribesByUri_StoppedWithPendingRequest_NextFailureIsReported()
+    {
+        var port = TestWait.FreePort();
+        var server = LoopbackServer.Start(port);
+        var time = new FakeTimeProvider();
+        await using var provider = new UriProvider(new Uri($"ws://127.0.0.1:{port}/"), time);
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+        await TestWait.EventuallyAsync(() => server.ConnectionCount == 1);
+        await provider.SetSubscriptionsAsync([Coin("A"), Coin("B")]);
+        await provider.SetSubscriptionsAsync([]);
+        await server.DisposeAsync();
+
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+
+        await TestWait.EventuallyAsync(() => provider.Status is { State: ProviderConnectionState.Reconnecting, Message: { Length: > 0 } message } && message != "Connecting");
+    }
+
+    /// <summary>
+    /// Verifies removing every instrument still goes idle when the address names them.
+    /// </summary>
+    [Fact]
+    public async Task SubscribesByUri_EmptySet_GoesIdle()
+    {
+        await using var server = LoopbackServer.Start();
+        await using var provider = new UriProvider(server.Uri, TimeProvider.System);
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+        await TestWait.EventuallyAsync(() => server.ConnectionCount == 1);
+
+        await provider.SetSubscriptionsAsync([]);
+
+        provider.Status.State.Should().Be(ProviderConnectionState.Idle);
+    }
+
+    /// <summary>
+    /// Verifies a dropped connection of such a source is opened again with the address of the current instruments.
+    /// </summary>
+    [Fact]
+    public async Task SubscribesByUri_DroppedConnection_ReconnectsWithTheSameAddress()
+    {
+        await using var server = LoopbackServer.Start();
+        await using var provider = new UriProvider(server.Uri, TimeProvider.System);
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+        await TestWait.EventuallyAsync(() => server.ConnectionCount == 1);
+
+        server.DropCurrentConnection();
+
+        await TestWait.EventuallyAsync(() => server.RequestUrls.Count == 2);
+        server.RequestUrls.Should().Equal("/?list=A", "/?list=A");
+    }
+
+    /// <summary>
     /// Advances the fake clock in one-second steps until the server has accepted a number of connections, and returns
     /// how much fake time that took. Stepping does not depend on the loop having registered its retry timer already, and
     /// the elapsed time shows how long the loop chose to wait.
@@ -692,6 +807,72 @@ public class WebSocketProviderBaseTests
 #pragma warning disable CS0162 // The yield makes this an iterator, so the exception surfaces when it is enumerated.
             yield break;
 #pragma warning restore CS0162
+        }
+    }
+
+    /// <summary>
+    /// A provider whose address names its instruments (<c>/?list=A,B</c>) and whose handshake carries an Origin header.
+    /// It understands the message <c>price:SYMBOL:VALUE</c>.
+    /// </summary>
+    private sealed class UriProvider : WebSocketProviderBase
+    {
+        /// <summary>
+        /// The endpoint the addresses are built on.
+        /// </summary>
+        private readonly Uri _root;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UriProvider"/> class.
+        /// </summary>
+        /// <param name="uri">
+        /// The endpoint.
+        /// </param>
+        /// <param name="time">
+        /// The clock.
+        /// </param>
+        public UriProvider(Uri uri, TimeProvider time)
+            : base(
+                new ProviderDescriptor("test", "Test", "A test source.", [AssetClass.Crypto], ProviderUpdateMode.Streaming),
+                uri,
+                time,
+                NullLogger.Instance)
+        {
+            _root = uri;
+        }
+
+        /// <inheritdoc />
+        protected override bool SubscribesByUri => true;
+
+        /// <inheritdoc />
+        protected override TimeSpan InitialBackoff => TimeSpan.FromMilliseconds(30);
+
+        /// <inheritdoc />
+        protected override void ConfigureSocket(System.Net.WebSockets.ClientWebSocketOptions options) =>
+            options.SetRequestHeader("Origin", "https://example.test");
+
+        /// <inheritdoc />
+        protected override Uri BuildConnectionUri(IReadOnlyCollection<Asset> assets) =>
+            new(_root, $"?list={string.Join(',', assets.Select(a => a.Symbol).Order())}");
+
+        /// <inheritdoc />
+        protected override IEnumerable<string> BuildSubscribeMessages(IReadOnlyCollection<Asset> assets) =>
+            throw new InvalidOperationException("The instruments are in the address.");
+
+        /// <inheritdoc />
+        protected override IEnumerable<string> BuildUnsubscribeMessages(IReadOnlyCollection<Asset> assets) =>
+            throw new InvalidOperationException("The instruments are in the address.");
+
+        /// <inheritdoc />
+        protected override void HandleMessage(string text)
+        {
+            if (text.Split(':') is ["price", var symbol, var value])
+            {
+                Publish(new Quote(
+                    new AssetId("test", symbol),
+                    decimal.Parse(value, CultureInfo.InvariantCulture),
+                    null,
+                    TimeProvider.GetUtcNow()));
+            }
         }
     }
 }
