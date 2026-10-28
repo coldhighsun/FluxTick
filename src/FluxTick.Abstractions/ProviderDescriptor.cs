@@ -34,9 +34,6 @@ public enum ProviderUpdateMode
 /// <param name="UpdateMode">
 /// How the provider obtains data.
 /// </param>
-/// <param name="RequiresApiKey">
-/// Whether the provider needs credentials to work.
-/// </param>
 /// <param name="Homepage">
 /// A link to the data source or its terms of use.
 /// </param>
@@ -52,7 +49,6 @@ public sealed record ProviderDescriptor(
     string Description,
     IReadOnlyList<AssetClass> SupportedAssetClasses,
     ProviderUpdateMode UpdateMode,
-    bool RequiresApiKey = false,
     Uri? Homepage = null,
     IReadOnlyList<ProviderOptionDefinition>? Options = null,
     bool EnabledByDefault = true)
@@ -61,6 +57,12 @@ public sealed record ProviderDescriptor(
     /// Gets the option definitions, never <see langword="null"/>.
     /// </summary>
     public IReadOnlyList<ProviderOptionDefinition> OptionDefinitions => Options ?? [];
+
+    /// <summary>
+    /// Gets a value indicating whether the provider needs values from the user, such as an API key, to work: it has a
+    /// required option.
+    /// </summary>
+    public bool RequiresApiKey => OptionDefinitions.Any(o => o.Required);
 
     /// <summary>
     /// Determines whether the provider can serve an asset class.

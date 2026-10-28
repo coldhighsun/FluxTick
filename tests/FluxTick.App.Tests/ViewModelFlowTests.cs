@@ -502,10 +502,10 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies switching a data source on opens its options so required settings are not hidden.
+    /// Verifies switching a data source on leaves its card as it was.
     /// </summary>
     [Fact]
-    public async Task EnablingProvider_ExpandsItsOptions()
+    public async Task EnablingProvider_KeepsItsCardCollapsed()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
@@ -515,14 +515,15 @@ public class ViewModelFlowTests
 
         provider.Enabled = true;
 
-        provider.IsExpanded.Should().BeTrue();
+        provider.IsExpanded.Should().BeFalse();
     }
 
     /// <summary>
-    /// Verifies an invalid option opens the section and flags it, and a valid value clears the flag.
+    /// Verifies an invalid option is not flagged while the user is still typing, saving opens the section and flags it,
+    /// and a valid value clears the flag.
     /// </summary>
     [Fact]
-    public async Task InvalidOption_ExpandsProviderAndFlagsError()
+    public async Task InvalidOption_FlagsAndExpandsOnSave_AndValidValueClears()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
@@ -533,6 +534,9 @@ public class ViewModelFlowTests
 
         interval.Text = "not a number";
 
+        provider.HasOptionError.Should().BeFalse("the value is still being typed");
+        provider.SaveCommand.Execute(null);
+
         provider.HasOptionError.Should().BeTrue();
         provider.IsExpanded.Should().BeTrue();
         interval.Text = "10";
@@ -540,10 +544,11 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies restoring defaults resets every option of a source, saves the defaults and keeps the enabled state.
+    /// Verifies restoring defaults resets every option of a source as a draft that is saved with the save button, and keeps
+    /// the enabled state.
     /// </summary>
     [Fact]
-    public async Task RestoreDefaults_ResetsOptionsPersistsAndKeepsEnabledState()
+    public async Task RestoreDefaults_ResetsOptionsAsDraftAndSavingPersistsAndKeepsEnabledState()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
@@ -553,6 +558,7 @@ public class ViewModelFlowTests
         var url = provider.Options.Single(o => o.Definition.Key == "Url");
         interval.Text = "10";
         url.Text = "https://b";
+        provider.SaveCommand.Execute(null);
         await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Interval") == "00:00:10");
         var enabled = provider.Enabled;
 
@@ -561,6 +567,10 @@ public class ViewModelFlowTests
         interval.Text.Should().Be("5");
         url.Text.Should().Be("https://a");
         provider.Enabled.Should().Be(enabled);
+        provider.IsDirty.Should().BeTrue();
+        h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Interval").Should().Be("00:00:10", "the draft is not saved yet");
+
+        provider.SaveCommand.Execute(null);
 
         // Defaults are not written out, so they keep following the default of the installed version.
         await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.Count == 0);
@@ -578,6 +588,8 @@ public class ViewModelFlowTests
         provider.CollectOptions().Should().BeEmpty();
 
         provider.Options.Single(o => o.Definition.Key == "Interval").Text = "10";
+        provider.CollectOptions().Should().BeEmpty("an edit is a draft until it is saved");
+        provider.SaveCommand.Execute(null);
 
         provider.CollectOptions().Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("Interval", "00:00:10"));
     }
@@ -599,16 +611,18 @@ public class ViewModelFlowTests
         provider.CollectOptions().Should().BeEmpty();
 
         provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
+        provider.SaveCommand.Execute(null);
 
         await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[Harness.Crypto].Options.Count == 1);
         h.Store.Stored!.Providers[Harness.Crypto].Options.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("Url", "https://b"));
     }
 
     /// <summary>
-    /// Verifies an invalid input in one option does not drop the saved value of that option when another option is saved.
+    /// Verifies a save with an invalid input is refused as a whole and opens the card, and that reverting brings back the
+    /// saved values.
     /// </summary>
     [Fact]
-    public async Task InvalidInput_DoesNotRevertTheSavedValueWhenAnotherOptionIsSaved()
+    public async Task Save_WithInvalidInput_IsRefusedAndRevertRestoresTheSavedValues()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
@@ -616,21 +630,31 @@ public class ViewModelFlowTests
         var id = provider.Descriptor.Id;
         var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
         interval.Text = "10";
+        provider.SaveCommand.Execute(null);
         await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Interval") == "00:00:10");
+        provider.IsExpanded = false;
 
         interval.Text = "not a number";
         provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
+        provider.SaveCommand.Execute(null);
 
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Url") == "https://b");
-        h.Store.Stored!.Providers[id].Options["Interval"].Should().Be("00:00:10");
+        provider.IsExpanded.Should().BeTrue();
         interval.Error.Should().NotBeEmpty();
+        h.Store.Stored!.Providers[id].Options["Interval"].Should().Be("00:00:10");
+        h.Store.Stored.Providers[id].Options.ContainsKey("Url").Should().BeFalse();
+
+        provider.RevertCommand.Execute(null);
+
+        interval.Text.Should().Be("10");
+        interval.Error.Should().BeEmpty();
+        provider.IsDirty.Should().BeFalse();
     }
 
     /// <summary>
-    /// Verifies restoring only saves when it changes something, so clicking it on an unchanged source does no work.
+    /// Verifies restoring defaults never saves by itself, and the edits are saved once with the save button.
     /// </summary>
     [Fact]
-    public void RestoreDefaults_SavesOnlyWhenSomethingChanged()
+    public void RestoreDefaults_NeverSavesByItself_SavingDoesOnce()
     {
         var descriptor = new ProviderDescriptor(
             "plain",
@@ -643,11 +667,16 @@ public class ViewModelFlowTests
         var provider = new ProviderSettingsViewModel(descriptor, _ => saves++);
 
         provider.RestoreDefaultsCommand.Execute(null);
-        saves.Should().Be(0, "everything is already at the default");
+        provider.IsDirty.Should().BeFalse("everything is already at the default");
 
         provider.Options.Single().Text = "https://b";
-        saves.Should().Be(1, "committing the edit saves");
+        saves.Should().Be(0, "an edit is a draft");
+        provider.SaveCommand.Execute(null);
+        saves.Should().Be(1);
         provider.RestoreDefaultsCommand.Execute(null);
+        saves.Should().Be(1, "restoring only changes the draft");
+
+        provider.SaveCommand.Execute(null);
 
         saves.Should().Be(2);
         provider.Options.Single().Text.Should().Be("https://a");
@@ -674,7 +703,10 @@ public class ViewModelFlowTests
         provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
         provider.Options.Single(o => o.Definition.Key == "Key").Text = "my-key";
 
+        provider.SaveCommand.Execute(null);
+
         provider.RestoreDefaultsCommand.Execute(null);
+        provider.SaveCommand.Execute(null);
 
         provider.Options.Single(o => o.Definition.Key == "Url").Text.Should().Be("https://a");
         provider.Options.Single(o => o.Definition.Key == "Key").Text.Should().Be("my-key");
@@ -692,6 +724,7 @@ public class ViewModelFlowTests
         var provider = h.SettingsPage.Providers.First();
         var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
         interval.Text = "not a number";
+        provider.SaveCommand.Execute(null);
         provider.HasOptionError.Should().BeTrue();
 
         provider.RestoreDefaultsCommand.Execute(null);
@@ -720,7 +753,7 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies an invalid option is only flagged while its data source is enabled, because a disabled source hides its options.
+    /// Verifies an invalid option is only flagged while its data source is enabled, because a source that is off does not run.
     /// </summary>
     [Fact]
     public async Task InvalidOption_OfDisabledProvider_IsNotFlagged()
@@ -729,6 +762,7 @@ public class ViewModelFlowTests
         await h.Main.InitializeAsync();
         var provider = h.SettingsPage.Providers.First();
         provider.Options.Single(o => o.Definition.Key == "Interval").Text = "not a number";
+        provider.SaveCommand.Execute(null);
         provider.HasOptionError.Should().BeTrue();
 
         provider.Enabled = false;
@@ -822,7 +856,7 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies the provider list is limited to enabled sources that support the class, best first.
+    /// Verifies the provider list is limited to enabled sources that support the class, in order of name.
     /// </summary>
     [Fact]
     public async Task BeginAdd_ListsOnlySourcesSupportingTheClass()
@@ -837,7 +871,7 @@ public class ViewModelFlowTests
         h.AddAsset.SelectedProvider!.Id.Should().Be(Harness.Crypto);
 
         h.AddAsset.SelectedAssetClass = AssetClass.Equity;
-        h.AddAsset.AvailableProviders.Select(p => p.Id).Should().Equal(Harness.Stocks, Harness.Plain);
+        h.AddAsset.AvailableProviders.Select(p => p.Id).Should().Equal(Harness.Plain, Harness.Stocks);
     }
 
     /// <summary>
@@ -1023,10 +1057,10 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies a valid option edit is persisted and an invalid one is not.
+    /// Verifies a valid option edit is persisted when it is saved and an invalid one is not.
     /// </summary>
     [Fact]
-    public async Task ProviderOption_EditPersistsOnlyValidValues()
+    public async Task ProviderOption_SavePersistsOnlyValidValues()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
@@ -1034,10 +1068,13 @@ public class ViewModelFlowTests
         var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
 
         interval.Text = "30";
+        h.Store.Stored!.Providers.ContainsKey(Harness.Crypto).Should().BeFalse("the edit is not saved yet");
+        provider.SaveCommand.Execute(null);
         await Harness.EventuallyAsync(() => h.Store.Stored!.Providers.ContainsKey(Harness.Crypto));
         h.Store.Stored!.Providers[Harness.Crypto].Options["Interval"].Should().Be("00:00:30");
 
         interval.Text = "1";
+        provider.SaveCommand.Execute(null);
         interval.Error.Should().NotBeEmpty();
         h.Store.Stored.Providers[Harness.Crypto].Options["Interval"].Should().Be("00:00:30");
     }
@@ -1094,5 +1131,48 @@ public class ViewModelFlowTests
 
         await Harness.EventuallyAsync(() => chip.IsGood);
         chip.IsBad.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the router offers only sources that can run, so a source without its key is not offered.
+    /// </summary>
+    [Fact]
+    public async Task AddAsset_SourceWithoutRequiredValue_IsNotOffered()
+    {
+        var settings = new AppSettings();
+        settings.Providers["keyed"] = new ProviderSettings { Enabled = true };
+        await using var h = new Harness(settings, extraFactory: new FakeFactory("keyed", [AssetClass.Commodity], requiresKey: true));
+        await h.Main.InitializeAsync();
+        h.AddAsset.BeginAdd();
+
+        h.AddAsset.SelectedAssetClass = AssetClass.Commodity;
+
+        h.AddAsset.AvailableProviders.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies the provider list of the add instrument window keeps its order and selection when the language changes.
+    /// </summary>
+    [Fact]
+    public async Task AddAsset_LanguageChanged_KeepsProviderOrderAndSelection()
+    {
+        await using var h = new Harness(new AppSettings());
+        await h.Main.InitializeAsync();
+        h.AddAsset.BeginAdd();
+        h.AddAsset.SelectedAssetClass = AssetClass.Equity;
+        var before = h.AddAsset.AvailableProviders.Select(p => p.Id).ToList();
+        h.AddAsset.SelectedProvider = h.AddAsset.AvailableProviders[^1];
+        var selected = h.AddAsset.SelectedProvider;
+
+        Loc.Instance.Select(Loc.SimplifiedChinese);
+        try
+        {
+            h.AddAsset.AvailableProviders.Select(p => p.Id).Should().Equal(before);
+            h.AddAsset.SelectedProvider.Should().BeSameAs(selected);
+        }
+        finally
+        {
+            Loc.Instance.Select(Loc.English);
+        }
     }
 }

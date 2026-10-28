@@ -72,6 +72,11 @@ public enum OptionValidationError
     /// The value is above the upper bound given in <see cref="OptionValidation.Limit"/>.
     /// </summary>
     AboveMaximum,
+
+    /// <summary>
+    /// A required value is missing.
+    /// </summary>
+    Required,
 }
 
 /// <summary>
@@ -118,6 +123,11 @@ public readonly record struct OptionValidation(OptionValidationError Error, stri
 /// <param name="Max">
 /// Optional inclusive upper bound, interpreted like <paramref name="Min"/>.
 /// </param>
+/// <param name="Required">
+/// Whether a <see cref="ProviderOptionType.String"/> or <see cref="ProviderOptionType.Secret"/> option must not be
+/// blank, such as an API key. The settings page opens the options of a source that is switched on while one is missing,
+/// and the source is not enabled in the settings file until every required value is given.
+/// </param>
 public sealed record ProviderOptionDefinition(
     string Key,
     string Label,
@@ -126,7 +136,8 @@ public sealed record ProviderOptionDefinition(
     string? Description = null,
     IReadOnlyList<string>? Choices = null,
     double? Min = null,
-    double? Max = null)
+    double? Max = null,
+    bool Required = false)
 {
     /// <summary>
     /// The key of the option in which the polled sources keep how often they fetch prices.
@@ -145,6 +156,19 @@ public sealed record ProviderOptionDefinition(
     public string? Validate(string? value) => Check(value)?.Message;
 
     /// <summary>
+    /// Determines whether a value is missing for an option that requires one: the option is required, holds text, and the
+    /// value is blank. This is the one place that says what a missing required value is.
+    /// </summary>
+    /// <param name="value">
+    /// The value to check.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a required value is missing.
+    /// </returns>
+    public bool IsMissing(string? value) =>
+        Required && Type is ProviderOptionType.String or ProviderOptionType.Secret && string.IsNullOrWhiteSpace(value);
+
+    /// <summary>
     /// Validates a stored text value against this definition and says what is wrong with it.
     /// </summary>
     /// <param name="value">
@@ -156,6 +180,11 @@ public sealed record ProviderOptionDefinition(
     public OptionValidation? Check(string? value)
     {
         value ??= string.Empty;
+        if (IsMissing(value))
+        {
+            return new(OptionValidationError.Required, "A value is required.");
+        }
+
         switch (Type)
         {
             case ProviderOptionType.Int:

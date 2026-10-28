@@ -53,6 +53,61 @@ public static class NumberText
     }
 
     /// <summary>
+    /// Determines whether a text may be shown by a box for a whole number: digits, and a leading minus sign when negative
+    /// numbers are allowed. The empty text counts.
+    /// </summary>
+    /// <param name="text">
+    /// The text the box would show.
+    /// </param>
+    /// <param name="allowNegative">
+    /// Whether a leading minus sign may be typed.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the box may show the text.
+    /// </returns>
+    public static bool IsPartialWholeNumber(string text, bool allowNegative)
+    {
+        var digits = allowNegative && text.StartsWith('-') ? text.AsSpan(1) : text.AsSpan();
+        foreach (var c in digits)
+        {
+            if (!char.IsAsciiDigit(c))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Determines whether a text may be shown by a box for a number of seconds as the settings store it: digits and at most
+    /// one point, whatever the culture, because the settings are read with the point. The empty text counts.
+    /// </summary>
+    /// <param name="text">
+    /// The text the box would show.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the box may show the text.
+    /// </returns>
+    public static bool IsPartialSeconds(string text)
+    {
+        var points = 0;
+        foreach (var c in text)
+        {
+            if (c == '.')
+            {
+                points++;
+            }
+            else if (!char.IsAsciiDigit(c))
+            {
+                return false;
+            }
+        }
+
+        return points <= 1;
+    }
+
+    /// <summary>
     /// Parses a typed number. In this order: a number as the current culture writes it (<c>12,5</c> is 12.5 where the
     /// comma is the decimal separator); thousands as the current culture groups them, in threes (<c>1.000</c> is a
     /// thousand where the point is the group separator, and <c>1,5</c> is no number where the comma is); a number with

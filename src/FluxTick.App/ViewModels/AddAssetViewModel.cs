@@ -128,7 +128,30 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
     {
         Title = _titleText();
         Message = _messageText?.Invoke() ?? string.Empty;
+
+        // The names changed with the language, and with them the order; the selection stays where it is.
+        var sorted = OrderByName(AvailableProviders);
+        for (var index = 0; index < sorted.Count; index++)
+        {
+            var current = AvailableProviders.IndexOf(sorted[index]);
+            if (current != index)
+            {
+                AvailableProviders.Move(current, index);
+            }
+        }
     }
+
+    /// <summary>
+    /// Puts data sources in ascending order of the name the user sees.
+    /// </summary>
+    /// <param name="providers">
+    /// The data sources.
+    /// </param>
+    /// <returns>
+    /// The data sources in order.
+    /// </returns>
+    private static List<ProviderDescriptor> OrderByName(IEnumerable<ProviderDescriptor> providers) =>
+        [.. providers.OrderBy(ProviderText.Name, StringComparer.CurrentCultureIgnoreCase)];
 
     /// <summary>
     /// Raised when the page is finished (added, replaced or cancelled) and its window should be closed.
@@ -442,7 +465,7 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
     /// </param>
     private void LoadProviders(AssetClass assetClass, string? avoidProviderId)
     {
-        var providers = _router.GetProviders(assetClass, _settings.Current);
+        var providers = OrderByName(_router.GetProviders(assetClass, _settings.Current));
         AvailableProviders.Clear();
         foreach (var provider in providers)
         {

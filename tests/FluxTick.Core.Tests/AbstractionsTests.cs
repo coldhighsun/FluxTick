@@ -275,4 +275,74 @@ public class AbstractionsTests
         new ProviderOptions(factory.Descriptor),
         Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
         TimeProvider.System);
+
+    /// <summary>
+    /// Verifies a required text option rejects a blank value and an optional one accepts it.
+    /// </summary>
+    /// <param name="type">
+    /// The option type.
+    /// </param>
+    /// <param name="required">
+    /// Whether the option is required.
+    /// </param>
+    /// <param name="value">
+    /// The value to check.
+    /// </param>
+    /// <param name="valid">
+    /// Whether the value is valid.
+    /// </param>
+    [Theory]
+    [InlineData(ProviderOptionType.Secret, true, "", false)]
+    [InlineData(ProviderOptionType.String, true, "  ", false)]
+    [InlineData(ProviderOptionType.Secret, true, "key", true)]
+    [InlineData(ProviderOptionType.Secret, false, "", true)]
+    public void Check_RequiredTextOption_RejectsBlank(ProviderOptionType type, bool required, string value, bool valid)
+    {
+        var definition = new ProviderOptionDefinition("ApiKey", "API key", type, string.Empty, Required: required);
+
+        var result = definition.Check(value);
+
+        (result is null).Should().Be(valid);
+        if (!valid)
+        {
+            result!.Value.Error.Should().Be(OptionValidationError.Required);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a descriptor requires credentials exactly when one of its options is required.
+    /// </summary>
+    [Fact]
+    public void RequiresApiKey_FollowsRequiredOptions()
+    {
+        var plain = new ProviderDescriptor("a", "A", "d", [AssetClass.Crypto], ProviderUpdateMode.Streaming);
+        var keyed = plain with { Options = [new ProviderOptionDefinition("ApiKey", "Key", ProviderOptionType.Secret, string.Empty, Required: true)] };
+
+        plain.RequiresApiKey.Should().BeFalse();
+        keyed.RequiresApiKey.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a required text option counts as missing when blank, whatever else it is, and other options never do.
+    /// </summary>
+    /// <param name="type">
+    /// The option type.
+    /// </param>
+    /// <param name="required">
+    /// Whether the option is required.
+    /// </param>
+    /// <param name="value">
+    /// The value.
+    /// </param>
+    /// <param name="missing">
+    /// Whether the value counts as missing.
+    /// </param>
+    [Theory]
+    [InlineData(ProviderOptionType.Secret, true, null, true)]
+    [InlineData(ProviderOptionType.String, true, " ", true)]
+    [InlineData(ProviderOptionType.String, true, "x", false)]
+    [InlineData(ProviderOptionType.String, false, "", false)]
+    [InlineData(ProviderOptionType.Int, true, "", false)]
+    public void IsMissing_FollowsRequiredTextOptions(ProviderOptionType type, bool required, string? value, bool missing) =>
+        new ProviderOptionDefinition("k", "K", type, string.Empty, Required: required).IsMissing(value).Should().Be(missing);
 }

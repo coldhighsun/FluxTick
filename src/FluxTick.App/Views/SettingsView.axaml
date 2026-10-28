@@ -257,29 +257,29 @@
       </TabItem>
 
       <TabItem Header="{loc:T Settings_TabSources}">
-        <ScrollViewer Name="ProvidersScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
-            <!-- Press and drag a card (its grip, or any part that is not a button or a box) to reorder; the order is saved at once. -->
-            <ItemsControl Name="ProvidersList" ItemsSource="{Binding Providers}">
+            <!-- Filter by asset class; the list below has the enabled sources first, each group in ascending order of name. -->
+            <ItemsControl ItemsSource="{Binding ProviderClassFilters}" Margin="0,0,0,10">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProviderClassFilterViewModel">
+                  <ToggleButton Classes="filter" IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Label}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl Name="ProvidersList" ItemsSource="{Binding FilteredProviders}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ProviderSettingsViewModel">
-                  <Border Classes="card" Cursor="SizeAll">
-                    <!-- The cursor is inherited, so the controls that take the pointer for themselves say what theirs is. -->
-                    <Border.Styles>
-                      <Style Selector="TextBox">
-                        <Setter Property="Cursor" Value="IBeam" />
-                      </Style>
-                      <Style Selector="Button, ComboBox, ToggleSwitch">
-                        <Setter Property="Cursor" Value="Arrow" />
-                      </Style>
-                    </Border.Styles>
+                  <Border Classes="card">
                     <StackPanel Spacing="6">
                       <!-- Header: click to expand or collapse; the enable switch stays outside the button. -->
-                      <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Path Data="M4 3h.01M4 7h.01M4 11h.01M9 3h.01M9 7h.01M9 11h.01" Stroke="{DynamicResource MutedBrush}"
-                              StrokeThickness="2" StrokeLineCap="Round" Margin="2,0,8,0" VerticalAlignment="Center"
-                              ToolTip.Tip="{loc:T Settings_DragToReorder}" />
-                        <ToggleButton Grid.Column="1" Classes="disclosure" Cursor="Hand" IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                      <Grid ColumnDefinitions="*,Auto">
+                        <ToggleButton Classes="disclosure" Cursor="Hand" IsChecked="{Binding IsExpanded, Mode=TwoWay}"
                                       AutomationProperties.Name="{Binding Name}">
                           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Path Classes="chevron" Classes.expanded="{Binding IsExpanded}" Data="M5 3l4 4-4 4" Width="14" Height="14" VerticalAlignment="Center" />
@@ -294,21 +294,23 @@
                             </StackPanel>
                           </StackPanel>
                         </ToggleButton>
-                        <ToggleSwitch Grid.Column="2" IsChecked="{Binding Enabled}" />
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" />
                       </Grid>
 
                       <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
                         <TextBlock Text="{Binding Description}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="10" />
 
-                        <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Enabled}">
+                        <ItemsControl ItemsSource="{Binding Options}">
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:OptionViewModel">
                               <StackPanel Spacing="3" Margin="0,6,0,0">
                                 <TextBlock FontSize="11" Classes="muted">
                                   <Run Text="{Binding Label}" /><Run Text="{Binding Unit}" />
                                 </TextBlock>
-                                <TextBox Text="{Binding Text, UpdateSourceTrigger=LostFocus}" IsVisible="{Binding IsText}" PasswordChar="{Binding PasswordChar}" />
+                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" IsVisible="{Binding IsPlainText}" PasswordChar="{Binding PasswordChar}" />
+                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" IsVisible="{Binding IsNumber}"
+                                         views:NumericInput.Enabled="True" views:NumericInput.Kind="{Binding NumberKind}" />
                                 <ToggleSwitch IsChecked="{Binding BoolValue}" IsVisible="{Binding IsBool}" />
                                 <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" IsVisible="{Binding IsChoice}" HorizontalAlignment="Stretch" />
                                 <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Classes="muted" FontSize="10" TextWrapping="Wrap" />
@@ -318,9 +320,16 @@
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <Button Content="{loc:T Settings_RestoreDefaults}" Command="{Binding RestoreDefaultsCommand}"
-                                IsVisible="{Binding HasOptions}" HorizontalAlignment="Left" FontSize="11" Padding="10,4" Margin="0,6,0,0"
-                                ToolTip.Tip="{loc:T Settings_RestoreDefaultsTip}" />
+                        <!-- Save and revert show while there are edits; restore defaults is always there. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" IsVisible="{Binding HasOptions}">
+                          <Button Classes="primary" Content="{loc:T Settings_Save}" Command="{Binding SaveCommand}" IsVisible="{Binding IsDirty}"
+                                  FontSize="11" Padding="12,4" />
+                          <Button Content="{loc:T Settings_Revert}" Command="{Binding RevertCommand}" IsVisible="{Binding IsDirty}"
+                                  FontSize="11" Padding="10,4" />
+                          <Button Content="{loc:T Settings_RestoreDefaults}" Command="{Binding RestoreDefaultsCommand}"
+                                  FontSize="11" Padding="10,4" ToolTip.Tip="{loc:T Settings_RestoreDefaultsTip}" />
+                          <TextBlock Text="{loc:T Settings_Unsaved}" Classes="muted" FontSize="11" VerticalAlignment="Center" IsVisible="{Binding IsDirty}" />
+                        </StackPanel>
                       </StackPanel>
                     </StackPanel>
                   </Border>

@@ -344,4 +344,22 @@ public class LocalizationTests
     /// </returns>
     private static IEnumerable<string> Placeholders(string text) =>
         System.Text.RegularExpressions.Regex.Matches(text, @"\{\d+\}").Select(m => m.Value).Order();
+
+    /// <summary>
+    /// Verifies the message for a missing required value is translated.
+    /// </summary>
+    [Fact]
+    public void Validation_Required_IsTranslated()
+    {
+        var required = new OptionValidation(OptionValidationError.Required, "A value is required.");
+        Loc.Instance.Select(Loc.SimplifiedChinese);
+        try
+        {
+            ProviderText.Validation(required).Should().Be("此项为必填。");
+        }
+        finally
+        {
+            Loc.Instance.Select(Loc.English);
+        }
+    }
 }

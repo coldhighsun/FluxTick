@@ -141,4 +141,50 @@ public class NumberTextTests
     {
         TestCulture.Under("de-DE", () => NumberText.IsPartialNumber(text).Should().Be(expected));
     }
+
+    /// <summary>
+    /// Verifies a box for a whole number accepts digits, and a leading minus sign only when negative numbers are allowed.
+    /// </summary>
+    /// <param name="text">
+    /// The text the box would show.
+    /// </param>
+    /// <param name="allowNegative">
+    /// Whether negative numbers are allowed.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the box may show the text.
+    /// </param>
+    [Theory]
+    [InlineData("", false, true)]
+    [InlineData("123", false, true)]
+    [InlineData("-", true, true)]
+    [InlineData("-12", true, true)]
+    [InlineData("-12", false, false)]
+    [InlineData("1-2", true, false)]
+    [InlineData("1.5", true, false)]
+    [InlineData("1a", false, false)]
+    [InlineData("--1", true, false)]
+    public void IsPartialWholeNumber_AcceptsDigitsAndAllowedSign(string text, bool allowNegative, bool expected) =>
+        NumberText.IsPartialWholeNumber(text, allowNegative).Should().Be(expected);
+
+    /// <summary>
+    /// Verifies a box for seconds accepts digits and one point, whatever the culture, and nothing else.
+    /// </summary>
+    /// <param name="text">
+    /// The text the box would show.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the box may show the text.
+    /// </param>
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("5", true)]
+    [InlineData("0.5", true)]
+    [InlineData(".5", true)]
+    [InlineData("1.2.3", false)]
+    [InlineData("1,5", false)]
+    [InlineData("-1", false)]
+    [InlineData("1e3", false)]
+    public void IsPartialSeconds_AcceptsDigitsAndOnePoint(string text, bool expected) =>
+        NumberText.IsPartialSeconds(text).Should().Be(expected);
 }

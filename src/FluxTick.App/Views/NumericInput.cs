@@ -7,7 +7,8 @@ using FluxTick.App.Services;
 namespace FluxTick.App.Views;
 
 /// <summary>
-/// Limits a text box to the typing of a real number: set <c>views:NumericInput.Enabled="True"</c> on it.
+/// Limits a text box to the typing of a number: set <c>views:NumericInput.Enabled="True"</c> on it, and
+/// <c>views:NumericInput.Kind</c> when it is not a real number.
 /// </summary>
 public static class NumericInput
 {
@@ -16,6 +17,12 @@ public static class NumericInput
     /// </summary>
     public static readonly AttachedProperty<bool> EnabledProperty =
         AvaloniaProperty.RegisterAttached<TextBox, bool>("Enabled", typeof(NumericInput));
+
+    /// <summary>
+    /// Identifies the attached property that says which kind of number a limited text box accepts.
+    /// </summary>
+    public static readonly AttachedProperty<NumericKind> KindProperty =
+        AvaloniaProperty.RegisterAttached<TextBox, NumericKind>("Kind", typeof(NumericInput));
 
     /// <summary>
     /// Initializes static members of the <see cref="NumericInput"/> class.
@@ -43,6 +50,48 @@ public static class NumericInput
     /// Whether the box is limited.
     /// </param>
     public static void SetEnabled(TextBox box, bool value) => box.SetValue(EnabledProperty, value);
+
+    /// <summary>
+    /// Gets which kind of number a text box accepts.
+    /// </summary>
+    /// <param name="box">
+    /// The text box.
+    /// </param>
+    /// <returns>
+    /// The kind of number.
+    /// </returns>
+    public static NumericKind GetKind(TextBox box) => box.GetValue(KindProperty);
+
+    /// <summary>
+    /// Sets which kind of number a text box accepts.
+    /// </summary>
+    /// <param name="box">
+    /// The text box.
+    /// </param>
+    /// <param name="value">
+    /// The kind of number.
+    /// </param>
+    public static void SetKind(TextBox box, NumericKind value) => box.SetValue(KindProperty, value);
+
+    /// <summary>
+    /// Determines whether a box may show a text, by the kind of number it accepts.
+    /// </summary>
+    /// <param name="box">
+    /// The text box.
+    /// </param>
+    /// <param name="text">
+    /// The text the box would show.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the box may show the text.
+    /// </returns>
+    private static bool Accepts(TextBox box, string text) => GetKind(box) switch
+    {
+        NumericKind.Seconds => NumberText.IsPartialSeconds(text),
+        NumericKind.WholeNumber => NumberText.IsPartialWholeNumber(text, allowNegative: false),
+        NumericKind.SignedWholeNumber => NumberText.IsPartialWholeNumber(text, allowNegative: true),
+        _ => NumberText.IsPartialNumber(text),
+    };
 
     /// <summary>
     /// Starts or stops watching the typing of a text box.
@@ -76,7 +125,7 @@ public static class NumericInput
     /// </param>
     private static void OnTextInput(object? sender, TextInputEventArgs e)
     {
-        if (sender is TextBox box && !string.IsNullOrEmpty(e.Text) && !NumberText.IsPartialNumber(After(box, e.Text)))
+        if (sender is TextBox box && !string.IsNullOrEmpty(e.Text) && !Accepts(box, After(box, e.Text)))
         {
             e.Handled = true;
         }
@@ -108,7 +157,7 @@ public static class NumericInput
             var text = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
 
             // The box may have changed while the clipboard was read, and the paste would then land in the wrong place.
-            if (!string.IsNullOrEmpty(text) && box.Text == before && NumberText.IsPartialNumber(After(box, text)))
+            if (!string.IsNullOrEmpty(text) && box.Text == before && Accepts(box, After(box, text)))
             {
                 box.Text = After(box, text);
                 box.CaretIndex = start + text.Length;
