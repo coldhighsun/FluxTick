@@ -161,7 +161,7 @@ public abstract class BatchQuotePollingProviderBase : PollingProviderBase
             answered.Add(quote.Key);
             foreach (var asset in subscribed)
             {
-                Publish(new Quote(asset.Id, quote.Price, quote.PreviousClose, quote.Time ?? TimeProvider.GetUtcNow()));
+                Publish(new Quote(asset.Id, quote.Price, quote.PreviousClose, quote.Time ?? TimeProvider.GetUtcNow()) { TimeIsEstimated = quote.Time is null });
             }
         }
 

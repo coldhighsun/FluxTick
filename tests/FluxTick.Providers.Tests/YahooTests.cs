@@ -50,6 +50,98 @@ public class YahooTests
     }
 
     /// <summary>
+    /// Builds a chart response of a given instrument type with trading periods like Yahoo's: pre-market from 08:00 to
+    /// 13:30, the regular session to 20:00 and after hours to 24:00 (UTC, 1 Jan 2026 is 1767225600).
+    /// </summary>
+    /// <param name="instrumentType">
+    /// The instrument type.
+    /// </param>
+    /// <returns>
+    /// The response body.
+    /// </returns>
+    private static string ChartWithPeriods(string instrumentType) => """
+        {"chart":{"result":[{"meta":{"instrumentType":"TYPE","regularMarketPrice":190.5,"regularMarketTime":1767225600,
+        "currentTradingPeriod":{"pre":{"start":1767254400,"end":1767274200},"regular":{"start":1767274200,"end":1767297600},"post":{"start":1767297600,"end":1767312000}}},
+        "timestamp":[1767274200],"indicators":{"quote":[{"close":[190.5]}]}}],"error":null}}
+        """.Replace("TYPE", instrumentType);
+
+    /// <summary>
+    /// Verifies the trading state is read from the trading periods of the current day.
+    /// </summary>
+    [Theory]
+    [InlineData(1767240000, MarketState.Closed)] // 04:00, before the pre-market
+    [InlineData(1767254400, MarketState.PreMarket)] // 08:00
+    [InlineData(1767274199, MarketState.PreMarket)]
+    [InlineData(1767274200, MarketState.Open)] // 13:30
+    [InlineData(1767297599, MarketState.Open)]
+    [InlineData(1767297600, MarketState.AfterHours)] // 20:00
+    [InlineData(1767312000, MarketState.Closed)] // 24:00
+    public void ParseChart_WithTradingPeriods_ReportsTheStateAtTheTimeOfTheAnswer(long seconds, MarketState expected)
+    {
+        var data = YahooParser.ParseChart(ChartWithPeriods("EQUITY"), "yahoo", "AAPL", DateTimeOffset.FromUnixTimeSeconds(seconds));
+
+        data.Quote.Market.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies a market without a pre-market period (Shanghai and Shenzhen) is told to be in its opening auction in the
+    /// quarter of an hour before the regular session.
+    /// </summary>
+    [Theory]
+    [InlineData(1767274200 - 901, MarketState.Closed)]
+    [InlineData(1767274200 - 900, MarketState.PreMarket)]
+    [InlineData(1767274200 - 1, MarketState.PreMarket)]
+    [InlineData(1767274200, MarketState.Open)]
+    public void ParseChart_WithoutAPreMarketPeriod_ReportsTheOpeningAuctionAsPreMarket(long seconds, MarketState expected)
+    {
+        var json = ChartWithPeriods("EQUITY").Replace("""{"start":1767254400,"end":1767274200}""", """{"start":1767274200,"end":1767274200}""");
+
+        var data = YahooParser.ParseChart(json, "yahoo", "600000.SS", DateTimeOffset.FromUnixTimeSeconds(seconds));
+
+        data.Quote.Market.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies only shares, funds and indices are told: the periods of other instruments cover the whole day.
+    /// </summary>
+    [Theory]
+    [InlineData("ETF", MarketState.Open)]
+    [InlineData("INDEX", MarketState.Open)]
+    [InlineData("CURRENCY", null)]
+    [InlineData("CRYPTOCURRENCY", null)]
+    [InlineData("FUTURE", null)]
+    [InlineData("MUTUALFUND", null)]
+    public void ParseChart_ForAnInstrumentType_ReportsTheStateOnlyForSharesFundsAndIndices(string type, MarketState? expected)
+    {
+        var data = YahooParser.ParseChart(ChartWithPeriods(type), "yahoo", "X", DateTimeOffset.FromUnixTimeSeconds(1767280000));
+
+        data.Quote.Market.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the quote says its time is the time of the answer when Yahoo gives no time of the trade.
+    /// </summary>
+    [Fact]
+    public void ParseChart_WithoutATradeTime_MarksTheTimeAsEstimated()
+    {
+        var withTime = YahooParser.ParseChart(ChartJson, "yahoo", "AAPL");
+        var withoutTime = YahooParser.ParseChart(ChartJson.Replace(",\"regularMarketTime\":1700000000", string.Empty), "yahoo", "AAPL", DateTimeOffset.FromUnixTimeSeconds(1700000500));
+
+        withTime.Quote.TimeIsEstimated.Should().BeFalse();
+        withoutTime.Quote.TimeIsEstimated.Should().BeTrue();
+        withoutTime.Quote.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeSeconds(1700000500));
+    }
+
+    /// <summary>
+    /// Verifies a response without trading periods reports no state.
+    /// </summary>
+    [Fact]
+    public void ParseChart_WithoutTradingPeriods_ReportsNoState()
+    {
+        YahooParser.ParseChart(ChartJson, "yahoo", "AAPL").Quote.Market.Should().BeNull();
+    }
+
+    /// <summary>
     /// Verifies an error object surfaces as a typed exception with Yahoo's message.
     /// </summary>
     [Fact]

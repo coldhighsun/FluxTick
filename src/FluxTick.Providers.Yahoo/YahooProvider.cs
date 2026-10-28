@@ -179,6 +179,6 @@ public sealed class YahooProvider : PollingProviderBase, IHistoryProvider, ISymb
 
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        return YahooParser.ParseChart(json, Descriptor.Id, symbol);
+        return YahooParser.ParseChart(json, Descriptor.Id, symbol, TimeProvider.GetUtcNow());
     }
 }
