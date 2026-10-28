@@ -32,6 +32,7 @@ public class BybitMessagesTests
         quote.Price.Should().Be(81513.7m);
         quote.Reference.Should().Be(84625.6m);
         quote.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1792683284127));
+        quote.TimeIsEstimated.Should().BeFalse();
     }
 
     /// <summary>
@@ -46,6 +47,7 @@ public class BybitMessagesTests
 
         quote.Reference.Should().BeNull();
         quote.Timestamp.Should().Be(Fallback);
+        quote.TimeIsEstimated.Should().BeTrue();
     }
 
     /// <summary>

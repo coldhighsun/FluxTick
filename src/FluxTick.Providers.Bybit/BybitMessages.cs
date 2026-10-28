@@ -75,10 +75,10 @@ internal static class BybitMessages
         }
 
         decimal? reference = JsonValues.TryGetPositiveDecimal(data, "prevPrice24h", out var previous) ? previous : null;
-        var timestamp = root.TryGetProperty("ts", out var ts) && JsonValues.TryGetUnixMilliseconds(ts, out var parsed)
+        DateTimeOffset? traded = root.TryGetProperty("ts", out var ts) && JsonValues.TryGetUnixMilliseconds(ts, out var parsed)
             ? parsed
-            : fallbackTime;
-        quote = new Quote(new AssetId(providerId, symbol), price, reference, timestamp);
+            : null;
+        quote = new Quote(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime) { TimeIsEstimated = traded is null };
         return true;
     }
 

@@ -115,10 +115,10 @@ internal static class OkxMessages
             }
 
             decimal? reference = JsonValues.TryGetPositiveDecimal(item, "open24h", out var open) ? open : null;
-            var timestamp = item.TryGetProperty("ts", out var ts) && JsonValues.TryGetUnixMilliseconds(ts, out var parsed)
+            DateTimeOffset? traded = item.TryGetProperty("ts", out var ts) && JsonValues.TryGetUnixMilliseconds(ts, out var parsed)
                 ? parsed
-                : fallbackTime;
-            quotes.Add(new Quote(new AssetId(providerId, symbol), price, reference, timestamp));
+                : null;
+            quotes.Add(new Quote(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime) { TimeIsEstimated = traded is null });
         }
 
         return quotes;

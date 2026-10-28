@@ -68,8 +68,8 @@ internal static class CoinbaseMessages
         }
 
         decimal? reference = JsonValues.TryGetPositiveDecimal(root, "open_24h", out var open) ? open : null;
-        var timestamp = JsonValues.TryGetIsoTime(root, "time", out var parsed) ? parsed : fallbackTime;
-        quote = new Quote(new AssetId(providerId, symbol), price, reference, timestamp);
+        DateTimeOffset? traded = JsonValues.TryGetIsoTime(root, "time", out var parsed) ? parsed : null;
+        quote = new Quote(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime) { TimeIsEstimated = traded is null };
         return true;
     }
 

@@ -106,8 +106,8 @@ internal static class KrakenMessages
             decimal? reference = JsonValues.TryGetDecimal(item, "change", out var change) && price - change > 0m
                 ? price - change
                 : null;
-            var timestamp = JsonValues.TryGetIsoTime(item, "timestamp", out var parsed) ? parsed : fallbackTime;
-            quotes.Add(new Quote(new AssetId(providerId, symbol), price, reference, timestamp));
+            DateTimeOffset? traded = JsonValues.TryGetIsoTime(item, "timestamp", out var parsed) ? parsed : null;
+            quotes.Add(new Quote(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime) { TimeIsEstimated = traded is null });
         }
 
         return quotes;
