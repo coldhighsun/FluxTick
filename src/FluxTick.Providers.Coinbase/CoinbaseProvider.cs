@@ -41,8 +41,23 @@ public sealed class CoinbaseProvider : CryptoExchangeProvider
     protected override string SymbolsRequest => "/products";
 
     /// <inheritdoc />
-    protected override string HistoryRequest(Asset asset) =>
-        $"/products/{Uri.EscapeDataString(asset.Symbol)}/candles?granularity=60";
+    protected override string HistoryRequest(Asset asset)
+    {
+        // Without a start and an end the service answers with its last 300 candles, five times what the sparkline shows.
+        var end = TimeProvider.GetUtcNow();
+        return $"/products/{Uri.EscapeDataString(asset.Symbol)}/candles?granularity=60&start={Iso(end - HistoryWindow.Span)}&end={Iso(end)}";
+    }
+
+    /// <summary>
+    /// Writes a time the way the candles endpoint takes it.
+    /// </summary>
+    /// <param name="time">
+    /// The time.
+    /// </param>
+    /// <returns>
+    /// The time in ISO 8601, in UTC, to the second.
+    /// </returns>
+    private static string Iso(DateTimeOffset time) => time.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     protected override IReadOnlyList<PricePoint> ParseHistory(string json) => CoinbaseMessages.ParseCandles(json);

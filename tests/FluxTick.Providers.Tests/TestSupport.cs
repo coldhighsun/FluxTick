@@ -162,6 +162,8 @@ internal sealed class LoopbackServer : IAsyncDisposable
     /// </summary>
     private readonly ConcurrentQueue<string> _origins = new();
 
+    private readonly ConcurrentQueue<string> _authorizations = new();
+
     /// <summary>
     /// The most recently accepted connection.
     /// </summary>
@@ -242,6 +244,11 @@ internal sealed class LoopbackServer : IAsyncDisposable
     /// Gets the Origin header of every accepted connection, in arrival order; empty when the client sent none.
     /// </summary>
     public IReadOnlyList<string> Origins => [.. _origins];
+
+    /// <summary>
+    /// Gets the Authorization header of every accepted connection, in arrival order; empty when the client sent none.
+    /// </summary>
+    public IReadOnlyList<string> Authorizations => [.. _authorizations];
 
     /// <summary>
     /// Counts how often a message was received.
@@ -370,6 +377,7 @@ internal sealed class LoopbackServer : IAsyncDisposable
 
             _requestUrls.Enqueue(context.Request.RawUrl ?? string.Empty);
             _origins.Enqueue(context.Request.Headers["Origin"] ?? string.Empty);
+            _authorizations.Enqueue(context.Request.Headers["Authorization"] ?? string.Empty);
             var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
             _current = socket;
             Interlocked.Increment(ref _connections);

@@ -74,7 +74,7 @@ public sealed partial class OptionViewModel : ObservableObject
     /// <summary>
     /// Gets the label.
     /// </summary>
-    public string Label => Definition.Required ? $"{ProviderText.OptionLabel(Definition)} *" : ProviderText.OptionLabel(Definition);
+    public string Label => Definition.Required ? $"{ProviderText.OptionLabel(Definition, _owner)} *" : ProviderText.OptionLabel(Definition, _owner);
 
     /// <summary>
     /// Gets the help text, or an empty string.

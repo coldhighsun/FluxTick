@@ -50,6 +50,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     private readonly TimeSpan _fallbackInterval;
 
     /// <summary>
+    /// How long a connected stream may stay quiet before REST is polled as well.
+    /// </summary>
+    private readonly TimeSpan _quietStreamInterval;
+
+    /// <summary>
     /// The fallback loop, which runs while instruments are subscribed. Its token also ends the snapshots.
     /// </summary>
     private readonly BackgroundLoop _fallback;
@@ -63,6 +68,12 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// The number of rounds of the fallback in a row that delivered no price.
     /// </summary>
     private int _failedRounds;
+
+    /// <summary>
+    /// Whether there are subscriptions and every one of them is outside trading, so that the fallback has nothing to fetch.
+    /// The status then does not take the lack of polling for a failure.
+    /// </summary>
+    private bool _outsideTrading;
 
     /// <summary>
     /// The problems REST reported, such as a symbol without data; replaced atomically.
@@ -122,15 +133,21 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// <param name="logger">
     /// The logger.
     /// </param>
+    /// <param name="quietStreamInterval">
+    /// How long a connected stream may stay quiet during trading hours before REST is polled as well, or
+    /// <see langword="null"/> for 5 minutes.
+    /// </param>
     protected RestBackedWebSocketProviderBase(
         ProviderDescriptor descriptor,
         Uri webSocketUri,
         TimeSpan fallbackInterval,
         TimeProvider timeProvider,
-        ILogger logger)
+        ILogger logger,
+        TimeSpan? quietStreamInterval = null)
         : base(descriptor, webSocketUri, timeProvider, logger)
     {
         _fallbackInterval = fallbackInterval;
+        _quietStreamInterval = quietStreamInterval ?? TimeSpan.FromMinutes(5);
         _fallback = new BackgroundLoop(ShutdownToken);
     }
 
@@ -139,7 +156,22 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// markets are quiet too, so this is slow on purpose: it keeps prices and market states from going unnoticed stale
     /// behind a connection that is up but no longer delivers, without polling for a market that is simply shut.
     /// </summary>
-    protected virtual TimeSpan QuietStreamInterval => TimeSpan.FromMinutes(1);
+    protected virtual TimeSpan QuietStreamInterval => _quietStreamInterval;
+
+    /// <summary>
+    /// Tells whether the market of an instrument is known not to be trading, so that polling REST for it is pointless: it
+    /// is shut, at midday break, or in the pre-market or after hours, when the stream delivers what trades. The hours
+    /// come from <see cref="IMarketHoursProvider"/>; an instrument whose market is not known is polled as usual. The
+    /// first price of a new instrument is fetched regardless.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the market is known not to be open; see <see cref="TradingHoursPolicy"/>.
+    /// </returns>
+    protected virtual bool IsOutsideTrading(Asset asset) =>
+        TradingHoursPolicy.IsOutsideTrading(this as IMarketHoursProvider, asset, TimeProvider.GetUtcNow(), hasStream: true);
 
     /// <summary>
     /// Gets how many rounds in a row of polling a connected but quiet stream must find newer prices, with the stream
@@ -185,6 +217,15 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
         if (Volatile.Read(ref _failedRounds) >= FailureThreshold)
         {
             return new ProviderStatus(ProviderConnectionState.Failed, reason ?? "No prices from the stream or from polling");
+        }
+
+        if (Volatile.Read(ref _outsideTrading))
+        {
+            // Nothing is polled while no market is open, so the lack of a recent REST success says nothing; the source is as
+            // available as it was, and the prices come back when a market opens or the stream does.
+            return new ProviderStatus(
+                ProviderConnectionState.Connected,
+                reason is null ? "Live stream unavailable; no market is open" : $"Live stream unavailable; no market is open ({reason})");
         }
 
         var freshness = TimeSpan.FromTicks(Math.Max(_fallbackInterval.Ticks * 3, MinFreshness.Ticks));
@@ -285,6 +326,7 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
         if (current.Count == 0)
         {
             await _fallback.StopAsync().ConfigureAwait(false);
+            Volatile.Write(ref _outsideTrading, false);
             Volatile.Write(ref _lastRestSuccess, NoSuccess);
             Volatile.Write(ref _failedRounds, 0);
             Volatile.Write(ref _restProblems, RestProblems.None);
@@ -380,6 +422,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
                     _quietRounds = 0;
                 }
 
+                // A market that is not trading has nothing new, and the stream delivers the pre-market and after hours.
+                var subscribed = CurrentSubscriptions;
+                var assets = subscribed.Where(a => !IsOutsideTrading(a)).ToArray();
+                SetOutsideTrading(subscribed.Count > 0 && assets.Length == 0);
+
                 var due = streamUp
                     ? IdleFor >= QuietStreamInterval && (lastPoll is not { } quiet || TimeProvider.GetElapsedTime(quiet) >= QuietStreamInterval)
                     : lastPoll is not { } polled || TimeProvider.GetElapsedTime(polled) >= wait;
@@ -388,8 +435,7 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
                     continue;
                 }
 
-                var assets = CurrentSubscriptions;
-                if (assets.Count == 0)
+                if (assets.Length == 0)
                 {
                     continue;
                 }
@@ -420,6 +466,23 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
         {
             // The subscriptions ended or the provider is shutting down.
         }
+    }
+
+    /// <summary>
+    /// Records whether every subscribed instrument is outside trading, and reports the status again when that changed.
+    /// </summary>
+    /// <param name="value">
+    /// Whether there is nothing to fetch because no market is open.
+    /// </param>
+    private void SetOutsideTrading(bool value)
+    {
+        if (Volatile.Read(ref _outsideTrading) == value)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _outsideTrading, value);
+        RefreshStatus();
     }
 
     /// <summary>

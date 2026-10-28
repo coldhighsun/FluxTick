@@ -119,8 +119,11 @@ gracefully instead of failing.
 
 | Interface | Gives the app |
 | --- | --- |
-| `IHistoryProvider` | Recent prices to seed the sparkline immediately |
+| `IHistoryProvider` | Recent prices to seed the sparkline immediately. The sparkline shows the last 60 minutes only, so ask for about the last hour (`HistoryWindow.Span` in `Providers.Common`) and not for a whole day |
 | `ISymbolSearchProvider` | Symbol search and validation in the *Add instrument* page |
+| `IMarketHoursProvider` | Open / closed / pre-market / break state of the markets of your symbols; for stocks and indices, whose hours depend on your symbol format (use `ExchangeHours` from `Providers.Common`) |
+
+A source built on `RestBackedWebSocketProviderBase` or `PollingProviderBase` that also implements `IMarketHoursProvider` does not fetch prices of a market that is not trading (rule in `TradingHoursPolicy`): a streaming source polls only while its markets are open (or unknown), because the stream delivers the pre-market and after hours; a polling source skips a shut market and the midday break. The first price of a new instrument is always fetched. While the stream of a streaming source is down and no market is open, its status is Connected with a note instead of Reconnecting. Offer the `QuietPollInterval` option (`ProviderOptionDefinition.QuietPollIntervalKey`, default 5 minutes) so the user can choose how often a connected but silent stream is topped up.
 
 Without `ISymbolSearchProvider` the *Add instrument* page lets the user type the symbol as it is.
 
@@ -200,11 +203,13 @@ falls back to the English text from your descriptor):
 | --- | --- |
 | `Provider_{id}_Name` | `DisplayName` |
 | `Provider_{id}_Desc` | `Description` |
-| `Option_{Key}_Label` | The label of an option |
+| `Option_{Key}_Label` | The label of an option, shared by every provider |
+| `Option_{id}_{Key}_Label` | The label of an option for your provider only; used before the shared one |
 | `Option_{id}_{Key}_Desc` | The description of an option |
 
-Option labels are keyed by `Key` only and shared by every provider, so an option that reuses a key such as
-`PollInterval` gets the existing translation. Pick a new key if yours means something different. `en.json` needs no
+An option that reuses a key such as `PollInterval` gets the shared translation. If it means something else for your
+source (for the streaming ones it is the interval while the stream is down), add `Option_{id}_{Key}_Label` instead of
+inventing a new key. `en.json` needs no
 entries, and the localization tests only allow keys starting with `Provider_` or `Option_` that exist in `zh-CN.json` alone.
 
 ## 6. Test it

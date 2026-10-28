@@ -8,6 +8,22 @@ namespace FluxTick.Providers.Common;
 public static class QuoteText
 {
     /// <summary>
+    /// Tests whether a symbol starts with a prefix and has more after it, compared without regard to case, as the symbols
+    /// of Tencent and Sina start with a market code (<c>sh600000</c>).
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <param name="prefix">
+    /// The prefix.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when it does.
+    /// </returns>
+    public static bool HasPrefix(string symbol, string prefix) =>
+        symbol.Length > prefix.Length && symbol.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Cuts the quoted body out of a <c>name="body";</c> assignment.
     /// </summary>
     /// <param name="text">

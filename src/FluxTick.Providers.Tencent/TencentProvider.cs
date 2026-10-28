@@ -7,7 +7,7 @@ namespace FluxTick.Providers.Tencent;
 /// <summary>
 /// Polls the Tencent quote service for every subscribed instrument, one request per batch of instruments.
 /// </summary>
-public sealed class TencentProvider : BatchQuotePollingProviderBase, IHistoryProvider, ISymbolSearchProvider
+public sealed class TencentProvider : BatchQuotePollingProviderBase, IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -66,6 +66,29 @@ public sealed class TencentProvider : BatchQuotePollingProviderBase, IHistoryPro
     {
         _quoteBase = quoteBase;
         _http = http;
+    }
+
+    /// <inheritdoc />
+    public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
+        ExchangeHours.StateOf(ExchangeOf(asset.Symbol), now, lastTradeTime, holidayGrace);
+
+    /// <summary>
+    /// Finds the exchange of a symbol from its market prefix (<c>sh600000</c>, <c>hk00700</c>, <c>usAAPL</c>).
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <returns>
+    /// The exchange, or <see langword="null"/> when it is not known.
+    /// </returns>
+    internal static ExchangeHours? ExchangeOf(string symbol)
+    {
+        if (QuoteText.HasPrefix(symbol, "sh") || QuoteText.HasPrefix(symbol, "sz") || QuoteText.HasPrefix(symbol, "bj"))
+        {
+            return ExchangeHours.ChinaA;
+        }
+
+        return QuoteText.HasPrefix(symbol, "hk") ? ExchangeHours.HongKong : QuoteText.HasPrefix(symbol, "us") ? ExchangeHours.Us : null;
     }
 
     /// <inheritdoc />

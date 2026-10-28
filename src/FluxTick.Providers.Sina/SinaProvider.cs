@@ -10,7 +10,7 @@ namespace FluxTick.Providers.Sina;
 /// are part of the address of the stream, so a change of the watchlist connects again. The quote service gives every new
 /// instrument its first price and takes over while the stream is down.
 /// </summary>
-public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider
+public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -66,6 +66,10 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearc
     /// <param name="logger">
     /// The logger.
     /// </param>
+    /// <param name="quietInterval">
+    /// How long a connected stream may stay quiet during trading hours before REST is polled as well, or
+    /// <see langword="null"/> for the default.
+    /// </param>
     internal SinaProvider(
         ProviderDescriptor descriptor,
         Uri quoteBase,
@@ -73,8 +77,9 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearc
         TimeSpan interval,
         HttpClient http,
         TimeProvider timeProvider,
-        ILogger logger)
-        : base(descriptor, streamUri, interval, timeProvider, logger)
+        ILogger logger,
+        TimeSpan? quietInterval = null)
+        : base(descriptor, streamUri, interval, timeProvider, logger, quietInterval)
     {
         _quoteBase = quoteBase;
         _http = http;
@@ -82,6 +87,25 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearc
 
     /// <inheritdoc />
     protected override bool SubscribesByUri => true;
+
+    /// <inheritdoc />
+    public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
+        ExchangeHours.StateOf(ExchangeOf(asset.Symbol), now, lastTradeTime, holidayGrace);
+
+    /// <summary>
+    /// Finds the exchange of a symbol. Only the A-share codes (<c>sh600000</c>) are known; currency pairs and futures
+    /// have no regular hours.
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <returns>
+    /// The exchange, or <see langword="null"/> when it is not known.
+    /// </returns>
+    internal static ExchangeHours? ExchangeOf(string symbol) =>
+        QuoteText.HasPrefix(symbol, "sh") || QuoteText.HasPrefix(symbol, "sz") || QuoteText.HasPrefix(symbol, "bj")
+            ? ExchangeHours.ChinaA
+            : null;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default)

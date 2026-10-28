@@ -305,6 +305,25 @@ public class LocalizationTests
     }
 
     /// <summary>
+    /// Verifies a label written for one data source is used for it before the label every source shares, so that the same
+    /// option can mean something else for a source that streams.
+    /// </summary>
+    [Fact]
+    public void ProviderText_OptionLabel_PrefersTheLabelOfTheDataSource()
+    {
+        var poll = new ProviderOptionDefinition(ProviderOptionDefinition.PollIntervalKey, "Poll interval", ProviderOptionType.Duration, "00:00:05");
+        var streaming = new ProviderDescriptor("yahoo", "Yahoo", "A feed.", [AssetClass.Equity], ProviderUpdateMode.Streaming);
+        var polling = new ProviderDescriptor("tencent", "Tencent", "A feed.", [AssetClass.Equity], ProviderUpdateMode.Polling);
+
+        InChinese(() =>
+        {
+            ProviderText.OptionLabel(poll, streaming).Should().Be("断线轮询间隔");
+            ProviderText.OptionLabel(poll, polling).Should().Be("轮询间隔");
+            ProviderText.OptionLabel(poll).Should().Be("轮询间隔");
+        });
+    }
+
+    /// <summary>
     /// Verifies the language setting reads as automatic when a settings file predates it.
     /// </summary>
     [Fact]

@@ -28,9 +28,51 @@ public class TencentTests
         """v_hint="sh~000847~腾讯济安~txja~ZS^hk~00700~腾讯控股~txkg~GP^us~tme.n~腾讯音乐~txyl~GP^hk~13005~腾讯法兴七三购A~txfxqsga~QZ^jj~000001~华夏成长混合~hxczhh~KJ^sh~510300~沪深300ETF华泰柏瑞~hs300etfhtbr~ETF^hk~00700~dup~dup~GP";""";
 
     /// <summary>
+    /// The start of the clock of the tests: Wednesday 10:00 in Shanghai with the market open. Polling skips a market that
+    /// is shut, and the default of the fake clock is a Saturday.
+    /// </summary>
+    private static readonly DateTimeOffset TradingHoursStart = new(2026, 10, 28, 2, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
     /// The Shanghai test asset.
     /// </summary>
     private static readonly Asset Pufa = new("tencent", "sh600000", "浦发银行", AssetClass.Equity);
+
+    /// <summary>
+    /// Verifies a market that is shut is polled once, for the first price, and not again.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MarketShut_PollsOnlyForTheFirstPrice()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 2, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var provider = CreateProvider(handler, time);
+
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
+        for (var i = 0; i < 6; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromMilliseconds(30));
+        }
+
+        handler.Requests.Should().ContainSingle("a shut market has nothing new");
+    }
+
+    /// <summary>
+    /// Verifies polling goes on once the market opens.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MarketOpens_PollsAgain()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 1, 0, 0, TimeSpan.Zero)); // 09:00 in Shanghai, before the pre-market
+        await using var provider = CreateProvider(handler, time);
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await AdvanceUntilAsync(time, TimeSpan.FromSeconds(5), () => handler.Requests.Count >= 2);
+    }
 
     /// <summary>
     /// Verifies a Shanghai line is parsed with its previous close and Beijing time.
@@ -170,7 +212,7 @@ public class TencentTests
     public async Task GetHistoryAsync_UsInstrument_ReturnsEmptyWithoutRequest()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Json("""{"data":{"usAAPL":{"data":{"date":"","data":["1600 348.22 1"]}}}}"""));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         var points = await provider.GetHistoryAsync(new Asset("tencent", "usAAPL", "Apple", AssetClass.Equity));
 
@@ -216,7 +258,7 @@ public class TencentTests
             new Uri("https://proxy.example.test/qt/"),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
-            new FakeTimeProvider(),
+            new FakeTimeProvider(TradingHoursStart),
             NullLogger.Instance);
 
         await provider.SetSubscriptionsAsync([new Asset("tencent", "sh600000", "SPDB", AssetClass.Equity)]);
@@ -259,7 +301,7 @@ public class TencentTests
     public async Task Provider_PublishesUnderTheSubscribedSymbol()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var typed = new Asset("tencent", "SH600000", "浦发银行", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([typed]);
@@ -279,7 +321,7 @@ public class TencentTests
     public async Task Provider_BatchesSubscriptionsIntoOneRequest()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var tencent = new Asset("tencent", "hk00700", "腾讯控股", AssetClass.Equity);
         var apple = new Asset("tencent", "usAAPL", "苹果", AssetClass.Equity);
 
@@ -298,7 +340,7 @@ public class TencentTests
     public async Task Provider_UnknownSymbol_IsReportedButOthersContinue()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines + "\nv_pv_none_match=\"1\";"));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var unknown = new Asset("tencent", "sh999999", "?", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([Pufa, unknown]);
@@ -315,7 +357,7 @@ public class TencentTests
     public async Task Provider_PollsAgainAfterTheInterval()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -331,7 +373,7 @@ public class TencentTests
     public async Task Provider_RepeatedFailures_ReportsFailed()
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -352,7 +394,7 @@ public class TencentTests
         var calls = 0;
         var handler = new StubHttpHandler(_ =>
             Interlocked.Increment(ref calls) == 1 ? throw new InvalidOperationException("surprise") : StubHttpHandler.Gbk(QuoteLines));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -369,7 +411,7 @@ public class TencentTests
     public async Task Provider_Search_FiltersByAssetClass()
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SearchResponse) });
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var search = (ISymbolSearchProvider)provider;
 
         var indices = await search.SearchAsync("腾讯", AssetClass.Index);
@@ -387,7 +429,7 @@ public class TencentTests
     public async Task Provider_History_IsEmptyWithoutSeries()
     {
         var handler = new StubHttpHandler(_ => Json("""{"code":0,"data":{"usAAPL":{"data":{"date":"","data":["1143 344.77 1"]}}}}"""));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         var points = await ((IHistoryProvider)provider).GetHistoryAsync(new Asset("tencent", "usAAPL", "苹果", AssetClass.Equity));
 

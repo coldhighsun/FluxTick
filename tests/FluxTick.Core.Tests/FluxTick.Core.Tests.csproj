@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FluxTick.Core\FluxTick.Core.csproj" />
+    <ProjectReference Include="..\..\src\FluxTick.Providers.Common\FluxTick.Providers.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

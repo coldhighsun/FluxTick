@@ -134,6 +134,21 @@ public abstract class PollingProviderBase : LoggingProviderBase
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// Tells whether the market of an instrument is known not to be trading, so that polling it is pointless. The first
+    /// price of a new instrument is fetched regardless. Without a stream nothing else delivers the pre-market and after
+    /// hours, so only a shut market or a break is skipped; see <see cref="TradingHoursPolicy"/>.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the market is known not to be trading.
+    /// </returns>
+    protected virtual bool IsOutsideTrading(Asset asset) =>
+        TradingHoursPolicy.IsOutsideTrading(this as IMarketHoursProvider, asset, TimeProvider.GetUtcNow(), hasStream: false);
+
+    /// <inheritdoc />
     protected override async ValueTask DisposeCoreAsync()
     {
         await _loop.StopAsync().ConfigureAwait(false);
@@ -152,9 +167,14 @@ public abstract class PollingProviderBase : LoggingProviderBase
     private async Task RunAsync(CancellationToken cancellationToken)
     {
         var delay = _interval;
+        var first = true;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var backOff = await PollAndReportAsync(CurrentSubscriptions, cancellationToken).ConfigureAwait(false);
+            // A market that is shut has nothing new; the status stays as the last poll left it. The first poll gives every
+            // instrument its first price, shut or not; later ones are given theirs when they are added.
+            var assets = first ? CurrentSubscriptions : [.. CurrentSubscriptions.Where(a => !IsOutsideTrading(a))];
+            first = false;
+            var backOff = assets.Count > 0 && await PollAndReportAsync(assets, cancellationToken).ConfigureAwait(false);
             delay = backOff ? Backoff.Double(delay, MaxBackoff) : _interval;
             try
             {

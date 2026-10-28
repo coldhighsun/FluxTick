@@ -145,6 +145,12 @@ public sealed record ProviderOptionDefinition(
     public const string PollIntervalKey = "PollInterval";
 
     /// <summary>
+    /// The key of the option that sets how long a live stream may stay quiet during trading hours before the source polls
+    /// its REST API as well, for the sources that stream and use REST for what the stream misses.
+    /// </summary>
+    public const string QuietPollIntervalKey = "QuietPollInterval";
+
+    /// <summary>
     /// Validates a stored text value against this definition.
     /// </summary>
     /// <param name="value">
