@@ -368,24 +368,28 @@ public class RowAndOptionTests
     }
 
     /// <summary>
-    /// Verifies invalid input is rejected with an error and not committed.
+    /// Verifies invalid input shows an error and is never saved.
     /// </summary>
     [Theory]
     [InlineData("abc")]
     [InlineData("1")]
     [InlineData("500")]
     [InlineData("")]
-    public void Option_DurationInvalid_ShowsErrorAndDoesNotCommit(string input)
+    public void Option_DurationInvalid_ShowsErrorAndIsNotSaved(string input)
     {
         var definition = new ProviderOptionDefinition("Poll", "Poll", ProviderOptionType.Duration, "00:00:05", Min: 2, Max: 60);
-        var commits = 0;
-        var option = new OptionViewModel(definition, null, () => commits++);
+        var edits = 0;
+        var option = new OptionViewModel(definition, null, () => edits++);
 
         option.Text = input;
 
-        commits.Should().Be(0);
+        edits.Should().Be(1);
+        option.Error.Should().BeEmpty("the input may still be on its way to a valid value");
+        option.Validate(enforceRequired: false).Should().BeFalse();
         option.Error.Should().NotBeEmpty();
         option.StoredValue.Should().BeNull();
+        option.IsDirty.Should().BeTrue();
+        option.ValueToPersist.Should().BeNull();
     }
 
     /// <summary>

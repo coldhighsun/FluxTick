@@ -101,6 +101,7 @@ public static class ProviderText
         OptionValidationError.NotInChoices => Loc.Get("Validation_Choice"),
         OptionValidationError.BelowMinimum => Loc.Get("Validation_AtLeast", FormatLimit(validation.Limit)),
         OptionValidationError.AboveMaximum => Loc.Get("Validation_AtMost", FormatLimit(validation.Limit)),
+        OptionValidationError.Required => Loc.Get("Validation_Required"),
         _ => validation.Message,
     };
 

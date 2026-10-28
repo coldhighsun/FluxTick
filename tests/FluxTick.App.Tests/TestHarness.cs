@@ -127,20 +127,30 @@ public sealed class FakeFactory : IMarketDataProviderFactory
     /// <param name="searchable">
     /// Whether the provider supports search.
     /// </param>
-    public FakeFactory(string id, AssetClass[] classes, bool searchable = true)
+    /// <param name="requiresKey">
+    /// Whether the provider has a required API key option and is off until the user switches it on.
+    /// </param>
+    public FakeFactory(string id, AssetClass[] classes, bool searchable = true, bool requiresKey = false)
     {
         Searchable = searchable;
+        var options = new List<ProviderOptionDefinition>
+        {
+            new("Interval", "Interval", ProviderOptionType.Duration, "00:00:05", Min: 2, Max: 60),
+            new("Url", "Url", ProviderOptionType.String, "https://a"),
+        };
+        if (requiresKey)
+        {
+            options.Add(new("ApiKey", "API key", ProviderOptionType.Secret, string.Empty, Required: true));
+        }
+
         Descriptor = new ProviderDescriptor(
             id,
             id.ToUpperInvariant(),
             "Test",
             classes,
             ProviderUpdateMode.Streaming,
-            Options:
-            [
-                new ProviderOptionDefinition("Interval", "Interval", ProviderOptionType.Duration, "00:00:05", Min: 2, Max: 60),
-                new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "https://a"),
-            ]);
+            Options: options,
+            EnabledByDefault: !requiresKey);
     }
 
     /// <summary>
@@ -221,12 +231,15 @@ public sealed class Harness : IAsyncDisposable
     /// <param name="openFolder">
     /// Opens a folder and tells whether that worked; defaults to a success, so no test starts the real file manager.
     /// </param>
-    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null, Func<bool>? trayProbe = null, Func<string, bool>? openFolder = null)
+    /// <param name="extraFactory">
+    /// A further provider to register, or <see langword="null"/> for none.
+    /// </param>
+    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null, Func<bool>? trayProbe = null, Func<string, bool>? openFolder = null, IMarketDataProviderFactory? extraFactory = null)
     {
         CryptoFactory = new FakeFactory(Crypto, [AssetClass.Crypto]);
         StocksFactory = new FakeFactory(Stocks, [AssetClass.Equity, AssetClass.Index]);
         PlainFactory = new FakeFactory(Plain, [AssetClass.Equity], searchable: false);
-        var registry = new ProviderRegistry([CryptoFactory, StocksFactory, PlainFactory]);
+        var registry = new ProviderRegistry(extraFactory is null ? [CryptoFactory, StocksFactory, PlainFactory] : [CryptoFactory, StocksFactory, PlainFactory, extraFactory]);
         Router = new ProviderRouter(registry);
         Store = new InMemorySettingsStore { Stored = settings ?? new AppSettings() };
         Settings = new SettingsManager(Store, NullLogger<SettingsManager>.Instance);

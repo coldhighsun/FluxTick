@@ -33,11 +33,6 @@ internal sealed class SettingsFile
     public Dictionary<string, ProviderSettingsFile?>? Providers { get; init; }
 
     /// <summary>
-    /// Gets or sets the order of the data sources.
-    /// </summary>
-    public List<string?>? ProviderOrder { get; init; }
-
-    /// <summary>
     /// Gets or sets the appearance and behavior settings.
     /// </summary>
     public AppearanceFile? Appearance { get; init; }
@@ -89,7 +84,6 @@ internal sealed class SettingsFile
             }
         }
 
-        settings.ProviderOrder.AddRange(NotNull(ProviderOrder, ref repaired));
         settings.Appearance = (Appearance ?? new()).ToSettings(ref repaired);
         settings.General = (General ?? new()).ToSettings(ref repaired);
         settings.Updates = (Updates ?? new()).ToSettings();

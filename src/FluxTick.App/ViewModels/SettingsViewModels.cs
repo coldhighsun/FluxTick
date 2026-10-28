@@ -17,12 +17,12 @@ namespace FluxTick.App.ViewModels;
 public sealed partial class OptionViewModel : ObservableObject
 {
     /// <summary>
-    /// Called when the user committed a valid value.
+    /// Called when the user edited the value.
     /// </summary>
-    private readonly Action _committed;
+    private readonly Action _edited;
 
     /// <summary>
-    /// Suppresses commits while values are set programmatically.
+    /// Suppresses edit handling while values are set programmatically.
     /// </summary>
     private bool _loading;
 
@@ -37,9 +37,10 @@ public sealed partial class OptionViewModel : ObservableObject
     private readonly ProviderDescriptor? _owner;
 
     /// <summary>
-    /// The last valid value the editor held, kept while the user types something invalid.
+    /// The saved value in its stored text form: what the settings hold, whatever the editor shows. A blank value is the
+    /// saved value of a required option that was never given.
     /// </summary>
-    private string? _lastValid;
+    private string _saved = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OptionViewModel"/> class.
@@ -50,17 +51,17 @@ public sealed partial class OptionViewModel : ObservableObject
     /// <param name="stored">
     /// The stored value, or <see langword="null"/> to show the default.
     /// </param>
-    /// <param name="committed">
-    /// The callback invoked when the user commits a valid value.
+    /// <param name="edited">
+    /// The callback invoked when the user edits the value.
     /// </param>
     /// <param name="owner">
     /// The data source that owns the option, used to translate its hint.
     /// </param>
-    public OptionViewModel(ProviderOptionDefinition definition, string? stored, Action committed, ProviderDescriptor? owner = null)
+    public OptionViewModel(ProviderOptionDefinition definition, string? stored, Action edited, ProviderDescriptor? owner = null)
     {
         Definition = definition;
         _owner = owner;
-        _committed = committed;
+        _edited = edited;
         _normalizedDefault = definition.Canonicalize(definition.DefaultValue);
         Load(stored);
     }
@@ -73,7 +74,7 @@ public sealed partial class OptionViewModel : ObservableObject
     /// <summary>
     /// Gets the label.
     /// </summary>
-    public string Label => ProviderText.OptionLabel(Definition);
+    public string Label => Definition.Required ? $"{ProviderText.OptionLabel(Definition)} *" : ProviderText.OptionLabel(Definition);
 
     /// <summary>
     /// Gets the help text, or an empty string.
@@ -86,9 +87,22 @@ public sealed partial class OptionViewModel : ObservableObject
     public string Unit => Definition.Type == ProviderOptionType.Duration ? Loc.Get("Option_SecondsUnit") : string.Empty;
 
     /// <summary>
-    /// Gets a value indicating whether the option is edited as free text or a number.
+    /// Gets a value indicating whether the option is edited as free text.
     /// </summary>
-    public bool IsText => Definition.Type is ProviderOptionType.String or ProviderOptionType.Secret or ProviderOptionType.Int or ProviderOptionType.Duration;
+    public bool IsPlainText => Definition.Type is ProviderOptionType.String or ProviderOptionType.Secret;
+
+    /// <summary>
+    /// Gets a value indicating whether the option is edited as a number, in a box that takes digits only.
+    /// </summary>
+    public bool IsNumber => Definition.Type is ProviderOptionType.Int or ProviderOptionType.Duration;
+
+    /// <summary>
+    /// Gets the kind of number a number option takes: seconds with a point for a duration, a whole number for an integer,
+    /// which may be negative unless its lower bound rules that out.
+    /// </summary>
+    public NumericKind NumberKind => Definition.Type == ProviderOptionType.Duration
+        ? NumericKind.Seconds
+        : Definition.Min is >= 0 ? NumericKind.WholeNumber : NumericKind.SignedWholeNumber;
 
     /// <summary>
     /// Gets the password character for secret options, or <see langword="null"/>.
@@ -140,6 +154,74 @@ public sealed partial class OptionViewModel : ObservableObject
     public partial string Error { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets a value indicating whether the option is required and the saved settings hold no value for it.
+    /// </summary>
+    public bool IsMissingRequired => Definition.IsMissing(_saved);
+
+    /// <summary>
+    /// Gets a value indicating whether the editor differs from the saved value. An invalid input counts as a change.
+    /// </summary>
+    public bool IsDirty => DraftValue != _saved;
+
+    /// <summary>
+    /// Gets the value the editor holds, in its stored text form: blank for a required option that is left blank, and
+    /// <see langword="null"/> when the input is invalid.
+    /// </summary>
+    private string? DraftValue => StoredValue ?? (Definition.IsMissing(Text) ? string.Empty : null);
+
+    /// <summary>
+    /// Shows that a required option has no saved value, when it has none.
+    /// </summary>
+    public void ShowErrorIfMissing()
+    {
+        if (IsMissingRequired)
+        {
+            Error = RequiredText();
+        }
+    }
+
+    /// <summary>
+    /// Checks the value the editor holds before it is saved and shows what is wrong with it.
+    /// </summary>
+    /// <param name="enforceRequired">
+    /// Whether a required option must have a value, as it must for a source that is on.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the value can be saved.
+    /// </returns>
+    public bool Validate(bool enforceRequired)
+    {
+        if (StoredValue is not null || (DraftValue is not null && !enforceRequired))
+        {
+            Error = string.Empty;
+            return true;
+        }
+
+        Error = ErrorText();
+        return false;
+    }
+
+    /// <summary>
+    /// Takes the value the editor holds as the saved value. Call it once the value was checked.
+    /// </summary>
+    public void MarkSaved() => _saved = DraftValue ?? _saved;
+
+    /// <summary>
+    /// Puts the editor back to the saved value.
+    /// </summary>
+    public void Revert() => Load(_saved);
+
+    /// <summary>
+    /// Puts the editor to the built-in default without saving it.
+    /// </summary>
+    public void ResetToDefault()
+    {
+        Apply(Definition.DefaultValue);
+        Error = string.Empty;
+        _edited();
+    }
+
+    /// <summary>
     /// Gets the current value in its stored text form, or <see langword="null"/> when the input is invalid.
     /// </summary>
     public string? StoredValue
@@ -178,32 +260,57 @@ public sealed partial class OptionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Gets the value to persist, or <see langword="null"/> when the option should not be stored because it is at the
-    /// built-in default. While the input is invalid the last valid value is kept, so a half-typed edit never reverts
-    /// a saved setting.
+    /// Gets the saved value to persist, or <see langword="null"/> when the option should not be stored because it is at
+    /// the built-in default. The editor is not consulted, so a draft is never written by accident.
     /// </summary>
-    public string? ValueToPersist
-    {
-        get
-        {
-            var value = StoredValue ?? _lastValid;
-            return value is null || value == _normalizedDefault ? null : value;
-        }
-    }
+    public string? ValueToPersist => _saved == _normalizedDefault ? null : _saved;
 
     /// <summary>
-    /// Sets the editor from a stored value without committing.
+    /// Sets the editor and the saved value from a stored value, without raising an edit.
     /// </summary>
     /// <param name="stored">
     /// The stored value, or <see langword="null"/> to show the default.
     /// </param>
     public void Load(string? stored)
     {
+        var value = Resolve(stored);
+        Apply(value);
+        _saved = Definition.Canonicalize(value);
+        Error = string.Empty;
+    }
+
+    /// <summary>
+    /// Sets the saved value from a stored value and leaves the editor as it is, for an edit that is not saved yet.
+    /// </summary>
+    /// <param name="stored">
+    /// The stored value, or <see langword="null"/> for the default.
+    /// </param>
+    public void SetSaved(string? stored) => _saved = Definition.Canonicalize(Resolve(stored));
+
+    /// <summary>
+    /// Gets the value an option shows for a stored value. Like ProviderOptions, which is what the provider runs with, an
+    /// invalid stored value counts as the default.
+    /// </summary>
+    /// <param name="stored">
+    /// The stored value, or <see langword="null"/> for the default.
+    /// </param>
+    /// <returns>
+    /// The stored value when it is valid, the default otherwise.
+    /// </returns>
+    private string Resolve(string? stored) =>
+        stored is not null && Definition.Validate(stored) is null ? stored : Definition.DefaultValue;
+
+    /// <summary>
+    /// Sets the editor from a stored value without raising an edit.
+    /// </summary>
+    /// <param name="value">
+    /// The stored value.
+    /// </param>
+    private void Apply(string value)
+    {
         _loading = true;
         try
         {
-            // Like ProviderOptions, which is what the provider runs with: an invalid stored value counts as the default.
-            var value = stored is not null && Definition.Validate(stored) is null ? stored : Definition.DefaultValue;
             switch (Definition.Type)
             {
                 case ProviderOptionType.Bool:
@@ -221,9 +328,6 @@ public sealed partial class OptionViewModel : ObservableObject
                     Text = value;
                     break;
             }
-
-            Error = string.Empty;
-            _lastValid = StoredValue;
         }
         finally
         {
@@ -232,28 +336,28 @@ public sealed partial class OptionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Validates a text edit and commits it when valid.
+    /// Handles a text edit.
     /// </summary>
     /// <param name="value">
     /// The new text.
     /// </param>
-    partial void OnTextChanged(string value) => Commit();
+    partial void OnTextChanged(string value) => Edit();
 
     /// <summary>
-    /// Commits a switch change.
+    /// Handles a switch change.
     /// </summary>
     /// <param name="value">
     /// The new value.
     /// </param>
-    partial void OnBoolValueChanged(bool value) => Commit();
+    partial void OnBoolValueChanged(bool value) => Edit();
 
     /// <summary>
-    /// Commits a pick list change.
+    /// Handles a pick list change.
     /// </summary>
     /// <param name="value">
     /// The new selection.
     /// </param>
-    partial void OnSelectedChoiceChanged(string? value) => Commit();
+    partial void OnSelectedChoiceChanged(string? value) => Edit();
 
     /// <summary>
     /// Builds the texts that depend on the language again after the language changed.
@@ -263,9 +367,9 @@ public sealed partial class OptionViewModel : ObservableObject
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(Unit));
-        if (Error.Length > 0 && StoredValue is null)
+        if (Error.Length > 0)
         {
-            Error = ErrorText();
+            Error = StoredValue is null ? ErrorText() : RequiredText();
         }
     }
 
@@ -280,24 +384,32 @@ public sealed partial class OptionViewModel : ObservableObject
         : Definition.Check(Text) is { } problem ? ProviderText.Validation(problem) : Loc.Get("Option_Invalid");
 
     /// <summary>
-    /// Validates the current input and notifies the owner when valid.
+    /// Gets the message for a required value that is missing.
     /// </summary>
-    private void Commit()
+    /// <returns>
+    /// The message in the active language.
+    /// </returns>
+    private static string RequiredText() =>
+        ProviderText.Validation(new OptionValidation(OptionValidationError.Required, "A value is required."));
+
+    /// <summary>
+    /// Handles an edit and tells the owner. An error is cleared as soon as the input is fine, but a new one is not shown
+    /// while the user is still typing, because a value that is on its way to a valid one is not wrong yet; saving checks it
+    /// and shows what is wrong. Nothing is saved here: that takes the owner's save.
+    /// </summary>
+    private void Edit()
     {
         if (_loading)
         {
             return;
         }
 
-        if (StoredValue is not { } valid)
+        if (Error.Length > 0 && DraftValue is not null)
         {
-            Error = ErrorText();
-            return;
+            Error = string.Empty;
         }
 
-        Error = string.Empty;
-        _lastValid = valid;
-        _committed();
+        _edited();
     }
 }
 
@@ -310,6 +422,21 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// Called when the enabled state or an option changed.
     /// </summary>
     private readonly Action<ProviderSettingsViewModel> _changed;
+
+    /// <summary>
+    /// Runs an action after the input that is being handled, for what must not happen inside a binding update.
+    /// </summary>
+    private readonly Action<Action> _later;
+
+    /// <summary>
+    /// Whether an option was edited and not saved, as last announced.
+    /// </summary>
+    private bool _dirty;
+
+    /// <summary>
+    /// Whether a required option had no saved value, as last announced.
+    /// </summary>
+    private bool _missingRequired;
 
     /// <summary>
     /// Suppresses change notifications while loading.
@@ -330,12 +457,16 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// <param name="changed">
     /// The callback invoked when the user changes something.
     /// </param>
-    public ProviderSettingsViewModel(ProviderDescriptor descriptor, Action<ProviderSettingsViewModel> changed)
+    /// <param name="later">
+    /// Runs an action after the input that is being handled, or <see langword="null"/> to run it at once.
+    /// </param>
+    public ProviderSettingsViewModel(ProviderDescriptor descriptor, Action<ProviderSettingsViewModel> changed, Action<Action>? later = null)
     {
         Descriptor = descriptor;
         _changed = changed;
+        _later = later ?? (action => action());
         Options = new ObservableCollection<OptionViewModel>(
-            descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, () => _changed(this), descriptor)));
+            descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, OnOptionEdited, descriptor)));
         foreach (var option in Options)
         {
             option.PropertyChanged += OnOptionPropertyChanged;
@@ -374,10 +505,26 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     public bool HasOptions => Options.Count > 0;
 
     /// <summary>
-    /// Gets a value indicating whether an option of an enabled source currently holds an invalid value.
-    /// The options of a disabled source are hidden, so their errors are not surfaced.
+    /// Gets a value indicating whether an option of a source that is on currently holds an invalid value or lacks a
+    /// required one. A source that is off is not flagged, as it does not run.
     /// </summary>
     public bool HasOptionError => Enabled && Options.Any(o => o.Error.Length > 0);
+
+    /// <summary>
+    /// Gets a value indicating whether the switch was turned on without the values the source needs and is about to go
+    /// back, so that what shows the switch, such as the order of the list, does not follow it.
+    /// </summary>
+    public bool IsEnableRefused { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether a required option has no saved value, so that the source can not be switched on yet.
+    /// </summary>
+    public bool HasMissingRequired => Options.Any(o => o.IsMissingRequired);
+
+    /// <summary>
+    /// Gets a value indicating whether an option was edited and not saved yet.
+    /// </summary>
+    public bool IsDirty => Options.Any(o => o.IsDirty);
 
     /// <summary>
     /// Gets or sets a value indicating whether the provider is in use.
@@ -410,23 +557,101 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     public partial bool StatusBad { get; set; }
 
     /// <summary>
-    /// Puts every option of this source back to its built-in default and saves it when that changes anything.
-    /// The enabled state is kept, and so are secret options such as keys, which are not settings that can be
-    /// "restored" but credentials.
+    /// Puts every option of this source to its built-in default, as an edit that is saved with the others. The enabled
+    /// state is kept, and so are secret options such as keys, which are not settings that can be "restored" but
+    /// credentials.
     /// </summary>
     [RelayCommand]
     public void RestoreDefaults()
     {
-        var before = CollectOptions();
         foreach (var option in Options.Where(o => o.Definition.Type != ProviderOptionType.Secret))
         {
-            option.Load(null);
+            option.ResetToDefault();
+        }
+    }
+
+    /// <summary>
+    /// Checks the edited options and saves them, or opens the card and shows what is wrong. A required value is only
+    /// needed while the source is on.
+    /// </summary>
+    [RelayCommand]
+    public void Save()
+    {
+        if (!IsDirty)
+        {
+            return;
         }
 
-        var after = CollectOptions();
-        if (before.Count != after.Count || before.Any(p => !after.TryGetValue(p.Key, out var value) || value != p.Value))
+        var valid = true;
+        foreach (var option in Options)
         {
-            _changed(this);
+            valid &= option.Validate(Enabled);
+        }
+
+        if (!valid)
+        {
+            IsExpanded = true;
+            return;
+        }
+
+        foreach (var option in Options)
+        {
+            option.MarkSaved();
+        }
+
+        OnOptionEdited();
+        _changed(this);
+    }
+
+    /// <summary>
+    /// Puts the options back to what is saved.
+    /// </summary>
+    [RelayCommand]
+    public void Revert()
+    {
+        foreach (var option in Options)
+        {
+            option.Revert();
+        }
+
+        ShowMissingRequired();
+        OnOptionEdited();
+    }
+
+    /// <summary>
+    /// Shows which required options of a source that is on have no saved value.
+    /// </summary>
+    private void ShowMissingRequired()
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        foreach (var option in Options)
+        {
+            option.ShowErrorIfMissing();
+        }
+    }
+
+    /// <summary>
+    /// Shows the buttons for unsaved edits and the status when an option was edited or saved.
+    /// </summary>
+    private void OnOptionEdited()
+    {
+        var dirty = IsDirty;
+        if (dirty != _dirty)
+        {
+            _dirty = dirty;
+            OnPropertyChanged(nameof(IsDirty));
+        }
+
+        var missing = HasMissingRequired;
+        if (missing != _missingRequired)
+        {
+            _missingRequired = missing;
+            OnPropertyChanged(nameof(HasMissingRequired));
+            UpdateStatus(_status);
         }
     }
 
@@ -441,19 +666,34 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         _loading = true;
         try
         {
-            Enabled = settings.IsProviderEnabled(Descriptor);
+            Enabled = settings.IsProviderSwitchedOn(Descriptor);
             settings.Providers.TryGetValue(Descriptor.Id, out var stored);
             foreach (var option in Options)
             {
                 string? value = null;
                 stored?.Options.TryGetValue(option.Definition.Key, out value);
-                option.Load(value);
+
+                // An edit that was not saved stays, so closing the window never loses it; what it is measured against
+                // follows the settings.
+                if (option.IsDirty)
+                {
+                    option.SetSaved(value);
+                }
+                else
+                {
+                    option.Load(value);
+                }
             }
+
+            // A source that is on but lacks a required value, as after an update that adds one, is flagged and opened.
+            ShowMissingRequired();
         }
         finally
         {
             _loading = false;
         }
+
+        OnOptionEdited();
     }
 
     /// <summary>
@@ -503,6 +743,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         _status = status;
         (StatusText, StatusGood, StatusBad) = status switch
         {
+            _ when Enabled && HasMissingRequired => (Loc.Get("Provider_NeedsSetup"), false, true),
             null => (Loc.Get("Provider_Off"), false, false),
             { State: ProviderConnectionState.Connected } => (Loc.Get("Provider_Connected"), true, false),
             { State: ProviderConnectionState.Idle } => (Loc.Get("Provider_Idle"), false, false),
@@ -521,15 +762,39 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     partial void OnEnabledChanged(bool value)
     {
         OnPropertyChanged(nameof(HasOptionError));
+        UpdateStatus(_status);
         if (_loading)
         {
             return;
         }
 
-        // Show the options of a source the user just switched on, so required settings are not hidden.
-        if (value && HasOptions)
+        // A source that needs a value, such as a key, can not be switched on before the value is saved: the switch goes
+        // back, and the card opens on the field that is missing.
+        if (value && HasMissingRequired)
         {
             IsExpanded = true;
+            foreach (var option in Options)
+            {
+                option.ShowErrorIfMissing();
+            }
+
+            // Not inside this binding update, which the switch is still part of; or it could keep showing the old state.
+            IsEnableRefused = true;
+            _later(() =>
+            {
+                _loading = true;
+                try
+                {
+                    Enabled = false;
+                }
+                finally
+                {
+                    _loading = false;
+                    IsEnableRefused = false;
+                }
+            });
+
+            return;
         }
 
         _changed(this);
@@ -552,6 +817,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasOptionError));
+        UpdateStatus(_status);
         if (HasOptionError)
         {
             IsExpanded = true;
@@ -579,6 +845,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Suppresses saves while values are loaded programmatically.
     /// </summary>
     private bool _loading;
+
+    /// <summary>
+    /// Whether the choices of the asset class filter are being set by the page itself.
+    /// </summary>
+    private bool _selectingProviderClass;
 
     /// <summary>
     /// Whether the desktop shows tray icons. It is assumed until the desktop has answered, which can take a moment on
@@ -664,7 +935,20 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         TrayAssets = new TrayAssetsSettingsViewModel(settings, registry);
         Alerts = new AlertsViewModel(settings, registry, ui);
         Providers = new ObservableCollection<ProviderSettingsViewModel>(
-            registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p))));
+            registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p), ui.PostBackground)));
+        foreach (var provider in Providers)
+        {
+            provider.PropertyChanged += OnProviderPropertyChanged;
+        }
+
+        ProviderClassFilters =
+        [
+            new ProviderClassFilterViewModel(null, OnProviderClassFilterChanged),
+            .. Enum.GetValues<AssetClass>()
+                .Where(c => registry.Descriptors.Any(d => d.Supports(c)))
+                .Select(c => new ProviderClassFilterViewModel(c, OnProviderClassFilterChanged)),
+        ];
+        ProviderClassFilters[0].IsSelected = true;
         market.ProviderStatusChanged += OnProviderStatusChanged;
         Reload();
         StartTrayProbe(trayProbe ?? TrayAvailability.Detect);
@@ -674,7 +958,29 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     protected override void Detach()
     {
         Market.ProviderStatusChanged -= OnProviderStatusChanged;
+        foreach (var provider in Providers)
+        {
+            provider.PropertyChanged -= OnProviderPropertyChanged;
+        }
+
         Alerts.Dispose();
+    }
+
+    /// <summary>
+    /// Puts a data source that was switched on or off in its place in the list.
+    /// </summary>
+    /// <param name="sender">
+    /// The data source entry.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnProviderPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_loading && e.PropertyName == nameof(ProviderSettingsViewModel.Enabled) && sender is not ProviderSettingsViewModel { IsEnableRefused: true })
+        {
+            RebuildFilteredProviders();
+        }
     }
 
     /// <summary>
@@ -752,6 +1058,17 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the data source entries.
     /// </summary>
     public ObservableCollection<ProviderSettingsViewModel> Providers { get; }
+
+    /// <summary>
+    /// Gets the data sources the page lists: those that match the asset class filter, the enabled
+    /// ones first, each group in ascending order of name.
+    /// </summary>
+    public ObservableCollection<ProviderSettingsViewModel> FilteredProviders { get; } = [];
+
+    /// <summary>
+    /// Gets the choices of the asset class filter: all, then each asset class that some data source supports.
+    /// </summary>
+    public IReadOnlyList<ProviderClassFilterViewModel> ProviderClassFilters { get; }
 
     /// <summary>
     /// Gets a value indicating whether the platform can start the app at sign-in.
@@ -1022,7 +1339,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
             SelectedCardSize = current.Appearance.CardSize;
-            ApplyProviderOrder(current.ProviderOrder);
             foreach (var provider in Providers)
             {
                 provider.Load(current);
@@ -1032,6 +1348,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         {
             _loading = false;
         }
+
+        RebuildFilteredProviders();
 
         Groups.Reload();
         TrayAssets.Reload();
@@ -1234,6 +1552,13 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         {
             provider.RefreshLanguage();
         }
+
+        foreach (var filter in ProviderClassFilters)
+        {
+            filter.RefreshLanguage();
+        }
+
+        RebuildFilteredProviders();
     }
 
     /// <summary>
@@ -1287,48 +1612,79 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     }
 
     /// <summary>
-    /// Puts the data sources in the saved order.
+    /// Keeps exactly one choice of the asset class filter checked and shows the data sources it matches. Unchecking the
+    /// checked choice, which the buttons allow, keeps it checked.
     /// </summary>
-    /// <param name="saved">
-    /// The saved order of the provider ids.
+    /// <param name="changed">
+    /// The choice that was checked or unchecked.
     /// </param>
-    private void ApplyProviderOrder(IReadOnlyList<string> saved)
+    private void OnProviderClassFilterChanged(ProviderClassFilterViewModel changed)
     {
-        var byId = Providers.ToDictionary(p => p.Descriptor.Id);
-        var sorted = ProviderOrdering.Sort(byId.Keys, saved);
-        for (var index = 0; index < sorted.Count; index++)
+        if (_selectingProviderClass)
         {
-            var current = Providers.IndexOf(byId[sorted[index]]);
-            if (current != index)
+            return;
+        }
+
+        _selectingProviderClass = true;
+        try
+        {
+            var chosen = changed.IsSelected ? changed : ProviderClassFilters.FirstOrDefault(f => f.IsSelected) ?? changed;
+            foreach (var filter in ProviderClassFilters)
             {
-                Providers.Move(current, index);
+                filter.IsSelected = filter == chosen;
             }
         }
+        finally
+        {
+            _selectingProviderClass = false;
+        }
+
+        RebuildFilteredProviders();
     }
 
     /// <summary>
-    /// Moves the data source that was dragged from one position of the list to another and saves the order.
+    /// Fills <see cref="FilteredProviders"/> with the data sources that match the asset class filter: the enabled ones
+    /// first, each group in ascending order of the displayed name.
     /// </summary>
-    /// <param name="from">
-    /// The original position.
-    /// </param>
-    /// <param name="to">
-    /// The new position; values outside the list are clamped to its ends.
-    /// </param>
-    /// <returns>
-    /// A task that completes once the order is saved.
-    /// </returns>
-    public Task MoveProviderAsync(int from, int to)
+    private void RebuildFilteredProviders()
     {
-        var target = Math.Clamp(to, 0, Providers.Count - 1);
-        if (from < 0 || from >= Providers.Count || from == target)
+        var assetClass = ProviderClassFilters.FirstOrDefault(f => f.IsSelected)?.AssetClass;
+        var matching = Providers
+            .Where(p => assetClass is not { } c || p.Descriptor.Supports(c))
+            .Select(p => (Provider: p, p.Enabled, p.Name))
+            .OrderByDescending(p => p.Enabled)
+            .ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(p => p.Provider)
+            .ToList();
+        var shown = matching.ToHashSet();
+
+        // Only what changed is removed, inserted or moved, so that the cards that stay keep their controls, and with them
+        // the focus and the scroll position.
+        for (var index = FilteredProviders.Count - 1; index >= 0; index--)
         {
-            return Task.CompletedTask;
+            if (!shown.Contains(FilteredProviders[index]))
+            {
+                FilteredProviders.RemoveAt(index);
+            }
         }
 
-        Providers.Move(from, target);
-        var order = Providers.Select(p => p.Descriptor.Id).ToList();
-        return _settings.UpdateAsync(s => s.ProviderOrder = order);
+        for (var index = 0; index < matching.Count; index++)
+        {
+            if (index < FilteredProviders.Count && FilteredProviders[index] == matching[index])
+            {
+                continue;
+            }
+
+            var current = FilteredProviders.IndexOf(matching[index]);
+            if (current < 0)
+            {
+                FilteredProviders.Insert(index, matching[index]);
+            }
+            else
+            {
+                FilteredProviders.Move(current, index);
+            }
+        }
     }
 
     /// <summary>

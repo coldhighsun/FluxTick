@@ -492,13 +492,6 @@ public sealed class AppSettings
     public Dictionary<string, ProviderSettings> Providers { get; init; } = [];
 
     /// <summary>
-    /// Gets or sets the provider ids in the order the user arranged the data sources, which is also their priority: the
-    /// first enabled provider that supports an asset class serves it. A provider that is not in the list comes after those
-    /// that are.
-    /// </summary>
-    public List<string> ProviderOrder { get; set; } = [];
-
-    /// <summary>
     /// Gets or sets the appearance and behavior settings.
     /// </summary>
     public AppearanceSettings Appearance { get; set; } = new();
@@ -624,7 +617,21 @@ public sealed class AppSettings
         JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(this, JsonOptions), JsonOptions)!;
 
     /// <summary>
-    /// Determines whether a provider is enabled, falling back to its descriptor default when no setting exists.
+    /// Determines whether a provider is switched on, falling back to its descriptor default when no setting exists. A
+    /// provider can be switched on and still not run, because a required option has no value; see
+    /// <see cref="IsProviderEnabled"/>.
+    /// </summary>
+    /// <param name="descriptor">
+    /// The provider descriptor.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the provider is switched on.
+    /// </returns>
+    public bool IsProviderSwitchedOn(ProviderDescriptor descriptor) =>
+        Providers.TryGetValue(descriptor.Id, out var settings) ? settings.Enabled : descriptor.EnabledByDefault;
+
+    /// <summary>
+    /// Determines whether a provider should run: it is switched on and every option it requires has a value.
     /// </summary>
     /// <param name="descriptor">
     /// The provider descriptor.
@@ -633,5 +640,34 @@ public sealed class AppSettings
     /// <see langword="true"/> when the provider should run.
     /// </returns>
     public bool IsProviderEnabled(ProviderDescriptor descriptor) =>
-        Providers.TryGetValue(descriptor.Id, out var settings) ? settings.Enabled : descriptor.EnabledByDefault;
+        IsProviderSwitchedOn(descriptor) && HasRequiredOptions(descriptor);
+
+    /// <summary>
+    /// Determines whether every option a provider requires has a value in the settings.
+    /// </summary>
+    /// <param name="descriptor">
+    /// The provider descriptor.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when no required option is missing.
+    /// </returns>
+    private bool HasRequiredOptions(ProviderDescriptor descriptor)
+    {
+        Providers.TryGetValue(descriptor.Id, out var settings);
+        foreach (var option in descriptor.OptionDefinitions)
+        {
+            if (!option.Required)
+            {
+                continue;
+            }
+
+            string? value = null;
+            if (settings is null || !settings.Options.TryGetValue(option.Key, out value) || option.IsMissing(value) || option.Check(value) is not null)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

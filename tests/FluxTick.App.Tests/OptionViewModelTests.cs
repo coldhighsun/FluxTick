@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 
 namespace FluxTick.App.Tests;
@@ -21,6 +22,7 @@ public class OptionViewModelTests
         var option = Create(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10));
 
         option.Text = text;
+        option.MarkSaved();
 
         (option.ValueToPersist is null).Should().Be(expected);
     }
@@ -51,6 +53,7 @@ public class OptionViewModelTests
         var option = Create(new ProviderOptionDefinition("Flag", "Flag", ProviderOptionType.Bool, defaultValue));
 
         option.BoolValue = value;
+        option.MarkSaved();
 
         (option.ValueToPersist is null).Should().Be(expected);
     }
@@ -67,6 +70,7 @@ public class OptionViewModelTests
         var option = Create(new ProviderOptionDefinition("Wait", "Wait", ProviderOptionType.Duration, "00:00:00.5", Min: 0.1, Max: 60));
 
         option.Text = seconds;
+        option.MarkSaved();
 
         (option.ValueToPersist is null).Should().Be(expected);
     }
@@ -82,6 +86,7 @@ public class OptionViewModelTests
         var option = Create(new ProviderOptionDefinition("Mode", "Mode", ProviderOptionType.Choice, "b", Choices: ["a", "b"]));
 
         option.SelectedChoice = choice;
+        option.MarkSaved();
 
         (option.ValueToPersist is null).Should().Be(expected);
     }
@@ -97,6 +102,7 @@ public class OptionViewModelTests
         var option = Create(new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "https://a"));
 
         option.Text = text;
+        option.MarkSaved();
 
         (option.ValueToPersist is null).Should().Be(expected);
     }
@@ -172,6 +178,8 @@ public class OptionViewModelTests
 
         number.Text = "5";
         wait.Text = "5";
+        number.MarkSaved();
+        wait.MarkSaved();
 
         number.ValueToPersist.Should().BeNull();
         wait.ValueToPersist.Should().BeNull();
@@ -191,14 +199,17 @@ public class OptionViewModelTests
         option.Text = text;
 
         option.StoredValue.Should().BeNull();
+        option.Error.Should().BeEmpty("the input may still be on its way to a valid value");
+        option.Validate(enforceRequired: false).Should().BeFalse();
         option.Error.Should().NotBeEmpty();
     }
 
     /// <summary>
-    /// Verifies half-typed or invalid input keeps the last valid value to persist instead of dropping the setting.
+    /// Verifies an edit is a draft: the value to persist stays the saved one, even while the input is invalid, until the
+    /// edit is saved.
     /// </summary>
     [Fact]
-    public void ValueToPersist_WhileTheInputIsInvalid_KeepsTheLastValidValue()
+    public void ValueToPersist_WhileEditing_StaysTheSavedValueUntilSaved()
     {
         var option = new OptionViewModel(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10), "7", () => { });
         option.ValueToPersist.Should().Be("7");
@@ -208,7 +219,84 @@ public class OptionViewModelTests
         option.StoredValue.Should().BeNull();
         option.ValueToPersist.Should().Be("7");
         option.Text = "8";
+        option.ValueToPersist.Should().Be("7");
+        option.MarkSaved();
         option.ValueToPersist.Should().Be("8");
+    }
+
+    /// <summary>
+    /// Verifies the option is dirty exactly when the editor differs from the saved value, and reverting clears it.
+    /// </summary>
+    [Fact]
+    public void IsDirty_FollowsTheEditorAgainstTheSavedValue()
+    {
+        var option = new OptionViewModel(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10), "7", () => { });
+        option.IsDirty.Should().BeFalse();
+
+        option.Text = "abc";
+        option.IsDirty.Should().BeTrue();
+
+        option.Text = "7";
+        option.IsDirty.Should().BeFalse();
+
+        option.Text = "8";
+        option.IsDirty.Should().BeTrue();
+        option.Revert();
+
+        option.Text.Should().Be("7");
+        option.Error.Should().BeEmpty();
+        option.IsDirty.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the owner is told about every edit, valid or not, and not about loading or reverting.
+    /// </summary>
+    [Fact]
+    public void Edited_IsCalledOnEdits_ButNotOnLoadOrRevert()
+    {
+        var edits = 0;
+        var option = new OptionViewModel(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10), "7", () => edits++);
+
+        option.Text = "abc";
+        option.Text = "8";
+        edits.Should().Be(2);
+
+        option.Revert();
+        option.Load("6");
+
+        edits.Should().Be(2);
+    }
+
+    /// <summary>
+    /// Verifies Validate refuses an invalid value, and a blank required one only when it has to be given.
+    /// </summary>
+    [Fact]
+    public void Validate_RequiredBlankValue_IsRefusedOnlyWhenEnforced()
+    {
+        var key = new OptionViewModel(new ProviderOptionDefinition("ApiKey", "Key", ProviderOptionType.Secret, string.Empty, Required: true), null, () => { });
+        var count = Create(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10));
+        count.Text = "abc";
+
+        key.Validate(enforceRequired: false).Should().BeTrue();
+        key.Error.Should().BeEmpty();
+        key.Validate(enforceRequired: true).Should().BeFalse();
+        key.Error.Should().NotBeEmpty();
+        count.Validate(enforceRequired: false).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies resetting to the default is a draft that is not saved.
+    /// </summary>
+    [Fact]
+    public void ResetToDefault_ChangesOnlyTheDraft()
+    {
+        var option = new OptionViewModel(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10), "7", () => { });
+
+        option.ResetToDefault();
+
+        option.Text.Should().Be("5");
+        option.IsDirty.Should().BeTrue();
+        option.ValueToPersist.Should().Be("7");
     }
 
     /// <summary>
@@ -234,4 +322,40 @@ public class OptionViewModelTests
     /// The editor.
     /// </returns>
     private static OptionViewModel Create(ProviderOptionDefinition definition) => new(definition, null, () => { });
+
+    /// <summary>
+    /// Verifies number options are edited in a box that takes digits only, of the kind that suits them, and others in a text box.
+    /// </summary>
+    [Fact]
+    public void NumberOptions_UseANumericBoxOfTheRightKind()
+    {
+        var wait = Create(new ProviderOptionDefinition("Wait", "Wait", ProviderOptionType.Duration, "00:00:05", Min: 1, Max: 60));
+        var count = Create(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10));
+        var offset = Create(new ProviderOptionDefinition("Offset", "Offset", ProviderOptionType.Int, "0", Min: -5, Max: 5));
+        var url = Create(new ProviderOptionDefinition("Url", "Url", ProviderOptionType.String, "https://a"));
+
+        wait.IsNumber.Should().BeTrue();
+        wait.NumberKind.Should().Be(NumericKind.Seconds);
+        count.NumberKind.Should().Be(NumericKind.WholeNumber);
+        offset.NumberKind.Should().Be(NumericKind.SignedWholeNumber);
+        url.IsNumber.Should().BeFalse();
+        url.IsPlainText.Should().BeTrue();
+        count.IsPlainText.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies SetSaved moves what the editor is measured against and leaves the draft alone.
+    /// </summary>
+    [Fact]
+    public void SetSaved_KeepsTheDraftAndFollowsTheSavedValue()
+    {
+        var option = new OptionViewModel(new ProviderOptionDefinition("Count", "Count", ProviderOptionType.Int, "5", Min: 1, Max: 10), "7", () => { });
+        option.Text = "8";
+
+        option.SetSaved("8");
+
+        option.Text.Should().Be("8");
+        option.IsDirty.Should().BeFalse();
+        option.ValueToPersist.Should().Be("8");
+    }
 }

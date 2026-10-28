@@ -150,7 +150,7 @@ Optional descriptor arguments:
 
 - `EnabledByDefault: false` keeps the source off on first run, so the user turns it on in **Settings → Data sources**
   (Tencent, OKX and Simulated do this). Use it for demo sources and for sources that only suit some users.
-- `RequiresApiKey` says the source needs credentials to work.
+- `RequiresApiKey` (read-only) is true when the source has a `Required` option, such as a key.
 - `Homepage` links to the data source or its terms of use.
 
 Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The settings page generates the right editor
@@ -168,8 +168,17 @@ How the settings page stores options, so you know what your declaration promises
   `00:00:05` and `00:00:05.0000000` are the same value), so rewriting such a value in another form never restarts a
   running provider. `String`, `Secret` and `Choice` values are compared as exact text.
 - A stored value that does not validate is treated as the default, in the provider and in the editor alike.
-- Each data source that declares options has a **Restore defaults** button that puts its options back to their declared
-  defaults. `Secret` options (keys, tokens) are left alone, because they are credentials rather than settings.
+- Edits to the options of a source are a draft: the card shows **Save** and **Revert** buttons, and nothing reaches
+  `settings.json` until the user saves, so a running provider restarts once per save, not once per keystroke. Saving
+  checks every option and refuses invalid values. The enable switch takes effect at once. An edit that was not saved is
+  kept when the settings window is closed and opened again.
+- A `String` or `Secret` option declared with `Required: true` (an API key, say) must not be blank while the source is
+  on. A source that has no saved value for one can not be switched on: the switch goes back, and the card opens on the
+  missing field. A source that is switched on in `settings.json` but lacks one (for example after an update adds it) is
+  not started: the settings page opens and flags it, and `AppSettings.IsProviderEnabled` is false for it.
+- Each data source that declares options has a **Restore defaults** button that puts the editors of its options back to
+  their declared defaults, as a draft the user then saves. `Secret` options (keys, tokens) are left alone, because they are
+  credentials rather than settings.
 
 ## 5. Register it
 

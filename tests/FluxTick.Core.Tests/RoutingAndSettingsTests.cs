@@ -93,36 +93,20 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies the order of the data sources the user arranged wins and the others follow in registration order.
+    /// Verifies the providers come in the order they were registered, as the caller orders them for display.
     /// </summary>
     [Fact]
-    public void GetProviders_WithProviderOrder_PutsArrangedFirst()
+    public void GetProviders_WithSeveralProviders_KeepsRegistrationOrder()
     {
         var registry = new ProviderRegistry(
         [
+            new FakeProviderFactory("c", [AssetClass.Crypto]),
             new FakeProviderFactory("a", [AssetClass.Crypto]),
             new FakeProviderFactory("b", [AssetClass.Crypto]),
-            new FakeProviderFactory("c", [AssetClass.Crypto]),
         ]);
         var router = new ProviderRouter(registry);
-        var settings = new AppSettings { ProviderOrder = ["c", "missing", "a"] };
 
-        var providers = router.GetProviders(AssetClass.Crypto, settings);
-
-        providers.Select(p => p.Id).Should().Equal("c", "a", "b");
-        router.GetPreferred(AssetClass.Crypto, settings)!.Id.Should().Be("c");
-    }
-
-    /// <summary>
-    /// Verifies no preferred provider exists when none is enabled for the class.
-    /// </summary>
-    [Fact]
-    public void GetPreferred_WithoutUsableProvider_ReturnsNull()
-    {
-        var registry = new ProviderRegistry([new FakeProviderFactory("a", [AssetClass.Crypto])]);
-        var router = new ProviderRouter(registry);
-
-        router.GetPreferred(AssetClass.Forex, new AppSettings()).Should().BeNull();
+        router.GetProviders(AssetClass.Crypto, new AppSettings()).Select(p => p.Id).Should().Equal("c", "a", "b");
     }
 
     /// <summary>
@@ -140,7 +124,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies settings survive a save/load round trip, including the order of the data sources and option keys.
+    /// Verifies settings survive a save/load round trip and option keys.
     /// </summary>
     [Fact]
     public async Task SaveAsync_ThenLoadAsync_RoundTripsSettings()
@@ -149,7 +133,6 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var settings = new AppSettings();
         settings.Watchlist.Add(new WatchlistEntry { ProviderId = "a", Symbol = "BTC", DisplayName = "Bitcoin", AssetClass = AssetClass.Crypto });
         settings.Providers["a"] = new ProviderSettings { Enabled = false, Options = { ["PollInterval"] = "00:00:09" } };
-        settings.ProviderOrder.AddRange(["b", "a"]);
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.ThemeMode = ThemeMode.Dark;
         settings.Appearance.Language = LanguageMode.ZhCN;
@@ -169,7 +152,6 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded!.Watchlist.Should().ContainSingle().Which.Symbol.Should().Be("BTC");
         loaded.Providers["a"].Enabled.Should().BeFalse();
         loaded.Providers["a"].Options["PollInterval"].Should().Be("00:00:09");
-        loaded.ProviderOrder.Should().Equal("b", "a");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
         loaded.Appearance.Language.Should().Be(LanguageMode.ZhCN);
@@ -344,7 +326,6 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Watchlist.Add(new WatchlistEntry { ProviderId = "p", Symbol = "S", DisplayName = "D", AssetClass = AssetClass.Crypto, GroupId = "g", CostPrice = 2, Quantity = 3, HoldingCurrency = "USD" });
         settings.Alerts.Add(new AlertRule { Id = "r", ProviderId = "p", Symbol = "S", Condition = AlertCondition.PriceBelow, Threshold = 5, Enabled = false, Repeat = true });
         settings.Providers["p"] = new ProviderSettings { Enabled = false, Options = { ["k"] = "v" } };
-        settings.ProviderOrder.Add("p");
         settings.Appearance = new AppearanceSettings
         {
             Opacity = 0.5,
@@ -377,7 +358,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
     /// Verifies a disabled provider is skipped but keeps its place when it is switched on again.
     /// </summary>
     [Fact]
-    public void GetProviders_DisabledProviderInOrder_IsSkipped()
+    public void GetProviders_DisabledProvider_IsSkipped()
     {
         var registry = new ProviderRegistry(
         [
@@ -386,30 +367,30 @@ public sealed class RoutingAndSettingsTests : IDisposable
             new FakeProviderFactory("c", [AssetClass.Crypto]),
         ]);
         var router = new ProviderRouter(registry);
-        var settings = new AppSettings { ProviderOrder = ["c", "b", "a"] };
+        var settings = new AppSettings();
         settings.Providers["c"] = new ProviderSettings { Enabled = false };
 
-        router.GetProviders(AssetClass.Crypto, settings).Select(p => p.Id).Should().Equal("b", "a");
+        router.GetProviders(AssetClass.Crypto, settings).Select(p => p.Id).Should().Equal("a", "b");
 
         settings.Providers["c"].Enabled = true;
 
-        router.GetProviders(AssetClass.Crypto, settings).Select(p => p.Id).Should().Equal("c", "b", "a");
+        router.GetProviders(AssetClass.Crypto, settings).Select(p => p.Id).Should().Equal("a", "b", "c");
     }
 
     /// <summary>
-    /// Verifies the per-class routing of older versions is ignored, and the data sources keep their default order.
+    /// Verifies the per-class routing and the data source order of older versions are ignored.
     /// </summary>
     [Fact]
-    public async Task LoadAsync_WithOldRouting_IgnoresIt()
+    public async Task LoadAsync_WithOldRoutingAndProviderOrder_IgnoresThem()
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "settings.json");
-        await File.WriteAllTextAsync(path, """{ "routing": { "Equity": ["b", "a"], "Crypto": ["c", "a", null] } }""");
+        await File.WriteAllTextAsync(path, """{ "routing": { "Equity": ["b", "a"], "Crypto": ["c", "a", null] }, "providerOrder": ["b", "a"] }""");
         var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
 
         await manager.LoadAsync(new AppSettings());
 
-        manager.Current.ProviderOrder.Should().BeEmpty();
+        manager.Current.Providers.Should().BeEmpty();
     }
 
     /// <summary>
@@ -425,14 +406,13 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var path = Path.Combine(_directory, "settings.json");
         await File.WriteAllTextAsync(
             path,
-            """{ "watchlist": [null], "groups": [null], "alerts": [null], "providers": { "binance": null }, "providerOrder": [null, "binance"] }""");
+            """{ "watchlist": [null], "groups": [null], "alerts": [null], "providers": { "binance": null } }""");
         var manager = new SettingsManager(new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance), NullLogger<SettingsManager>.Instance);
 
         await manager.LoadAsync(new AppSettings());
 
         manager.Current.Watchlist.Should().BeEmpty();
         manager.Current.Providers.Should().BeEmpty();
-        manager.Current.ProviderOrder.Should().Equal("binance");
         manager.Current.Groups.Should().ContainSingle();
     }
 
@@ -983,5 +963,51 @@ public sealed class RoutingAndSettingsTests : IDisposable
             Interlocked.Increment(ref _saves);
             return inner.SaveAsync(settings, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Verifies a provider that is switched on but lacks a required value is not enabled for running, and is once the value
+    /// is there.
+    /// </summary>
+    [Fact]
+    public void IsProviderEnabled_SwitchedOnWithoutRequiredValue_IsFalse()
+    {
+        var descriptor = new ProviderDescriptor(
+            "keyed",
+            "Keyed",
+            "Test",
+            [AssetClass.Commodity],
+            ProviderUpdateMode.Streaming,
+            Options: [new ProviderOptionDefinition("ApiKey", "API key", ProviderOptionType.Secret, string.Empty, Required: true)],
+            EnabledByDefault: false);
+        var settings = new AppSettings();
+        settings.Providers["keyed"] = new ProviderSettings { Enabled = true };
+
+        settings.IsProviderSwitchedOn(descriptor).Should().BeTrue();
+        settings.IsProviderEnabled(descriptor).Should().BeFalse();
+
+        settings.Providers["keyed"].Options["ApiKey"] = "  ";
+
+        settings.IsProviderEnabled(descriptor).Should().BeFalse();
+
+        settings.Providers["keyed"].Options["ApiKey"] = "secret";
+
+        settings.IsProviderEnabled(descriptor).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a provider without required options is enabled exactly when it is switched on.
+    /// </summary>
+    [Fact]
+    public void IsProviderEnabled_WithoutRequiredOptions_FollowsTheSwitch()
+    {
+        var descriptor = new FakeProviderFactory("a", [AssetClass.Crypto]).Descriptor;
+        var settings = new AppSettings();
+
+        settings.IsProviderEnabled(descriptor).Should().BeTrue();
+
+        settings.Providers["a"] = new ProviderSettings { Enabled = false };
+
+        settings.IsProviderEnabled(descriptor).Should().BeFalse();
     }
 }
