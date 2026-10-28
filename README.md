@@ -75,10 +75,17 @@ pick it in the *Add instrument* window or drag the sources into your order of pr
 Grab the latest build from the [Releases](https://github.com/coldhighsun/FluxTick/releases) page:
 
 - **Windows:** `FluxTick-<version>-win-x64-setup.exe` installs for the current user (no administrator rights needed).
-  Uninstalling keeps your settings in `%APPDATA%\FluxTick`. There is no portable build for Windows.
+  Uninstalling keeps your settings in `%APPDATA%\FluxTick`.
+- **Windows (portable):** `FluxTick-<version>-win-x64-portable.zip` contains a single `FluxTick.exe`; unzip it anywhere and run it, no installation needed.
 - **Linux / macOS:** `FluxTick-<version>-linux-x64.zip` / `FluxTick-<version>-osx-arm64.zip`.
 
-The installer is not code-signed, so Windows SmartScreen may warn on first run.
+> **Do not mix the portable build and the installed version on the same machine.** Both share the same settings in
+> `%APPDATA%\FluxTick`, and each registers its own *Launch at startup* entry pointing at its own `FluxTick.exe`, so the
+> two will conflict (the wrong copy may start at sign-in, or the entry may be overwritten). The built-in updater also
+> installs the setup program, so a portable copy that updates itself turns into an installed one. Pick one, and
+> uninstall the installed version (or delete the portable folder) before switching.
+
+The installer and the portable build are not code-signed, so Windows SmartScreen may warn on first run.
 
 On Windows, FluxTick looks for a newer release when it starts and about once a day while it runs (stable releases only, pre-releases are ignored). It then offers to download, verify and install the new setup program, and starts again when done. This can be turned off under Settings → Updates.
 

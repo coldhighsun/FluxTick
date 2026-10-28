@@ -76,10 +76,14 @@
 从 [Releases](https://github.com/coldhighsun/FluxTick/releases) 页面获取最新版本：
 
 - **Windows：** `FluxTick-<版本>-win-x64-setup.exe` 为当前用户安装（无需管理员权限）。卸载时会保留 `%APPDATA%\FluxTick` 中的设置。
-  Windows 不提供免安装版。
+- **Windows（便携版）：** `FluxTick-<版本>-win-x64-portable.zip` 内只有一个 `FluxTick.exe`，解压到任意位置即可运行，无需安装。
 - **Linux / macOS：** `FluxTick-<版本>-linux-x64.zip` / `FluxTick-<版本>-osx-arm64.zip`。
 
-安装程序未做代码签名，首次运行时 Windows SmartScreen 可能会提示。
+> **请勿在同一台电脑上同时使用便携版和安装版。** 两者共用 `%APPDATA%\FluxTick` 中的设置，并且各自注册指向自己
+> `FluxTick.exe` 的*开机自启动*项，会互相冲突（登录时可能启动了错误的那一份，或启动项被覆盖）。内置更新功能
+> 下载的是安装程序，便携版自动更新后也会变成安装版。请二选一；切换前先卸载安装版（或删除便携版文件夹）。
+
+安装程序和便携版均未做代码签名，首次运行时 Windows SmartScreen 可能会提示。
 
 Windows 上，FluxTick 在启动时以及运行期间约每天一次检查新版本（仅检查正式版，忽略预发布版），并提示下载、校验并安装新的安装程序，完成后自动重新启动。可在 设置 → 更新 中关闭。
 
