@@ -12,7 +12,22 @@ namespace FluxTick.Providers.Yahoo;
 /// <param name="History">
 /// Intraday samples, oldest first.
 /// </param>
-internal sealed record YahooChartData(Quote Quote, IReadOnlyList<PricePoint> History);
+/// <param name="Sessions">
+/// Whether the extended sessions are under way, as the chart describes them or, for the US exchanges, as their fixed
+/// lengths give them; <see langword="null"/> when neither tells.
+/// </param>
+internal sealed record YahooChartData(Quote Quote, IReadOnlyList<PricePoint> History, YahooSessions? Sessions = null);
+
+/// <summary>
+/// Whether the extended sessions of the day are under way, for the sessions the chart describes.
+/// </summary>
+/// <param name="InPreMarket">
+/// Whether the pre-market session is under way, or <see langword="null"/> when the chart gives none.
+/// </param>
+/// <param name="InPostMarket">
+/// Whether the post-market session is under way, or <see langword="null"/> when the chart gives none.
+/// </param>
+internal sealed record YahooSessions(bool? InPreMarket, bool? InPostMarket);
 
 /// <summary>
 /// Raised when Yahoo answers with an error object instead of data (unknown symbol, delisted, ...).
@@ -42,6 +57,21 @@ internal static class YahooParser
     /// the Shanghai and Shenzhen markets, whose call auction is from 09:15.
     /// </summary>
     private static readonly TimeSpan OpeningAuction = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// The time zone Yahoo names for the US exchanges.
+    /// </summary>
+    private const string UsTimeZone = "America/New_York";
+
+    /// <summary>
+    /// How long the pre-market session of the US exchanges lasts, up to the open.
+    /// </summary>
+    private static readonly TimeSpan UsPreMarketLength = TimeSpan.FromMinutes(330);
+
+    /// <summary>
+    /// How long the post-market session of the US exchanges lasts, from the close.
+    /// </summary>
+    private static readonly TimeSpan UsPostMarketLength = TimeSpan.FromHours(4);
 
     /// <summary>
     /// Parses a <c>v8/finance/chart</c> response.
@@ -121,7 +151,44 @@ internal static class YahooParser
             Market = ParseMarketState(meta, received),
             TimeIsEstimated = tradeTime is null,
         };
-        return new YahooChartData(quote, ParseHistory(result));
+        return new YahooChartData(quote, ParseHistory(result), ParseSessions(meta, received));
+    }
+
+    /// <summary>
+    /// Tells whether the extended sessions are under way, for those the trading periods of the chart describe.
+    /// </summary>
+    /// <param name="meta">
+    /// The <c>meta</c> object of the chart result.
+    /// </param>
+    /// <param name="now">
+    /// The time to tell the sessions of.
+    /// </param>
+    /// <returns>
+    /// The sessions, or <see langword="null"/> when the chart has no trading periods.
+    /// </returns>
+    private static YahooSessions? ParseSessions(JsonElement meta, DateTimeOffset now)
+    {
+        if (!meta.TryGetProperty("currentTradingPeriod", out var periods) || periods.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        // The US exchanges do not always give the extended periods, but their length is fixed: the pre-market session runs
+        // for five and a half hours up to the open and the post-market session for four hours from the close. Taken from
+        // the regular session of the day, this also holds on a day that closes early. Other exchanges have other hours.
+        var us = meta.TryGetProperty("exchangeTimezoneName", out var zone)
+            && zone.ValueKind == JsonValueKind.String
+            && zone.GetString() == UsTimeZone
+            && TryGetPeriod(periods, "regular", out _);
+        TryGetPeriod(periods, "regular", out var regular);
+        var seconds = now.ToUnixTimeSeconds();
+        return new YahooSessions(
+            TryGetPeriod(periods, "pre", out var pre)
+                ? pre.Contains(seconds)
+                : us ? new TradingPeriod(regular.Start - (long)UsPreMarketLength.TotalSeconds, regular.Start).Contains(seconds) : null,
+            TryGetPeriod(periods, "post", out var post)
+                ? post.Contains(seconds)
+                : us ? new TradingPeriod(regular.End, regular.End + (long)UsPostMarketLength.TotalSeconds).Contains(seconds) : null);
     }
 
     /// <summary>

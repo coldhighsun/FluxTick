@@ -18,14 +18,23 @@ namespace FluxTick.Providers.Common;
 /// <param name="BackOff">
 /// Whether the next cycle should wait longer, for example because the service is rate limiting.
 /// </param>
-public readonly record struct PollOutcome(int Succeeded, int Failed, string? LastError, bool BackOff);
+/// <param name="Problems">
+/// The problem of each instrument that has one, or <see langword="null"/> when the source does not tell them apart. A
+/// source that does lets a problem go away with the instrument it was about.
+/// </param>
+public readonly record struct PollOutcome(
+    int Succeeded,
+    int Failed,
+    string? LastError,
+    bool BackOff,
+    IReadOnlyDictionary<AssetId, string>? Problems = null);
 
 /// <summary>
 /// Base class for sources that poll a service. It owns the polling loop, an immediate poll for newly added
 /// instruments, the delay that doubles while the service pushes back, and the translation of cycle results into
 /// the provider status; derived classes only fetch and publish quotes.
 /// </summary>
-public abstract class PollingProviderBase : MarketDataProviderBase
+public abstract class PollingProviderBase : LoggingProviderBase
 {
     /// <summary>
     /// The number of consecutive failed cycles before the provider reports <see cref="ProviderConnectionState.Failed"/>.
@@ -43,20 +52,9 @@ public abstract class PollingProviderBase : MarketDataProviderBase
     private readonly TimeSpan _interval;
 
     /// <summary>
-    /// The polling loop, or <see langword="null"/> while idle.
+    /// The polling loop, which runs while instruments are subscribed.
     /// </summary>
-    private Task? _loop;
-
-    /// <summary>
-    /// Stops the polling loop without disposing the provider.
-    /// </summary>
-    private CancellationTokenSource? _loopCts;
-
-    /// <summary>
-    /// The token of the current loop, kept apart from <see cref="_loopCts"/> because a token stays usable after its
-    /// source was cancelled and disposed.
-    /// </summary>
-    private CancellationToken _loopToken;
+    private readonly BackgroundLoop _loop;
 
     /// <summary>
     /// The number of consecutive cycles without a single success.
@@ -79,16 +77,11 @@ public abstract class PollingProviderBase : MarketDataProviderBase
     /// The logger.
     /// </param>
     protected PollingProviderBase(ProviderDescriptor descriptor, TimeSpan interval, TimeProvider timeProvider, ILogger logger)
-        : base(descriptor, timeProvider)
+        : base(descriptor, timeProvider, logger)
     {
         _interval = interval;
-        Logger = logger;
+        _loop = new BackgroundLoop(ShutdownToken);
     }
-
-    /// <summary>
-    /// Gets the logger.
-    /// </summary>
-    protected ILogger Logger { get; }
 
     /// <summary>
     /// Fetches the given instruments once and publishes their quotes. An exception that escapes is logged and counts
@@ -122,67 +115,29 @@ public abstract class PollingProviderBase : MarketDataProviderBase
     {
         if (current.Count == 0)
         {
-            await StopLoopAsync().ConfigureAwait(false);
+            await _loop.StopAsync().ConfigureAwait(false);
             SetStatus(ProviderConnectionState.Idle);
             return;
         }
 
-        if (_loop is null)
+        if (!_loop.IsRunning)
         {
-            _loopCts = CancellationTokenSource.CreateLinkedTokenSource(ShutdownToken);
-            _loopToken = _loopCts.Token;
-            var token = _loopToken;
-            _loop = Task.Run(() => RunAsync(token), CancellationToken.None);
+            _loop.Start(RunAsync);
         }
         else if (added.Count > 0)
         {
             // Show new instruments right away instead of at the next tick. The poll belongs to the loop, so stopping the
-            // loop also stops it from reporting a status afterwards. The token is a copy taken when the loop started:
-            // reading it from the source would throw if a concurrent disposal had already released the source.
-            var token = _loopToken;
+            // loop also stops it from reporting a status afterwards.
+            var token = _loop.Token;
             _ = Task.Run(() => PollAndReportAsync(added, token), CancellationToken.None);
         }
     }
 
     /// <inheritdoc />
-    protected override void OnStatusListenerFailed(Exception exception) =>
-        Logger.LogWarning(exception, "A listener of the {Provider} status failed", Descriptor.DisplayName);
-
-    /// <inheritdoc />
     protected override async ValueTask DisposeCoreAsync()
     {
-        await StopLoopAsync().ConfigureAwait(false);
+        await _loop.StopAsync().ConfigureAwait(false);
         await DisposeResourcesAsync().ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Stops the polling loop and waits for it to finish.
-    /// </summary>
-    /// <returns>
-    /// A task that completes when the loop has ended.
-    /// </returns>
-    private async Task StopLoopAsync()
-    {
-        var loop = _loop;
-        var cts = _loopCts;
-        _loop = null;
-        _loopCts = null;
-        if (loop is null || cts is null)
-        {
-            return;
-        }
-
-        await cts.CancelAsync().ConfigureAwait(false);
-        try
-        {
-            await loop.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected.
-        }
-
-        cts.Dispose();
     }
 
     /// <summary>
@@ -200,7 +155,7 @@ public abstract class PollingProviderBase : MarketDataProviderBase
         while (!cancellationToken.IsCancellationRequested)
         {
             var backOff = await PollAndReportAsync(CurrentSubscriptions, cancellationToken).ConfigureAwait(false);
-            delay = backOff ? TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxBackoff.Ticks)) : _interval;
+            delay = backOff ? Backoff.Double(delay, MaxBackoff) : _interval;
             try
             {
                 await Task.Delay(delay, TimeProvider, cancellationToken).ConfigureAwait(false);

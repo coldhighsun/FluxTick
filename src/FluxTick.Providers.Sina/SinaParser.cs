@@ -15,24 +15,29 @@ internal static class SinaParser
     private const string LinePrefix = "var hq_str_";
 
     /// <summary>
-    /// The index of the previous close in a price line.
+    /// The prefix of the codes of currency pairs, such as <c>fx_seurusd</c>.
     /// </summary>
-    private const int PreviousCloseField = 2;
+    public const string ForexPrefix = "fx_";
 
     /// <summary>
-    /// The index of the last price in a price line.
+    /// The prefix of the codes of international commodity futures, such as <c>hf_GC</c>.
     /// </summary>
-    private const int PriceField = 3;
+    public const string FuturesPrefix = "hf_";
 
     /// <summary>
-    /// The index of the quote date in a price line.
+    /// Where the lines of the stocks and indices keep what the app shows.
     /// </summary>
-    private const int DateField = 30;
+    private static readonly FieldLayout StockLayout = new(PreviousClose: 2, Price: 3, Date: 30, Time: 31);
 
     /// <summary>
-    /// The index of the quote time in a price line.
+    /// Where the lines of the currency pairs keep what the app shows; the price is the last one, not the bid or the ask.
     /// </summary>
-    private const int TimeField = 31;
+    private static readonly FieldLayout ForexLayout = new(PreviousClose: 3, Price: 8, Date: 17, Time: 0);
+
+    /// <summary>
+    /// Where the lines of the commodity futures keep what the app shows; the previous close is the previous settlement.
+    /// </summary>
+    private static readonly FieldLayout FuturesLayout = new(PreviousClose: 7, Price: 0, Date: 12, Time: 6);
 
     /// <summary>
     /// The offset of Beijing time, which does not observe daylight saving.
@@ -51,9 +56,31 @@ internal static class SinaParser
     /// The symbol as stored or typed.
     /// </param>
     /// <returns>
-    /// The code to request: a lower-case market followed by the code.
+    /// The code to request: a lower-case market followed by the code, a lower-case currency pair (<c>fx_seurusd</c>) or
+    /// the upper-case code of a future (<c>hf_GC</c>).
     /// </returns>
-    public static string ToRequestCode(string symbol) => symbol.Trim().ToLowerInvariant();
+    public static string ToRequestCode(string symbol)
+    {
+        var code = symbol.Trim();
+        return code.StartsWith(FuturesPrefix, StringComparison.OrdinalIgnoreCase)
+            ? FuturesPrefix + code[FuturesPrefix.Length..].ToUpperInvariant()
+            : code.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Tells which kind of instrument a code is by its prefix.
+    /// </summary>
+    /// <param name="code">
+    /// The code.
+    /// </param>
+    /// <returns>
+    /// <see cref="AssetClass.Forex"/> or <see cref="AssetClass.Commodity"/> for the codes of currency pairs and futures;
+    /// <see langword="null"/> for everything else.
+    /// </returns>
+    public static AssetClass? KindOf(string code) =>
+        code.StartsWith(ForexPrefix, StringComparison.OrdinalIgnoreCase) ? AssetClass.Forex
+        : code.StartsWith(FuturesPrefix, StringComparison.OrdinalIgnoreCase) ? AssetClass.Commodity
+        : null;
 
     /// <summary>
     /// Parses the price lines of a quote service response. Lines for unknown codes are skipped.
@@ -77,30 +104,86 @@ internal static class SinaParser
 
             // Unknown codes answer with an empty body.
             var key = line[LinePrefix.Length..equals].ToLowerInvariant();
-            var fields = body.Split(',');
-            if (fields.Length <= PriceField)
+            if (TryParseBody(key, body) is { } quote)
             {
-                continue;
-            }
-
-            decimal? previous = QuoteText.TryParsePrice(fields[PreviousCloseField], out var prior) && prior > 0m ? prior : null;
-
-            var time = fields.Length > TimeField ? ParseTime(fields[DateField], fields[TimeField]) : null;
-
-            // Before the opening auction, and for a suspended stock, the price is zero; the previous close is then the
-            // price still in force. It is only published with the time the line carries, which tells the app how old
-            // it is; without one it would look current, so the line is skipped.
-            if (QuoteText.TryParsePrice(fields[PriceField], out var last) && last > 0m)
-            {
-                quotes.Add(new ParsedQuote(key, last, previous, time));
-            }
-            else if (previous is { } close && time is not null)
-            {
-                quotes.Add(new ParsedQuote(key, close, previous, time));
+                quotes.Add(quote);
             }
         }
 
         return quotes;
+    }
+
+    /// <summary>
+    /// Parses the lines the stream pushes. They carry the same fields as the lines of the quote service, but without the
+    /// <c>var hq_str_</c> prefix and the quotes: <c>code=field,field,…</c>. Lines for unknown codes are skipped.
+    /// </summary>
+    /// <param name="text">
+    /// One pushed message, one line per instrument.
+    /// </param>
+    /// <returns>
+    /// The quotes found.
+    /// </returns>
+    public static IReadOnlyList<ParsedQuote> ParseStream(string text)
+    {
+        var quotes = new List<ParsedQuote>();
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.Trim().TrimEnd(';');
+            var equals = line.IndexOf('=');
+            if (equals <= 0)
+            {
+                continue;
+            }
+
+            var key = line[..equals].ToLowerInvariant();
+            if (TryParseBody(key, line[(equals + 1)..].Trim('"')) is { } quote)
+            {
+                quotes.Add(quote);
+            }
+        }
+
+        return quotes;
+    }
+
+    /// <summary>
+    /// Parses the fields of one instrument, which are the same in the quote service and in the stream.
+    /// </summary>
+    /// <param name="key">
+    /// The code of the instrument.
+    /// </param>
+    /// <param name="body">
+    /// The comma-separated fields.
+    /// </param>
+    /// <returns>
+    /// The quote, or <see langword="null"/> when the fields carry no price that can be shown.
+    /// </returns>
+    private static ParsedQuote? TryParseBody(string key, string body)
+    {
+        var layout = KindOf(key) switch
+        {
+            AssetClass.Forex => ForexLayout,
+            AssetClass.Commodity => FuturesLayout,
+            _ => StockLayout,
+        };
+        var fields = body.Split(',');
+        if (fields.Length <= Math.Max(layout.Price, layout.PreviousClose))
+        {
+            return null;
+        }
+
+        decimal? previous = QuoteText.TryParsePrice(fields[layout.PreviousClose], out var prior) && prior > 0m ? prior : null;
+
+        var time = fields.Length > Math.Max(layout.Date, layout.Time) ? ParseTime(fields[layout.Date], fields[layout.Time]) : null;
+
+        // Before the opening auction, and for a suspended stock, the price is zero; the previous close is then the
+        // price still in force. It is only published with the time the line carries, which tells the app how old
+        // it is; without one it would look current, so the line is skipped.
+        if (QuoteText.TryParsePrice(fields[layout.Price], out var last) && last > 0m)
+        {
+            return new ParsedQuote(key, last, previous, time);
+        }
+
+        return previous is { } close && time is not null ? new ParsedQuote(key, close, previous, time) : null;
     }
 
     /// <summary>
@@ -180,4 +263,21 @@ internal static class SinaParser
             ? new DateTimeOffset(wallClock.Ticks, BeijingOffset)
             : null;
     }
+
+    /// <summary>
+    /// The positions of the fields the app shows in the line of a kind of instrument.
+    /// </summary>
+    /// <param name="PreviousClose">
+    /// The index of the previous close.
+    /// </param>
+    /// <param name="Price">
+    /// The index of the last price.
+    /// </param>
+    /// <param name="Date">
+    /// The index of the quote date.
+    /// </param>
+    /// <param name="Time">
+    /// The index of the quote time.
+    /// </param>
+    private readonly record struct FieldLayout(int PreviousClose, int Price, int Date, int Time);
 }

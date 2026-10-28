@@ -175,7 +175,6 @@ public class SinaTests
         var request = handler.Requests.Single();
         request.RequestUri!.AbsoluteUri.Should().EndWith("/list=sh600000");
         request.Headers.Referrer.Should().Be(new Uri("https://finance.sina.com.cn/"));
-        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
     }
 
     /// <summary>
@@ -207,6 +206,7 @@ public class SinaTests
         await using var provider = new SinaProvider(
             new SinaProviderFactory().Descriptor,
             new Uri("https://proxy.example.test/hq/"),
+            Unreachable(),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
             new FakeTimeProvider(),
@@ -219,36 +219,182 @@ public class SinaTests
     }
 
     /// <summary>
-    /// Verifies a symbol the service does not know is reported while the others keep updating.
+    /// Lines pushed by the stream, as captured: no <c>var hq_str_</c> prefix and no quotes, one line per instrument.
+    /// </summary>
+    private const string StreamLines =
+        "sh600000=浦发银行,9.800,9.820,9.740,9.930,9.730,9.730,9.740,39963535,393524574.000,300900,9.730,396400,9.720,230300,9.710,520000,9.700,86700,9.690,98500,9.740,73000,9.750,67300,9.760,20600,9.770,39000,9.780,2026-10-28,13:18:21,00,\n"
+        + "sh000001=上证指数,3676.9185,3648.3010,3679.7057,3684.4906,3652.3658,0,0,297554048,522183357436,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2026-10-28,13:19:02,00,\n";
+
+    /// <summary>
+    /// Verifies the lines of the stream are parsed like those of the quote service.
     /// </summary>
     [Fact]
-    public async Task Provider_UnknownSymbol_IsReportedButOthersContinue()
+    public void ParseStream_PushedLines_ReturnPriceReferenceAndBeijingTime()
+    {
+        var quotes = SinaParser.ParseStream(StreamLines);
+
+        quotes.Select(q => q.Key).Should().Equal("sh600000", "sh000001");
+        quotes[0].Price.Should().Be(9.74m);
+        quotes[0].PreviousClose.Should().Be(9.82m);
+        quotes[0].Time.Should().Be(new DateTimeOffset(2026, 10, 28, 13, 18, 21, TimeSpan.FromHours(8)));
+        quotes[1].Price.Should().Be(3679.7057m);
+    }
+
+    /// <summary>
+    /// Verifies text that is not a line of prices is skipped instead of throwing.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("garbage")]
+    [InlineData("=x,1")]
+    [InlineData("sh600000=")]
+    [InlineData("sh600000=name,1,2")]
+    public void ParseStream_NotPriceLines_ReturnsEmpty(string text)
+    {
+        SinaParser.ParseStream(text).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies a symbol the service does not know gives no quote while the others keep updating.
+    /// </summary>
+    [Fact]
+    public async Task Provider_UnknownSymbol_StillPublishesOthers()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
         await using var provider = CreateProvider(handler, new FakeTimeProvider());
         var unknown = new Asset("sina", "sh999999", "?", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([Pufa, unknown]);
-        await TestWait.ReadQuotesAsync(provider, 1);
+        var quotes = await TestWait.ReadQuotesAsync(provider, 1);
 
-        await TestWait.EventuallyAsync(() => provider.Status.Message == "No data for sh999999");
-        provider.Status.State.Should().Be(ProviderConnectionState.Connected);
+        quotes.Single().AssetId.Symbol.Should().Be("sh600000");
     }
 
     /// <summary>
-    /// Verifies the provider reports failure after repeated rejected cycles, as when the referrer is refused.
+    /// Verifies the stream connects with the Origin it insists on and the instruments in the address, and publishes the
+    /// pushed lines under the subscribed symbol.
     /// </summary>
     [Fact]
-    public async Task Provider_RepeatedForbidden_ReportsFailed()
+    public async Task Stream_Connect_SendsOriginAndCodesAndPublishesLines()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        var typed = new Asset("sina", "SH600000", "浦发银行", AssetClass.Equity);
+
+        await provider.SetSubscriptionsAsync([typed]);
+        await TestWait.EventuallyAsync(() => server.RequestUrls.Count == 1);
+        await server.SendAsync(StreamLines);
+
+        var quote = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
+        quote.AssetId.Should().Be(typed.Id);
+        quote.Price.Should().Be(9.74m);
+        quote.Reference.Should().Be(9.82m);
+        server.RequestUrls.Should().Equal("/?list=sh600000");
+        server.Origins.Should().Equal("https://finance.sina.com.cn");
+    }
+
+    /// <summary>
+    /// Verifies a change of the watchlist connects again with the new list.
+    /// </summary>
+    [Fact]
+    public async Task Stream_SubscriptionChange_ConnectsAgainWithTheNewList()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var time = new FakeTimeProvider();
+        await using var provider = CreateProvider(handler, time, server.Uri);
+        var ping = new Asset("sina", "sz000001", "平安银行", AssetClass.Equity);
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => server.ConnectionCount == 1);
+
+        await provider.SetSubscriptionsAsync([Pufa, ping]);
+
+        // The short wait that lets several changes share one reconnect runs on the fake clock.
+        await TestWait.EventuallyAsync(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(1));
+            return server.RequestUrls.Count == 2;
+        });
+        server.RequestUrls.Should().Equal("/?list=sh600000", "/?list=sh600000,sz000001");
+    }
+
+    /// <summary>
+    /// Verifies a new instrument gets its first price from the quote service even while the stream is up, and the
+    /// service is not polled again while the stream is connected.
+    /// </summary>
+    [Fact]
+    public async Task Snapshot_NewInstrument_IsFetchedOnceWhileTheStreamIsUp()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
+        var time = new FakeTimeProvider();
+        await using var provider = CreateProvider(handler, time, server.Uri);
+
+        await provider.SetSubscriptionsAsync([Pufa]);
+        var quote = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        for (var i = 0; i < 4; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromMilliseconds(30));
+        }
+
+        quote.Price.Should().Be(9.81m);
+        handler.Requests.Should().HaveCount(1, "only the snapshot of the new instrument was requested");
+    }
+
+    /// <summary>
+    /// Verifies the quote service takes over while the stream is down, and each failed round doubles the wait.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_StreamDownAndRequestsFail_BackOff()
+    {
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden));
+        var time = new FakeTimeProvider();
+        await using var provider = CreateProvider(handler, time);
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await AdvanceUntilRequestsAsync(handler, time, 2);
+        var elapsed = await AdvanceUntilRequestsAsync(handler, time, 3);
+
+        elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(10), "the 5 second wait doubled");
+    }
+
+    /// <summary>
+    /// Verifies prices that keep arriving from the quote service while the stream is down make the source connected, not
+    /// reconnecting, so alerts and holdings keep working.
+    /// </summary>
+    [Fact]
+    public async Task Status_StreamDownButPollingWorks_IsConnected()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
+        var time = new FakeTimeProvider();
+        await using var provider = CreateProvider(handler, time);
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await AdvanceUntilRequestsAsync(handler, time, 2);
+
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        provider.Status.Message.Should().StartWith("Live stream unavailable");
+    }
+
+    /// <summary>
+    /// Verifies the source is reported as failed when neither the stream nor the quote service delivers, as when the
+    /// referrer is refused.
+    /// </summary>
+    [Fact]
+    public async Task Status_StreamDownAndPollingForbiddenRepeatedly_IsFailed()
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden));
         var time = new FakeTimeProvider();
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
-        await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
 
-        // Every failed cycle doubles the delay, so step the clock far enough to cross each wait.
+        // Every failed round doubles the wait, so step the clock far enough to cross each one.
         await TestWait.EventuallyAsync(() =>
         {
             if (provider.Status.State == ProviderConnectionState.Failed)
@@ -259,6 +405,60 @@ public class SinaTests
             time.Advance(TimeSpan.FromSeconds(30));
             return false;
         });
+    }
+
+    /// <summary>
+    /// Verifies a symbol the service has no data for is shown in the status while the stream is up and the others keep
+    /// updating.
+    /// </summary>
+    [Fact]
+    public async Task Status_SymbolWithoutData_IsShownWhileTheStreamIsUp()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        var unknown = new Asset("sina", "sh999999", "?", AssetClass.Equity);
+
+        await provider.SetSubscriptionsAsync([Pufa, unknown]);
+
+        await TestWait.EventuallyAsync(() => provider.Status is { State: ProviderConnectionState.Connected, Message: "No data for sh999999" });
+    }
+
+    /// <summary>
+    /// Verifies a silent stream whose address names the instruments is dropped and connected again to the same address
+    /// when polling keeps finding newer prices.
+    /// </summary>
+    [Fact]
+    public async Task Stream_SilentWhilePollingFindsNewerPrices_ConnectsAgainToTheSameAddress()
+    {
+        await using var server = LoopbackServer.Start();
+        var round = 0;
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(
+            QuoteLines.Replace("13:13:41", $"13:{13 + Math.Min(Interlocked.Increment(ref round), 40):00}:41", StringComparison.Ordinal)));
+        var time = new FakeTimeProvider();
+        await using var provider = CreateProvider(handler, time, server.Uri);
+        await provider.SetSubscriptionsAsync([Pufa]);
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+
+        await TestWait.EventuallyAsync(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            return server.RequestUrls.Count >= 2;
+        });
+
+        server.RequestUrls.Should().Equal("/?list=sh600000", "/?list=sh600000");
+    }
+
+    /// <summary>
+    /// Verifies the descriptor now describes a streaming source with an endpoint for the stream.
+    /// </summary>
+    [Fact]
+    public void Descriptor_IsStreamingWithAStreamEndpoint()
+    {
+        var descriptor = new SinaProviderFactory().Descriptor;
+
+        descriptor.UpdateMode.Should().Be(ProviderUpdateMode.Streaming);
+        descriptor.OptionDefinitions.Should().Contain(o => o.Key == SinaProviderFactory.WebSocketUrlKey);
     }
 
     /// <summary>
@@ -363,15 +563,195 @@ public class SinaTests
     /// <param name="time">
     /// The fake clock.
     /// </param>
+    /// <param name="streamUri">
+    /// The stream endpoint; an address nobody listens on when omitted, so the stream is down.
+    /// </param>
     /// <returns>
     /// The provider.
     /// </returns>
-    private static SinaProvider CreateProvider(StubHttpHandler handler, FakeTimeProvider time) =>
+    private static SinaProvider CreateProvider(StubHttpHandler handler, FakeTimeProvider time, Uri? streamUri = null) =>
         new(
             new SinaProviderFactory().Descriptor,
             new Uri("https://quotes.example.test"),
+            streamUri ?? Unreachable(),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
             time,
             NullLogger.Instance);
+
+    /// <summary>
+    /// Lines of a currency pair and a future as captured: the pair has its bid, ask and last price, the future its last
+    /// price first and the previous settlement later.
+    /// </summary>
+    private const string ForexAndFuturesLines = """
+        var hq_str_fx_seurusd="14:11:00,1.111800,1.111900,1.112200,17,1.112600,1.113200,1.111500,1.111800,欧元兑美元即期汇率,-0.040000,-0.000400,0.001528,,1.207800,1.111400,,2026-10-28";
+        var hq_str_hf_GC="4042.168,,4042.000,4042.200,4084.100,4041.800,14:11:08,4074.600,4073.600,0,3,1,2026-10-28,纽约黄金,0";
+        var hq_str_hf_XAU="4029.27,4060.130,4029.27,4029.62,4070.74,4028.56,14:11:00,4060.13,4061.17,0,0,0,2026-10-28,伦敦金（现货黄金）";
+        var hq_str_hf_SB="";
+        """;
+
+    /// <summary>
+    /// Verifies a currency pair takes its last price, not the bid, and the previous close from the places of its own layout.
+    /// </summary>
+    [Fact]
+    public void ParseQuotes_CurrencyPair_ReturnsLastPriceAndPreviousClose()
+    {
+        var quote = SinaParser.ParseQuotes(ForexAndFuturesLines).Single(q => q.Key == "fx_seurusd");
+
+        quote.Price.Should().Be(1.1118m);
+        quote.PreviousClose.Should().Be(1.1122m);
+        quote.Time.Should().Be(new DateTimeOffset(2026, 10, 28, 14, 11, 0, TimeSpan.FromHours(8)));
+    }
+
+    /// <summary>
+    /// Verifies a future takes its price first, the previous settlement as previous close, and its time and date from the
+    /// places of its own layout, also when the second field is filled as it is for London spot gold.
+    /// </summary>
+    [Fact]
+    public void ParseQuotes_Futures_ReturnPriceAndPreviousSettlement()
+    {
+        var quotes = SinaParser.ParseQuotes(ForexAndFuturesLines);
+
+        var gold = quotes.Single(q => q.Key == "hf_gc");
+        gold.Price.Should().Be(4042.168m);
+        gold.PreviousClose.Should().Be(4074.6m);
+        gold.Time.Should().Be(new DateTimeOffset(2026, 10, 28, 14, 11, 8, TimeSpan.FromHours(8)));
+        quotes.Single(q => q.Key == "hf_xau").Price.Should().Be(4029.27m);
+        quotes.Should().NotContain(q => q.Key == "hf_sb", "the service has no data for that code");
+    }
+
+    /// <summary>
+    /// Verifies the stream pushes currency pairs and futures in the same lines.
+    /// </summary>
+    [Fact]
+    public void ParseStream_CurrencyPairAndFuture_AreParsed()
+    {
+        const string text = "fx_susdcny=14:13:01,6.6674000000,6.6675000000,6.6670000000,34.0000000000,6.6672000000,6.6701000000,6.6667000000,6.6674000000,在岸人民币,0.0060,0.0004,0.0034,此行情由新浪财经计算得出,0.0000,0.0000,,2026-10-28\n"
+            + "hf_CL=101.532,,101.520,101.530,101.640,99.750,14:11:09,99.900,100.170,0,1,2,2026-10-28,纽约原油,0\n";
+
+        var quotes = SinaParser.ParseStream(text);
+
+        quotes.Select(q => (q.Key, q.Price, q.PreviousClose)).Should().Equal(
+            ("fx_susdcny", 6.6674m, 6.667m),
+            ("hf_cl", 101.532m, 99.9m));
+    }
+
+    /// <summary>
+    /// Verifies the codes are brought into the case the service answers to: futures upper, everything else lower.
+    /// </summary>
+    [Theory]
+    [InlineData("SH600000", "sh600000")]
+    [InlineData("FX_SEURUSD", "fx_seurusd")]
+    [InlineData("hf_gc", "hf_GC")]
+    [InlineData(" HF_Xau ", "hf_XAU")]
+    public void ToRequestCode_Symbol_UsesTheCaseOfTheService(string symbol, string expected)
+    {
+        SinaParser.ToRequestCode(symbol).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies a search for a class the service cannot search needs no request and finds the listed instruments by code,
+    /// name or English name.
+    /// </summary>
+    [Theory]
+    [InlineData("gold", AssetClass.Commodity, new[] { "hf_GC", "hf_XAU" })]
+    [InlineData("黄金", AssetClass.Commodity, new[] { "hf_GC", "hf_XAU" })]
+    [InlineData("hf_c", AssetClass.Commodity, new[] { "hf_CL", "hf_CAD", "hf_C", "hf_CT" })]
+    [InlineData("eur", AssetClass.Forex, new[] { "fx_seurusd", "fx_seurcny", "fx_seurjpy" })]
+    [InlineData("gold", AssetClass.Forex, new string[0])]
+    public async Task Provider_SearchCurrencyPairsAndFutures_UsesTheList(string query, AssetClass assetClass, string[] expected)
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(SearchResponse));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+
+        var found = await ((ISymbolSearchProvider)provider).SearchAsync(query, assetClass);
+
+        found.Select(a => a.Symbol).Should().BeEquivalentTo(expected);
+        found.Should().OnlyContain(a => a.AssetClass == assetClass);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies a search without a class asks the service for stocks and adds the listed instruments.
+    /// </summary>
+    [Fact]
+    public async Task Provider_SearchWithoutClass_AddsTheListToTheStocks()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(SearchResponse));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+
+        var found = await ((ISymbolSearchProvider)provider).SearchAsync("gold", null);
+
+        found.Select(a => a.Symbol).Should().Equal("sh000001", "sz000001", "sz399006", "hf_GC", "hf_XAU");
+        handler.Requests.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// Verifies a future typed in lower case is requested in the case the service answers to and published under the
+    /// symbol that was subscribed.
+    /// </summary>
+    [Fact]
+    public async Task Provider_FutureTypedInLowerCase_IsRequestedAndPublishedUnderTheSubscribedSymbol()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(ForexAndFuturesLines));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        var gold = new Asset("sina", "hf_gc", "纽约黄金", AssetClass.Commodity);
+
+        await provider.SetSubscriptionsAsync([gold]);
+        var quote = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
+
+        quote.AssetId.Should().Be(gold.Id);
+        quote.Price.Should().Be(4042.168m);
+        handler.Requests.Single().RequestUri!.AbsoluteUri.Should().EndWith("/list=hf_GC");
+    }
+
+    /// <summary>
+    /// Verifies the descriptor offers currency pairs and commodities too.
+    /// </summary>
+    [Fact]
+    public void Descriptor_OffersCurrencyPairsAndCommodities()
+    {
+        new SinaProviderFactory().Descriptor.SupportedAssetClasses.Should().Contain([AssetClass.Forex, AssetClass.Commodity]);
+    }
+
+    /// <summary>
+    /// Gets an address nobody listens on, so the stream cannot connect.
+    /// </summary>
+    /// <returns>
+    /// A WebSocket address on a free local port.
+    /// </returns>
+    private static Uri Unreachable() => new($"ws://127.0.0.1:{TestWait.FreePort()}/");
+
+    /// <summary>
+    /// Advances the fake clock in one-second steps until the stub has received a number of requests, and returns how much
+    /// fake time that took.
+    /// </summary>
+    /// <param name="handler">
+    /// The stub that counts requests.
+    /// </param>
+    /// <param name="time">
+    /// The fake clock the provider waits on.
+    /// </param>
+    /// <param name="requests">
+    /// The request count to wait for.
+    /// </param>
+    /// <returns>
+    /// The fake time that passed.
+    /// </returns>
+    private static async Task<TimeSpan> AdvanceUntilRequestsAsync(StubHttpHandler handler, FakeTimeProvider time, int requests)
+    {
+        var start = time.GetUtcNow();
+        await TestWait.EventuallyAsync(() =>
+        {
+            if (handler.Requests.Count >= requests)
+            {
+                return true;
+            }
+
+            time.Advance(TimeSpan.FromSeconds(1));
+            return false;
+        });
+
+        return time.GetUtcNow() - start;
+    }
 }
