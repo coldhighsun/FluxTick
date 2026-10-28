@@ -7,7 +7,8 @@ using Avalonia.Platform;
 namespace FluxTick.App.Views;
 
 /// <summary>
-/// The base of the windows that open modally beside the main window, such as settings and add instrument.
+/// The base of the windows that open modally in the middle of the screen of the main window, such as settings and add
+/// instrument.
 /// They have a fixed width, a resizable height and only a close button.
 /// </summary>
 public class ToolWindow : Window
@@ -55,7 +56,7 @@ public class ToolWindow : Window
     }
 
     /// <summary>
-    /// Shows the window modally beside the owner, limited to the screen the owner is on.
+    /// Shows the window modally in the middle of the screen the owner is on, limited to that screen.
     /// </summary>
     /// <param name="owner">
     /// The main window, which cannot be used until this window is closed.
@@ -63,7 +64,7 @@ public class ToolWindow : Window
     /// <returns>
     /// A task that completes when the window is closed.
     /// </returns>
-    public Task ShowBesideAsync(Window owner)
+    public Task ShowCenteredAsync(Window owner)
     {
         var screen = owner.Screens.ScreenFromWindow(owner) ?? owner.Screens.Primary;
         if (screen is not null)
@@ -72,8 +73,8 @@ public class ToolWindow : Window
 
             // Place it before it is shown with the expected size so it does not appear elsewhere first,
             // then correct it once the real frame size is known.
-            PlaceBeside(owner, screen, new Size(Width, PlacementHeight()));
-            Opened += (_, _) => PlaceBeside(owner, screen, FrameSize ?? Bounds.Size);
+            PlaceInMiddle(screen, new Size(Width, PlacementHeight()));
+            Opened += (_, _) => PlaceInMiddle(screen, FrameSize ?? Bounds.Size);
         }
 
         return ShowDialog(owner);
@@ -81,17 +82,17 @@ public class ToolWindow : Window
 
     /// <summary>
     /// Shows the window on its own in the middle of the primary screen, without an owner and without blocking anything,
-    /// for when there is no main window to open it beside.
+    /// for when there is no main window to open it over.
     /// </summary>
     public void ShowStandalone()
     {
         if (Screens.Primary is { } screen)
         {
             LimitToScreen(screen);
-            Position = ToolWindowPlacement.Center(PixelSize.FromSize(new Size(Width, PlacementHeight()), screen.Scaling), screen.WorkingArea);
+            Position = ToolWindowPlacement.CenterOnScreen(new Size(Width, PlacementHeight()), screen.Scaling, screen.WorkingArea);
 
             // A window that sizes itself to its content only knows its height once it is shown.
-            Opened += (_, _) => Position = ToolWindowPlacement.Center(PixelSize.FromSize(FrameSize ?? Bounds.Size, screen.Scaling), screen.WorkingArea);
+            Opened += (_, _) => Position = ToolWindowPlacement.CenterOnScreen(FrameSize ?? Bounds.Size, screen.Scaling, screen.WorkingArea);
         }
 
         Show();
@@ -150,30 +151,14 @@ public class ToolWindow : Window
     }
 
     /// <summary>
-    /// Moves the window beside the owner.
+    /// Moves the window to the middle of the work area of a screen.
     /// </summary>
-    /// <param name="owner">
-    /// The main window.
-    /// </param>
     /// <param name="screen">
     /// The screen the owner is on.
     /// </param>
     /// <param name="size">
     /// The size of the window in device independent pixels.
     /// </param>
-    private void PlaceBeside(Window owner, Screen screen, Size size)
-    {
-        var scale = screen.Scaling;
-        var pixelSize = PixelSize.FromSize(size, scale);
-
-        // A full screen owner fills the screen, so there is no side to open on: the window goes to the middle instead.
-        if (owner.WindowState == WindowState.FullScreen)
-        {
-            Position = ToolWindowPlacement.Center(pixelSize, screen.Bounds);
-            return;
-        }
-
-        var ownerBounds = new PixelRect(owner.Position, PixelSize.FromSize(owner.Bounds.Size, scale));
-        Position = ToolWindowPlacement.Place(ownerBounds, pixelSize, screen.WorkingArea);
-    }
+    private void PlaceInMiddle(Screen screen, Size size) =>
+        Position = ToolWindowPlacement.CenterOnScreen(size, screen.Scaling, screen.WorkingArea);
 }

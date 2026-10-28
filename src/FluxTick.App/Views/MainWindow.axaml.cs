@@ -829,7 +829,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            await window.ShowBesideAsync(this);
+            await window.ShowCenteredAsync(this);
         }
         catch (Exception ex)
         {
