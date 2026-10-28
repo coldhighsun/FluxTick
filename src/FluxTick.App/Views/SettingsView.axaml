@@ -149,6 +149,13 @@
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_MarketStatus}" />
+                    <TextBlock Text="{loc:T Settings_MarketStatusHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding ShowMarketStatus}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Theme}" />
                     <TextBlock Text="{loc:T Settings_ThemeHint}" Classes="muted" FontSize="11" />
                   </StackPanel>

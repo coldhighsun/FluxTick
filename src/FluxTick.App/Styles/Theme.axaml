@@ -63,6 +63,10 @@
   <Style Selector="TextBlock.warn">
     <Setter Property="Foreground" Value="{DynamicResource WarnBrush}" />
   </Style>
+  <!-- A status that is no fault, such as a market that is shut, is not drawn as a warning. -->
+  <Style Selector="TextBlock.warn.muted">
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
   <Style Selector="TextBlock.up">
     <Setter Property="Foreground" Value="{DynamicResource UpBrush}" />
   </Style>

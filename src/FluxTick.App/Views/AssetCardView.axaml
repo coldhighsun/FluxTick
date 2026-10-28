@@ -24,6 +24,9 @@
           <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
             StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center"
             IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
+          <Border Classes="chip" VerticalAlignment="Center" IsVisible="{Binding HasMarketBadge}">
+            <TextBlock Text="{Binding MarketBadgeText}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
+          </Border>
           <Border Classes="chip" VerticalAlignment="Center">
             <TextBlock Text="{Binding ClassLabel}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
           </Border>
@@ -76,7 +79,7 @@
         <StackPanel Grid.Column="1" Classes="detail" VerticalAlignment="Bottom" Margin="6,0,0,1">
           <TextBlock Text="{Binding ChangeText}" Classes="mono change" IsVisible="{Binding !HasStatus}" HorizontalAlignment="Right"
                      Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
-          <TextBlock Text="{Binding StatusText}" Classes="warn change" IsVisible="{Binding HasStatus}" HorizontalAlignment="Right" />
+          <TextBlock Text="{Binding StatusText}" Classes="warn change" Classes.muted="{Binding StatusIsNeutral}" IsVisible="{Binding HasStatus}" HorizontalAlignment="Right" />
           <Panel Classes="largeonly">
             <TextBlock Text="{Binding ChangeAmountText}" Classes="mono muted" FontSize="11" IsVisible="{Binding !HasStatus}" HorizontalAlignment="Right"
                        Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />

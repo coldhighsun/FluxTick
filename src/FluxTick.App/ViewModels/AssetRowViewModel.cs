@@ -38,6 +38,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     private AssetSnapshot? _lastSnapshot;
 
     /// <summary>
+    /// Whether the prices of the snapshot shown last stopped because the market is shut, so that they still count in a
+    /// total. It is only so while the trading state is shown; with it off the prices are stale again.
+    /// </summary>
+    private bool _isClosingPrice;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AssetRowViewModel"/> class.
     /// </summary>
     /// <param name="asset">
@@ -156,6 +162,26 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial string StatusText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="StatusText"/> only says that the market is shut, which is no
+    /// fault, so that it is not drawn as a warning.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool StatusIsNeutral { get; set; }
+
+    /// <summary>
+    /// Gets or sets the label of the trading state of the market when it is not the regular session (pre-market,
+    /// after hours, break, closed), or an empty string. The chip beside the class shows it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string MarketBadgeText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the trading state of the market is shown.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowMarketStatus { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a counter incremented on every price change; the view plays a flash animation when it changes.
@@ -474,6 +500,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public bool HasStatus => StatusText.Length > 0;
 
     /// <summary>
+    /// Gets a value indicating whether the chip with the trading state of the market is shown.
+    /// </summary>
+    public bool HasMarketBadge => MarketBadgeText.Length > 0;
+
+    /// <summary>
     /// Gets a value indicating whether the prices are not coming in, whatever the reason (stale, reconnecting, failed,
     /// switched off), which the sparkline shows as a gray dashed line from the last price on.
     /// </summary>
@@ -482,9 +513,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// <summary>
     /// Gets a value indicating whether the last price is too old to count in a total: the prices went stale, the source
     /// failed or is off or missing. A source that is reconnecting is not outdated yet, so that a short break does not
-    /// make the holdings of a whole source drop out of the total and come back.
+    /// make the holdings of a whole source drop out of the total and come back. Prices that stopped because the market
+    /// is shut are the closing prices and still count, while the trading state is shown.
     /// </summary>
-    public bool IsPriceOutdated => Health is AssetHealth.Stale or AssetHealth.StaleReconnecting or AssetHealth.Failed or AssetHealth.ProviderDisabled or AssetHealth.ProviderMissing;
+    public bool IsPriceOutdated =>
+        Health is AssetHealth.StaleReconnecting or AssetHealth.Failed or AssetHealth.ProviderDisabled or AssetHealth.ProviderMissing
+        || (Health == AssetHealth.Stale && !_isClosingPrice);
 
     /// <summary>
     /// Gets a value indicating whether the displayed data is not trustworthy and should be dimmed, which it is while the
@@ -501,8 +535,18 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public void Update(AssetSnapshot snapshot)
     {
         _lastSnapshot = snapshot;
+
+        // It is set before the health, whose change notifies IsPriceOutdated, so that no listener sees the two out of step.
+        var closing = ShowMarketStatus && IsClosingPrice(snapshot);
+        var closingChanged = closing != _isClosingPrice;
+        _isClosingPrice = closing;
         Health = snapshot.Health;
-        StatusText = StatusOf(snapshot);
+        if (closingChanged)
+        {
+            OnPropertyChanged(nameof(IsPriceOutdated));
+        }
+
+        ApplyMarketStatus(snapshot);
         Sparkline = snapshot.Sparkline;
         SparklineTimeline = snapshot.Timeline;
 
@@ -563,6 +607,26 @@ public sealed partial class AssetRowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Works out the status text and the market chip from the health and the trading state of the market.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The snapshot.
+    /// </param>
+    private void ApplyMarketStatus(AssetSnapshot snapshot)
+    {
+        var market = ShowMarketStatus ? snapshot.MarketState : MarketState.Unknown;
+
+        // A market that is shut is told as such instead of "stale": the prices stopped because nothing trades, not because
+        // the data is bad. The snapshot only says so while prices are still being received; a source that went quiet keeps
+        // the warning.
+        var shut = _isClosingPrice;
+        var chip = !shut && market is MarketState.PreMarket or MarketState.AfterHours or MarketState.Break or MarketState.Closed;
+        StatusIsNeutral = shut;
+        StatusText = shut ? MarketLabel(snapshot.MarketState) : StatusOf(snapshot);
+        MarketBadgeText = chip ? MarketLabel(market) : string.Empty;
+    }
+
+    /// <summary>
     /// Builds the texts that depend on the language again after the language changed.
     /// </summary>
     /// <param name="providerName">
@@ -599,6 +663,59 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// The new status text.
     /// </param>
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatus));
+
+    /// <summary>
+    /// Notifies bindings of derived properties when the market chip changes.
+    /// </summary>
+    /// <param name="value">
+    /// The new label.
+    /// </param>
+    partial void OnMarketBadgeTextChanged(string value) => OnPropertyChanged(nameof(HasMarketBadge));
+
+    /// <summary>
+    /// Shows the instrument again after the trading state was turned on or off.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnShowMarketStatusChanged(bool value)
+    {
+        if (_lastSnapshot is { } snapshot)
+        {
+            var closing = value && IsClosingPrice(snapshot);
+            if (closing != _isClosingPrice)
+            {
+                _isClosingPrice = closing;
+                OnPropertyChanged(nameof(IsPriceOutdated));
+            }
+
+            ApplyMarketStatus(snapshot);
+            RefreshTooltip();
+        }
+    }
+
+    /// <summary>
+    /// Gets the label of a trading state.
+    /// </summary>
+    /// <param name="state">
+    /// The state.
+    /// </param>
+    /// <returns>
+    /// The label.
+    /// </returns>
+    private static string MarketLabel(MarketState state) => Loc.Get($"MarketState_{state}");
+
+    /// <summary>
+    /// Determines whether the prices of a snapshot stopped because the market is shut, so that they are the closing prices.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The snapshot.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the prices are stale and the market is closed or on a break.
+    /// </returns>
+    private static bool IsClosingPrice(AssetSnapshot snapshot) =>
+        snapshot.Health == AssetHealth.Stale && snapshot.MarketState is MarketState.Closed or MarketState.Break;
 
     /// <summary>
     /// Notifies bindings of derived properties when the health changes.
@@ -670,9 +787,15 @@ public sealed partial class AssetRowViewModel : ObservableObject
             }
         }
 
-        if (small && snapshot.Health != AssetHealth.Live && StatusOf(snapshot) is { Length: > 0 } status)
+        if (small && snapshot.Health != AssetHealth.Live && StatusText.Length > 0)
         {
-            lines.Add(status);
+            lines.Add(StatusText);
+        }
+
+        // The small card has no chip, so its tooltip tells the state of the market.
+        if (small && HasMarketBadge)
+        {
+            lines.Add(MarketBadgeText);
         }
 
         if (!string.IsNullOrEmpty(snapshot.HealthDetail))

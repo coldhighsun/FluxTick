@@ -189,6 +189,37 @@ public class PortfolioTests
     }
 
     /// <summary>
+    /// Verifies that the closing price of a shut market counts in the total, and that turning the trading state off, which
+    /// makes it stale again, works the total out again without waiting for a quote.
+    /// </summary>
+    [Fact]
+    public async Task RefreshPortfolio_ShutMarket_CountsUntilTheTradingStateIsTurnedOff()
+    {
+        var settings = Harness.WatchlistOf(Btc);
+        settings.General.BaseCurrency = "USD";
+        settings.Watchlist[0].CostPrice = 100m;
+        settings.Watchlist[0].Quantity = 1m;
+        settings.Watchlist[0].HoldingCurrency = "USD";
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        // The source reports the market shut and the price is a day old, so it is stale, with nothing moving.
+        h.CryptoFactory.Fake.Emit(new Quote(Btc.Id, 110m, 100m, h.Time.GetUtcNow() - TimeSpan.FromDays(1)) { Market = MarketState.Closed });
+        await Harness.EventuallyAsync(() => h.Main.Rows.Single().StatusIsNeutral);
+        h.Main.RefreshPortfolio();
+
+        h.Main.PortfolioText.Should().Contain("+10.00 USD").And.NotContain(Loc.Get("Portfolio_Stale", 1));
+
+        h.Main.Settings.ShowMarketStatus = false;
+
+        await Harness.EventuallyAsync(() => h.Main.PortfolioText == Loc.Get("Portfolio_Stale", 1));
+
+        h.Main.Settings.ShowMarketStatus = true;
+
+        await Harness.EventuallyAsync(() => h.Main.PortfolioText.Contains("+10.00 USD") && !h.Main.PortfolioText.Contains(Loc.Get("Portfolio_Stale", 1)));
+    }
+
+    /// <summary>
     /// Verifies that a source that is only reconnecting does not make its holdings drop out of the total.
     /// </summary>
     [Fact]
