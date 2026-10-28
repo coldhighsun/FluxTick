@@ -21,7 +21,7 @@ public sealed class ProviderRouter(ProviderRegistry registry)
     /// The current settings.
     /// </param>
     /// <returns>
-    /// The provider descriptors, best first; empty when no enabled provider supports the class.
+    /// The provider descriptors, the best first; empty when no enabled provider supports the class.
     /// </returns>
     public IReadOnlyList<ProviderDescriptor> GetProviders(AssetClass assetClass, AppSettings settings)
     {

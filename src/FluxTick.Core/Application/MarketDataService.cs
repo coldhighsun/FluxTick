@@ -69,6 +69,12 @@ public sealed class MarketDataService : IAsyncDisposable
     private const int MaxEmptyHistoryAnswers = 3;
 
     /// <summary>
+    /// The number of quotes in a row, each traded before the one shown, that are ignored as late answers; the next one is
+    /// taken as a time that really went back.
+    /// </summary>
+    private const int MaxOlderQuotesInARow = 5;
+
+    /// <summary>
     /// How long a regular session has to be under way before no trade today means a holiday, for a source that reports the
     /// state of the market itself. It is longer than the default, as such a source may lag by up to half an hour, and its
     /// last trade is from the day before until the first delayed trade comes in.
@@ -113,7 +119,7 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <summary>
     /// Guards the mutable state below.
     /// </summary>
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     /// <summary>
     /// Serializes <see cref="ApplyAsync"/> calls.
@@ -311,7 +317,7 @@ public sealed class MarketDataService : IAsyncDisposable
     public async Task ApplyAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
         List<string> announced = [];
-        List<AssetId> snapshots = [];
+        List<AssetId> snapshots;
         await _applyLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -348,7 +354,7 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        // Later applies do nothing from here on. The providers are disposed first, which also frees an apply that waits
+        // Later applies to do nothing from here on. The providers are disposed first, which also frees an apply that waits
         // on one of them, so a stuck provider cannot block shutdown.
         _disposed = true;
         await _healthTimer.DisposeAsync().ConfigureAwait(false);
@@ -748,8 +754,7 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             foreach (var state in _assets.Values)
             {
-                if (!state.Seeded
-                    && !state.Seeding
+                if (state is { Seeded: false, Seeding: false }
                     && state.NextSeedAttempt <= now
                     && _slots.TryGetValue(state.Asset.ProviderId, out var slot)
                     && slot.Provider is IHistoryProvider history)
@@ -868,7 +873,8 @@ public sealed class MarketDataService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Applies a quote to the matching instrument and notifies listeners.
+    /// Applies a quote to the matching instrument and notifies listeners. A quote whose trade time is older than the
+    /// one shown is not applied, unless one of the two times is only an estimate.
     /// </summary>
     /// <param name="quote">
     /// The quote to apply.
@@ -884,10 +890,27 @@ public sealed class MarketDataService : IAsyncDisposable
             }
 
             var received = _timeProvider.GetUtcNow();
-            if (state.Latest is { } previous && !previous.TimeIsEstimated && !quote.TimeIsEstimated && quote.Timestamp > previous.Timestamp)
+            if (state.Latest is { TimeIsEstimated: false } previous && !quote.TimeIsEstimated)
             {
-                state.AdvancedAt = received;
+                if (quote.Timestamp < previous.Timestamp && state.OlderQuotesInARow < MaxOlderQuotesInARow)
+                {
+                    // A quote traded before the one shown, such as a snapshot or a poll that finishes after a pushed tick,
+                    // must not move the price back or replace the market state of the newer one. The source did answer,
+                    // which is what the health check reads from the time of the last quote received. A source whose times
+                    // keep running backwards (a clock or time zone that jumped) is not a late answer but a bad time; after
+                    // a few such quotes in a row the price follows it again rather than freezing for good.
+                    state.OlderQuotesInARow++;
+                    state.LastReceivedAt = received;
+                    return;
+                }
+
+                if (quote.Timestamp > previous.Timestamp)
+                {
+                    state.AdvancedAt = received;
+                }
             }
+
+            state.OlderQuotesInARow = 0;
 
             state.Latest = quote;
             state.LastReceivedAt = received;
@@ -1226,6 +1249,11 @@ public sealed class MarketDataService : IAsyncDisposable
         /// while the price has not moved since the first quote. A source that repeats an old price does not move it.
         /// </summary>
         public DateTimeOffset? AdvancedAt { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many quotes in a row were ignored because they were traded before the one shown.
+        /// </summary>
+        public int OlderQuotesInARow { get; set; }
 
         /// <summary>
         /// Gets or sets the last health that was published.

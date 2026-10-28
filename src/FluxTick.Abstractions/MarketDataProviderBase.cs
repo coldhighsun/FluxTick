@@ -35,6 +35,18 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     private IReadOnlyDictionary<AssetId, Asset> _subscriptions = new Dictionary<AssetId, Asset>();
 
     /// <summary>
+    /// The current subscriptions by <see cref="KeyOf"/>, without regard to case, replaced atomically.
+    /// </summary>
+    private IReadOnlyDictionary<string, Asset[]> _byKey = new Dictionary<string, Asset[]>();
+
+    /// <summary>
+    /// How many quotes the current thread has published, so that a derived class can tell whether handling one message
+    /// published a quote, whatever other threads publish meanwhile.
+    /// </summary>
+    [ThreadStatic]
+    private static long _publishedByThisThread;
+
+    /// <summary>
     /// The current status, replaced atomically.
     /// </summary>
     private ProviderStatus _status = new(ProviderConnectionState.Idle);
@@ -91,6 +103,12 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
             }
 
             Volatile.Write(ref _subscriptions, next);
+
+            // Built before the derived class hears of the change, so a message that arrives as soon as it subscribes
+            // already finds its instruments.
+            Volatile.Write(
+                ref _byKey,
+                next.Values.GroupBy(KeyOf, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.OrdinalIgnoreCase));
             await OnSubscriptionsChangedAsync(next.Values.ToArray(), added, removed, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -158,6 +176,81 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     protected virtual ValueTask DisposeCoreAsync() => ValueTask.CompletedTask;
 
     /// <summary>
+    /// Gets the key a pushed or fetched message names an instrument by, which <see cref="PublishToSubscribers"/> looks
+    /// instruments up with. The default is the symbol; override it for a source that names instruments differently from
+    /// how they are stored, for example in another form of the symbol.
+    /// </summary>
+    /// <param name="asset">
+    /// The subscribed instrument.
+    /// </param>
+    /// <returns>
+    /// The key, compared without regard to case.
+    /// </returns>
+    protected virtual string KeyOf(Asset asset) => asset.Symbol;
+
+    /// <summary>
+    /// Publishes a price for the instrument that was subscribed, under the symbol it was subscribed with. A quote
+    /// without a trade time is stamped with the current time and marked as estimated.
+    /// </summary>
+    /// <param name="asset">
+    /// The subscribed instrument.
+    /// </param>
+    /// <param name="price">
+    /// The last price.
+    /// </param>
+    /// <param name="reference">
+    /// The previous close, or <see langword="null"/> when unknown.
+    /// </param>
+    /// <param name="tradedAt">
+    /// When the price was traded, or <see langword="null"/> when the message carries no usable time.
+    /// </param>
+    /// <param name="market">
+    /// The trading state the source reports, or <see langword="null"/> when it reports none.
+    /// </param>
+    protected void Publish(Asset asset, decimal price, decimal? reference, DateTimeOffset? tradedAt, MarketState? market = null) =>
+        Publish(new Quote(asset.Id, price, reference, tradedAt ?? TimeProvider.GetUtcNow())
+        {
+            Market = market,
+            TimeIsEstimated = tradedAt is null,
+        });
+
+    /// <summary>
+    /// Publishes a price for every subscribed instrument whose <see cref="KeyOf"/> is the given key.
+    /// </summary>
+    /// <param name="key">
+    /// The key the message names the instrument by, compared without regard to case.
+    /// </param>
+    /// <param name="price">
+    /// The last price.
+    /// </param>
+    /// <param name="reference">
+    /// The previous close, or <see langword="null"/> when unknown.
+    /// </param>
+    /// <param name="tradedAt">
+    /// When the price was traded, or <see langword="null"/> when the message carries no usable time.
+    /// </param>
+    /// <param name="market">
+    /// The trading state the source reports, or <see langword="null"/> when it reports none.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an instrument with that key is subscribed.
+    /// </returns>
+    protected bool PublishToSubscribers(string key, decimal price, decimal? reference, DateTimeOffset? tradedAt, MarketState? market = null)
+    {
+        if (!Volatile.Read(ref _byKey).TryGetValue(key, out var assets))
+        {
+            return false;
+        }
+
+        foreach (var asset in assets)
+        {
+            Publish(asset, price, reference, tradedAt, market);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Publishes a quote to the reader. Quotes for instruments that are no longer subscribed are dropped.
     /// </summary>
     /// <param name="quote">
@@ -165,10 +258,40 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     /// </param>
     protected void Publish(Quote quote)
     {
-        if (Volatile.Read(ref _subscriptions).ContainsKey(quote.AssetId))
+        if (Volatile.Read(ref _subscriptions).ContainsKey(quote.AssetId) && _channel.Writer.TryWrite(quote))
         {
-            _channel.Writer.TryWrite(quote);
+            _publishedByThisThread++;
+            OnQuotePublished(quote);
         }
+    }
+
+    /// <summary>
+    /// Gets how many quotes the calling thread has published so far. The difference across a call tells whether that call
+    /// published a quote, which quotes published by other threads do not disturb. It only sees quotes published
+    /// synchronously on the calling thread, so a caller that needs it states that as a requirement of its callee.
+    /// </summary>
+    protected static long PublishedByThisThread => _publishedByThisThread;
+
+    /// <summary>
+    /// Tells whether an instrument is subscribed at this moment.
+    /// </summary>
+    /// <param name="id">
+    /// The instrument.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when it is in the current subscriptions.
+    /// </returns>
+    protected bool IsSubscribed(AssetId id) => Volatile.Read(ref _subscriptions).ContainsKey(id);
+
+    /// <summary>
+    /// Called after a quote was accepted by <see cref="Publish(Quote)"/>, on the thread that published it. A derived class
+    /// that wants to follow what is published overrides it; it must be quick and must not throw.
+    /// </summary>
+    /// <param name="quote">
+    /// The quote that was published.
+    /// </param>
+    protected virtual void OnQuotePublished(Quote quote)
+    {
     }
 
     /// <summary>

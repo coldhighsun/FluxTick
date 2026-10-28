@@ -25,35 +25,35 @@ public interface IExchangeRateProvider
 /// <summary>
 /// Options of the <see cref="ExchangeRateService"/>.
 /// </summary>
-public sealed class ExchangeRateOptions
+public sealed record ExchangeRateOptions
 {
     /// <summary>
     /// Gets or sets how often the rates are fetched again.
     /// </summary>
-    public TimeSpan RefreshInterval { get; set; } = TimeSpan.FromHours(1);
+    public TimeSpan RefreshInterval { get; init; } = TimeSpan.FromHours(1);
 
     /// <summary>
     /// Gets or sets the file the latest rates are kept in so that they are available offline, or <see langword="null"/>
     /// to keep them in memory only.
     /// </summary>
-    public string? CachePath { get; set; }
+    public string? CachePath { get; init; }
 
     /// <summary>
     /// Gets or sets how many times a failed fetch is tried again before the service waits for the next refresh interval.
     /// Zero turns retrying off.
     /// </summary>
-    public int RetryAttempts { get; set; } = 6;
+    public int RetryAttempts { get; init; } = 6;
 
     /// <summary>
     /// Gets or sets how long the service waits before the first retry; every further retry waits twice as long as the
     /// one before, up to <see cref="RetryMaxDelay"/>.
     /// </summary>
-    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(30);
+    public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Gets or sets the longest wait between two retries.
     /// </summary>
-    public TimeSpan RetryMaxDelay { get; set; } = TimeSpan.FromMinutes(10);
+    public TimeSpan RetryMaxDelay { get; init; } = TimeSpan.FromMinutes(10);
 }
 
 /// <summary>
@@ -433,16 +433,16 @@ public sealed class ExchangeRateService : IDisposable
     /// <summary>
     /// The content of the cache file.
     /// </summary>
-    private sealed class RateCache
+    private sealed record RateCache
     {
         /// <summary>
         /// Gets or sets when the rates were fetched.
         /// </summary>
-        public DateTimeOffset? UpdatedAt { get; set; }
+        public DateTimeOffset? UpdatedAt { get; init; }
 
         /// <summary>
         /// Gets or sets the rates.
         /// </summary>
-        public Dictionary<string, decimal>? Rates { get; set; }
+        public Dictionary<string, decimal>? Rates { get; init; }
     }
 }

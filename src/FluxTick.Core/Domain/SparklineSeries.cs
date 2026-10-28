@@ -217,7 +217,7 @@ public sealed class SparklineSeries
     }
 
     /// <summary>
-    /// Computes the start of the window that ends at <paramref name="now"/>. A point in a bucket that starts at or before
+    /// Computes the start of the window that ends at <paramref name="now"/>. A point in a bucket that starts at, or before
     /// it is outside the window.
     /// </summary>
     /// <param name="now">

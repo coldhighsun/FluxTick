@@ -676,13 +676,11 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
-    /// Verifies a quote that is not newer than the one before does not count as the price advancing, so a source that
-    /// repeats an old price, or sends an older one, does not silence its report of a shut market.
+    /// Verifies a quote that repeats the time of the one before does not count as the price advancing, so a source that
+    /// repeats an old price does not silence its report of a shut market.
     /// </summary>
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-5)]
-    public async Task MarketState_WhenTheSourceRepeatsOrSendsAnOlderTime_StillBelievesTheShutReport(int minutesLater)
+    [Fact]
+    public async Task MarketState_WhenTheSourceRepeatsATime_StillBelievesTheShutReport()
     {
         var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
@@ -693,10 +691,161 @@ public class MarketDataServiceTests
         yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, old) { Market = MarketState.Closed });
         await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
 
-        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.2m, null, old + TimeSpan.FromMinutes(minutesLater)) { Market = MarketState.Closed });
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1.2m, null, old) { Market = MarketState.Closed });
         await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 1.2m);
 
         service.GetSnapshots().Single().MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a quote traded before the one shown, such as a snapshot that finishes after a pushed tick, moves neither
+    /// the price, nor the market state, nor the sparkline back.
+    /// </summary>
+    [Fact]
+    public async Task Quote_OlderThanTheLatest_IsIgnored()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 6, 0, 0, TimeSpan.Zero));
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var provider = yahoo.Created.Single();
+        var now = time.GetUtcNow();
+
+        provider.Emit(new Quote(apple.Id, 412m, 400m, now) { Market = MarketState.AfterHours });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
+        provider.Emit(new Quote(apple.Id, 399m, 400m, now - TimeSpan.FromHours(8)) { Market = MarketState.Closed });
+        provider.Emit(new Quote(apple.Id, 413m, 400m, now + TimeSpan.FromSeconds(1)) { Market = MarketState.AfterHours });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 413m);
+
+        var snapshot = service.GetSnapshots().Single();
+        snapshot.MarketState.Should().Be(MarketState.AfterHours);
+        snapshot.Sparkline.Should().NotContain(399m);
+    }
+
+    /// <summary>
+    /// Verifies a quote of the very trade that is shown, which comes to tell the market is shut, is applied, and that the
+    /// older quotes that follow still cannot move the price back.
+    /// </summary>
+    [Fact]
+    public async Task Quote_OfTheSameTradeWithAnotherMarketState_IsAppliedAndKeepsThePrice()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 29, 0, 30, 0, TimeSpan.Zero));
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var provider = yahoo.Created.Single();
+        var traded = time.GetUtcNow() - TimeSpan.FromMinutes(5);
+
+        provider.Emit(new Quote(apple.Id, 412m, 400m, traded) { Market = MarketState.AfterHours });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
+        provider.Emit(new Quote(apple.Id, 412m, 400m, traded) { Market = MarketState.Closed });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+        provider.Emit(new Quote(apple.Id, 399m, 400m, traded - TimeSpan.FromHours(8)) { Market = MarketState.Closed });
+        await Task.Delay(TimeSpan.FromMilliseconds(200));
+
+        var snapshot = service.GetSnapshots().Single();
+        snapshot.Quote!.Price.Should().Be(412m);
+        snapshot.MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a late quote still counts as the source answering, so the report of a shut market is not forgotten as
+    /// that of a source that went quiet.
+    /// </summary>
+    [Fact]
+    public async Task Quote_OlderThanTheLatest_KeepsTheMarketStateKnown()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var provider = yahoo.Created.Single();
+        var traded = time.GetUtcNow() - TimeSpan.FromHours(1);
+        provider.Emit(new Quote(apple.Id, 1m, null, traded) { Market = MarketState.Closed });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+
+        time.Advance(TimeSpan.FromSeconds(50));
+        provider.Emit(new Quote(apple.Id, 0.9m, null, traded - TimeSpan.FromMinutes(1)) { Market = MarketState.Closed });
+        await Task.Delay(TimeSpan.FromMilliseconds(200));
+        time.Advance(TimeSpan.FromSeconds(50));
+
+        // A hundred seconds after the quote that is shown, but only fifty after the last answer.
+        var snapshot = service.GetSnapshots().Single();
+        snapshot.Quote!.Price.Should().Be(1m);
+        snapshot.MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a source whose times keep running backwards is believed after a few such quotes in a row, instead of
+    /// leaving the price frozen for good.
+    /// </summary>
+    [Fact]
+    public async Task Quote_OlderThanTheLatestManyTimesInARow_IsTakenAsATimeThatWentBack()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        var now = _time.GetUtcNow();
+        provider.Emit(new Quote(Btc.Id, 105m, 100m, now));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
+
+        for (var i = 1; i <= 6; i++)
+        {
+            provider.Emit(new Quote(Btc.Id, 100m - i, 100m, now - TimeSpan.FromDays(1) + TimeSpan.FromSeconds(i)));
+        }
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 94m);
+    }
+
+    /// <summary>
+    /// Verifies a quote that is newer in between resets the count of late ones.
+    /// </summary>
+    [Fact]
+    public async Task Quote_NewerOneInBetween_ResetsTheCountOfLateOnes()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        var now = _time.GetUtcNow();
+        provider.Emit(new Quote(Btc.Id, 105m, 100m, now));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
+
+        for (var i = 1; i <= 4; i++)
+        {
+            provider.Emit(new Quote(Btc.Id, 50m + i, 100m, now - TimeSpan.FromHours(1)));
+        }
+
+        provider.Emit(new Quote(Btc.Id, 106m, 100m, now + TimeSpan.FromSeconds(1)));
+        for (var i = 1; i <= 4; i++)
+        {
+            provider.Emit(new Quote(Btc.Id, 60m + i, 100m, now - TimeSpan.FromHours(1)));
+        }
+
+        provider.Emit(new Quote(Btc.Id, 107m, 100m, now + TimeSpan.FromSeconds(2)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 107m);
+        service.GetSnapshots().Single().Sparkline.Should().NotContain(51m).And.NotContain(64m);
+    }
+
+    /// <summary>
+    /// Verifies a quote that only carries an estimated time is not held to the order of trade times: its time is when it
+    /// was received, so it always replaces the quote before.
+    /// </summary>
+    [Fact]
+    public async Task Quote_WithAnEstimatedTime_AlwaysReplacesTheLatest()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        var now = _time.GetUtcNow();
+        provider.Emit(new Quote(Btc.Id, 105m, 100m, now));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote is not null);
+
+        provider.Emit(new Quote(Btc.Id, 106m, 100m, now - TimeSpan.FromMinutes(1)) { TimeIsEstimated = true });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote!.Price == 106m);
     }
 
     /// <summary>

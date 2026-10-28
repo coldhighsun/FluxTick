@@ -15,47 +15,47 @@ internal sealed class SettingsFile
     /// <summary>
     /// Gets or sets the tracked instruments.
     /// </summary>
-    public List<WatchlistEntryFile?>? Watchlist { get; set; }
+    public List<WatchlistEntryFile?>? Watchlist { get; init; }
 
     /// <summary>
     /// Gets or sets the user-defined groups.
     /// </summary>
-    public List<WatchGroupFile?>? Groups { get; set; }
+    public List<WatchGroupFile?>? Groups { get; init; }
 
     /// <summary>
     /// Gets or sets the price alert rules.
     /// </summary>
-    public List<AlertRuleFile?>? Alerts { get; set; }
+    public List<AlertRuleFile?>? Alerts { get; init; }
 
     /// <summary>
     /// Gets or sets the settings of each provider.
     /// </summary>
-    public Dictionary<string, ProviderSettingsFile?>? Providers { get; set; }
+    public Dictionary<string, ProviderSettingsFile?>? Providers { get; init; }
 
     /// <summary>
     /// Gets or sets the order of the data sources.
     /// </summary>
-    public List<string?>? ProviderOrder { get; set; }
+    public List<string?>? ProviderOrder { get; init; }
 
     /// <summary>
     /// Gets or sets the appearance and behavior settings.
     /// </summary>
-    public AppearanceFile? Appearance { get; set; }
+    public AppearanceFile? Appearance { get; init; }
 
     /// <summary>
     /// Gets or sets the general settings.
     /// </summary>
-    public GeneralFile? General { get; set; }
+    public GeneralFile? General { get; init; }
 
     /// <summary>
     /// Gets or sets the update check settings.
     /// </summary>
-    public UpdatesFile? Updates { get; set; }
+    public UpdatesFile? Updates { get; init; }
 
     /// <summary>
     /// Gets or sets the window geometry.
     /// </summary>
-    public WindowFile? Window { get; set; }
+    public WindowFile? Window { get; init; }
 
     /// <summary>
     /// Converts what was read to settings.

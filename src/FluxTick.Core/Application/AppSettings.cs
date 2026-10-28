@@ -138,7 +138,7 @@ public sealed class WatchGroup
     /// <summary>
     /// Gets or sets the stable identifier that watchlist entries refer to.
     /// </summary>
-    public string Id { get; set; } = Identifier.New();
+    public string Id { get; init; } = Identifier.New();
 
     /// <summary>
     /// Gets or sets the display name.
@@ -178,22 +178,22 @@ public sealed class WatchlistEntry
     /// <summary>
     /// Gets or sets the provider that serves the instrument.
     /// </summary>
-    public string ProviderId { get; set; } = string.Empty;
+    public string ProviderId { get; init; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the provider-native symbol.
     /// </summary>
-    public string Symbol { get; set; } = string.Empty;
+    public string Symbol { get; init; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the display name.
     /// </summary>
-    public string DisplayName { get; set; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the asset class.
     /// </summary>
-    public AssetClass AssetClass { get; set; }
+    public AssetClass AssetClass { get; init; }
 
     /// <summary>
     /// Gets or sets the id of the <see cref="WatchGroup"/> the item belongs to. It is <see langword="null"/> only
@@ -356,12 +356,12 @@ public sealed class AppearanceSettings
     /// <summary>
     /// Gets or sets the asset classes whose card section is collapsed when grouping by type.
     /// </summary>
-    public List<AssetClass> CollapsedTypes { get; set; } = [];
+    public List<AssetClass> CollapsedTypes { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the ids of the providers whose card section is collapsed when grouping by provider.
     /// </summary>
-    public List<string> CollapsedProviders { get; set; } = [];
+    public List<string> CollapsedProviders { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the order of the asset class sections when grouping by type. Classes that are not listed follow
@@ -474,22 +474,22 @@ public sealed class AppSettings
     /// <summary>
     /// Gets or sets the tracked instruments in display order.
     /// </summary>
-    public List<WatchlistEntry> Watchlist { get; set; } = [];
+    public List<WatchlistEntry> Watchlist { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the user-defined groups in display order.
     /// </summary>
-    public List<WatchGroup> Groups { get; set; } = [];
+    public List<WatchGroup> Groups { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the price alert rules.
     /// </summary>
-    public List<AlertRule> Alerts { get; set; } = [];
+    public List<AlertRule> Alerts { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the settings of each provider keyed by provider id.
     /// </summary>
-    public Dictionary<string, ProviderSettings> Providers { get; set; } = [];
+    public Dictionary<string, ProviderSettings> Providers { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the provider ids in the order the user arranged the data sources, which is also their priority: the
@@ -534,7 +534,7 @@ public sealed class AppSettings
     /// Makes the groups consistent so that every instrument always belongs to a group: when there is no group, a
     /// default one is created, and an instrument without a group, or with a group that no longer exists, joins the
     /// first group. This keeps "no group" from being a state the rest of the application has to deal with. It also
-    /// drops the collapsed states of asset classes and data sources that no instrument on the watchlist uses any more,
+    /// drops the collapsed states of asset classes and data sources that no instrument on the watchlist uses anymore,
     /// so that an old state does not come back months later when an instrument of that kind is added again.
     /// </summary>
     /// <returns>
@@ -574,7 +574,7 @@ public sealed class AppSettings
         // The tray list forgets instruments that left the watchlist and keys that repeat.
         changed |= TrayAssetSelection.Sanitize(General.TrayAssets, Watchlist);
 
-        // A holding needs both a cost and a quantity above zero, otherwise it is not one. A currency is one the app has rates for.
+        // A holding needs both a cost and a quantity above zero, otherwise it is not one. A currency is one of the app has rates for.
         foreach (var entry in Watchlist)
         {
             if (!entry.HasHolding && (entry.CostPrice is not null || entry.Quantity is not null || entry.HoldingCurrency is not null))
@@ -599,17 +599,11 @@ public sealed class AppSettings
 
         // The boss key is a hotkey the app can register, written the usual way, or empty when the user turned it off. Any
         // other text is the default again, as there is nothing to tell what it was meant to be.
-        if (General.BossKey is not { Length: > 0 } bossKey)
+        if (General.BossKey is { Length: > 0 } bossKey)
         {
-            if (General.BossKey is null)
-            {
-                General.BossKey = new GeneralSettings().BossKey;
-                changed = true;
-            }
-        }
-        else
-        {
-            var spelled = HotkeyGesture.TryParse(bossKey, out var gesture) ? gesture.ToString() : new GeneralSettings().BossKey;
+            var spelled = HotkeyGesture.TryParse(bossKey, out var gesture)
+                ? gesture.ToString()
+                : new GeneralSettings().BossKey;
             if (spelled != bossKey)
             {
                 General.BossKey = spelled;
