@@ -1,6 +1,7 @@
 using FluxTick.Abstractions;
 using FluxTick.Core.Application;
 using FluxTick.Core.Tests.TestDoubles;
+using FluxTick.Providers.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -601,7 +602,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenTheMarketOpens_RaisesASnapshotWithTheNewState()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 13, 29, 0, TimeSpan.Zero)); // 09:29 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -637,7 +638,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenTheSourceReportsTheMarketShut_UsesItOverTheHours()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 26, 15, 0, 0, TimeSpan.Zero)); // Thanksgiving, 10:00 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -655,7 +656,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenTheSourceReportsShutAndThePriceAdvances_UsesTheHoursUntilItStops()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -682,7 +683,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenTheSourceRepeatsATime_StillBelievesTheShutReport()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -704,7 +705,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task Quote_OlderThanTheLatest_IsIgnored()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 6, 0, 0, TimeSpan.Zero));
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -730,7 +731,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task Quote_OfTheSameTradeWithAnotherMarketState_IsAppliedAndKeepsThePrice()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 29, 0, 30, 0, TimeSpan.Zero));
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -757,7 +758,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task Quote_OlderThanTheLatest_KeepsTheMarketStateKnown()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -857,7 +858,7 @@ public class MarketDataServiceTests
     [InlineData(50, MarketState.Closed)]
     public async Task MarketState_WhenTheSourceReportsOpenButNothingTradedToday_IsClosedAfterTheGrace(int minutesAfterTheOpen, MarketState expected)
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var open = new DateTimeOffset(2026, 11, 26, 14, 30, 0, TimeSpan.Zero); // Thanksgiving, 09:30 in New York
         var time = new FakeTimeProvider(open + TimeSpan.FromMinutes(minutesAfterTheOpen));
@@ -876,7 +877,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenTheQuoteTimesAreOnlyEstimated_StillBelievesTheShutReport()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -899,7 +900,7 @@ public class MarketDataServiceTests
     [InlineData(MarketState.AfterHours)]
     public async Task MarketState_WhenTheSourceReportsPreMarketOrAfterHours_UsesIt(MarketState reported)
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -916,7 +917,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenTheSourceReportsOpenInTheMiddayBreak_IsBreak()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.ChinaA };
         var share = new Asset("yahoo", "600000.SS", "SPDB", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 4, 0, 0, TimeSpan.Zero)); // 12:00 in Shanghai
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -938,7 +939,7 @@ public class MarketDataServiceTests
     [InlineData("00:02:00", "00:02:20", "00:02:40")] // 150 seconds
     public async Task MarketState_BetweenTwoPollsOfASlowSource_Stays(string interval, string stays, string gone)
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity], pollInterval: interval);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity], pollInterval: interval) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
@@ -961,7 +962,7 @@ public class MarketDataServiceTests
     [Fact]
     public async Task MarketState_WhenNothingIsReceivedAnymore_IsUnknown()
     {
-        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]);
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);

@@ -50,9 +50,25 @@ public abstract class ProviderContractTests<TFactory>
         descriptor.Description.Should().NotBeNullOrWhiteSpace();
         descriptor.SupportedAssetClasses.Should().NotBeEmpty();
         descriptor.OptionDefinitions.Select(o => o.Key).Should().OnlyHaveUniqueItems();
-        foreach (var option in descriptor.OptionDefinitions)
+        foreach (var option in descriptor.OptionDefinitions.Where(o => !o.IsMissing(o.DefaultValue)))
         {
+            // A required option such as an API key has no usable default; the user has to enter it.
             option.Validate(option.DefaultValue).Should().BeNull($"the default of '{option.Key}' must be valid");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a source that needs a value such as an API key is off by default, since it cannot work until the user
+    /// has entered it.
+    /// </summary>
+    [Fact]
+    public void Descriptor_WithRequiredOption_IsOffByDefault()
+    {
+        var descriptor = new TFactory().Descriptor;
+
+        if (descriptor.OptionDefinitions.Any(o => o.Required))
+        {
+            descriptor.EnabledByDefault.Should().BeFalse();
         }
     }
 
@@ -150,3 +166,4 @@ public sealed class KrakenProviderContractTests : ProviderContractTests<KrakenPr
 /// Contract tests for the Bybit provider.
 /// </summary>
 public sealed class BybitProviderContractTests : ProviderContractTests<BybitProviderFactory>;
+

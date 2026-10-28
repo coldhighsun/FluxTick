@@ -213,7 +213,7 @@ public class YahooTests
         var handler = new StubHandler(r => r.RequestUri!.AbsolutePath.EndsWith("MSFT", StringComparison.Ordinal)
             ? Json("""{"chart":{"result":[{"meta":{"regularMarketPrice":null}}],"error":null}}""")
             : Json(ChartJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         await provider.SetSubscriptionsAsync([Aapl, Msft]);
         var quotes = await ReadAsync(provider, 1);
@@ -228,7 +228,7 @@ public class YahooTests
     public async Task Fallback_ServerErrors_BackOff()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -247,13 +247,30 @@ public class YahooTests
     public async Task Provider_Poll_RequestsDailyInterval()
     {
         var handler = new StubHandler(_ => Json(ChartJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         await provider.SetSubscriptionsAsync([Aapl]);
         await ReadAsync(provider, 1);
         await provider.GetHistoryAsync(Aapl);
 
-        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal("?interval=1d&range=1d", "?interval=1m&range=1d");
+        // The history asks for the last 65 minutes by time, not for the whole day.
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal(
+            "?interval=1d&range=1d",
+            "?interval=1m&period1=1699970100&period2=1699974000");
+    }
+
+    /// <summary>
+    /// Verifies a window without trades, which the service answers with a chart that has no candles, gives an empty
+    /// history rather than a failure.
+    /// </summary>
+    [Fact]
+    public async Task Provider_History_WindowWithoutTrades_IsEmpty()
+    {
+        const string noCandles = """{"chart":{"result":[{"meta":{"regularMarketPrice":190.5,"chartPreviousClose":188.0,"regularMarketTime":1700000000}}],"error":null}}""";
+        var handler = new StubHandler(_ => Json(noCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        (await provider.GetHistoryAsync(Aapl)).Should().BeEmpty();
     }
 
     /// <summary>
@@ -289,7 +306,7 @@ public class YahooTests
     {
         const string json = """{"quotes":[{"symbol":"BTC-USD","quoteType":"CRYPTOCURRENCY","shortname":"Bitcoin USD"},{"symbol":"AAPL","quoteType":"EQUITY","shortname":"Apple Inc."}]}""";
         var handler = new StubHandler(_ => Json(json));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var search = (ISymbolSearchProvider)provider;
 
         var all = await search.SearchAsync("b", null);
@@ -307,7 +324,7 @@ public class YahooTests
     public async Task Provider_Subscribed_PublishesQuotes()
     {
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Aapl, Msft]);
@@ -331,7 +348,7 @@ public class YahooTests
             Unreachable(),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
-            new FakeTimeProvider(),
+            new FakeTimeProvider(TradingHoursStart),
             NullLogger.Instance);
 
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -349,7 +366,7 @@ public class YahooTests
         var handler = new StubHandler(r => r.RequestUri!.AbsolutePath.EndsWith("MSFT", StringComparison.Ordinal)
             ? Json(ErrorJson)
             : Json(ChartJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         await provider.SetSubscriptionsAsync([Aapl, Msft]);
         var quotes = await ReadAsync(provider, 1);
@@ -364,7 +381,7 @@ public class YahooTests
     public async Task Fallback_RateLimited_BacksOff()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -439,7 +456,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         var lower = new Asset("yahoo", "aapl", "Apple", AssetClass.Equity);
         await provider.SetSubscriptionsAsync([lower]);
         await server.WaitForMessageAsync("""{"subscribe":["AAPL"]}""");
@@ -462,7 +479,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await server.WaitForMessageAsync("""{"subscribe":["AAPL"]}""");
 
@@ -485,7 +502,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         var tesla = new Asset("yahoo", "TSLA", "Tesla", AssetClass.Equity);
         await provider.SetSubscriptionsAsync([tesla]);
         await server.WaitForMessageAsync("""{"subscribe":["TSLA"]}""");
@@ -504,7 +521,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         var pair = new Asset("yahoo", "EURUSD=X", "EUR/USD", AssetClass.Forex);
         await provider.SetSubscriptionsAsync([pair]);
         await server.WaitForMessageAsync("""{"subscribe":["EURUSD=X"]}""");
@@ -522,7 +539,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await server.WaitForMessageAsync("""{"subscribe":["AAPL"]}""");
 
@@ -541,7 +558,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => Json(ChartJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
 
         await provider.SetSubscriptionsAsync([Aapl]);
         var quote = (await ReadAsync(provider, 1)).Single();
@@ -558,7 +575,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await ReadAsync(provider, 1);
@@ -574,13 +591,145 @@ public class YahooTests
     }
 
     /// <summary>
+    /// Verifies nothing is polled while the market is not open, whether the stream is down: on a weekend, in the
+    /// pre-market, in after hours; the first price of a new instrument is still fetched.
+    /// </summary>
+    [Theory]
+    [InlineData(2023, 11, 18, 15, 0)] // Saturday
+    [InlineData(2023, 11, 15, 13, 0)] // Wednesday 08:00 in New York, the pre-market
+    [InlineData(2023, 11, 14, 22, 0)] // Tuesday 17:00 in New York, after hours
+    public async Task Fallback_MarketNotOpen_DoesNotPoll(int year, int month, int day, int hour, int minute)
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        time.SetUtcNow(new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero));
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await StepAsync(time, TimeSpan.FromMinutes(2));
+
+        handler.Requests.Should().HaveCount(1, "only the snapshot of the new instrument was requested");
+    }
+
+    /// <summary>
+    /// Verifies a crypto instrument is polled whatever the hours of the stock exchanges: the symbol of a crypto pair has no
+    /// suffix, so the hours would call it a US share.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_CryptoOnAWeekend_StillPolls()
+    {
+        var bitcoin = new Asset("yahoo", "BTC-USD", "Bitcoin", AssetClass.Crypto);
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 18, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await provider.SetSubscriptionsAsync([bitcoin]);
+        await EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await AdvanceUntilRequestsAsync(handler, time, 2);
+    }
+
+    /// <summary>
+    /// Verifies a source whose stream is down is not reported as reconnecting for as long as no market is open: nothing is
+    /// polled then, which says nothing about the source.
+    /// </summary>
+    [Fact]
+    public async Task Status_StreamDownAndNoMarketOpen_IsNotReconnecting()
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 18, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await EventuallyAsync(() => handler.Requests.Count == 1);
+
+        await EventuallyAsync(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            return provider.Status.State == ProviderConnectionState.Connected;
+        });
+
+        provider.Status.Message.Should().Contain("no market is open");
+        handler.Requests.Should().HaveCount(1);
+    }
+
+    /// <summary>
+    /// Verifies polling starts again once the market opens.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_MarketOpens_PollsAgain()
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 15, 14, 0, 0, TimeSpan.Zero)); // 09:00 in New York, the pre-market
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await EventuallyAsync(() => handler.Requests.Count == 1);
+        await StepAsync(time, TimeSpan.FromMinutes(1));
+        handler.Requests.Should().HaveCount(1);
+
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 15, 14, 31, 0, TimeSpan.Zero)); // 09:31, the market is open
+
+        await AdvanceUntilRequestsAsync(handler, time, 2);
+    }
+
+    /// <summary>
+    /// Verifies only the instruments whose market is open are polled.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_OnlyOneMarketOpen_PollsOnlyThatOne()
+    {
+        var hongKong = new Asset("yahoo", "0700.HK", "Tencent", AssetClass.Equity);
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        time.SetUtcNow(new DateTimeOffset(2023, 11, 14, 15, 0, 0, TimeSpan.Zero)); // New York open, Hong Kong shut
+        await provider.SetSubscriptionsAsync([Aapl, hongKong]);
+        await EventuallyAsync(() => handler.Requests.Count == 2);
+        var snapshot = handler.Requests.Count;
+
+        await AdvanceUntilRequestsAsync(handler, time, snapshot + 1);
+        await StepAsync(time, TimeSpan.FromSeconds(5));
+
+        handler.Requests.Skip(snapshot).Should().OnlyContain(r => r.RequestUri!.ToString().Contains("AAPL"), "Hong Kong is shut");
+    }
+
+    /// <summary>
+    /// Verifies a connected but quiet stream is polled after five minutes unless the option says otherwise.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_QuietStream_PollsAfterTheConfiguredInterval()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = new YahooProvider(
+            new YahooProviderFactory().Descriptor,
+            new Uri("https://example.test"),
+            server.Uri,
+            TimeSpan.FromSeconds(5),
+            new HttpClient(handler),
+            time,
+            NullLogger.Instance);
+        await provider.SetSubscriptionsAsync([Aapl]);
+        await ReadAsync(provider, 1);
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+
+        await StepAsync(time, TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(30));
+        handler.Requests.Should().HaveCount(1, "the stream has been quiet for less than five minutes");
+
+        await AdvanceUntilRequestsAsync(handler, time, 2);
+    }
+
+    /// <summary>
     /// Verifies the chart API takes over while the stream is down.
     /// </summary>
     [Fact]
     public async Task Fallback_StreamDown_PollsTheChartApi()
     {
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => handler.Requests.Count == 1);
@@ -600,7 +749,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await ReadAsync(provider, 1);
@@ -630,7 +779,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await ReadAsync(provider, 1);
@@ -656,7 +805,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         var lower = new Asset("yahoo", "aapl", "Apple", AssetClass.Equity);
         await provider.SetSubscriptionsAsync([lower, Aapl]);
         await server.WaitForMessageAsync("""{"subscribe":["AAPL"]}""");
@@ -677,7 +826,7 @@ public class YahooTests
     public async Task Status_StreamDownButPollingWorks_IsConnected()
     {
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => handler.Requests.Count == 1);
@@ -695,7 +844,7 @@ public class YahooTests
     public async Task Status_StreamDownAndPollingFailsRepeatedly_IsFailed()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -724,7 +873,7 @@ public class YahooTests
         var handler = new StubHandler(r => r.RequestUri!.AbsolutePath.EndsWith("MSFT", StringComparison.Ordinal)
             ? Json(ErrorJson)
             : Json(ChartJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
 
         await provider.SetSubscriptionsAsync([Aapl, Msft]);
 
@@ -739,7 +888,7 @@ public class YahooTests
     public async Task Stream_SilentWhilePollingFindsNewerPrices_ConnectsAgain()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 5)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -766,7 +915,7 @@ public class YahooTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHandler(_ => Json(ChartJson));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
@@ -790,7 +939,7 @@ public class YahooTests
         // Requests: the snapshot, two newer rounds, one that repeats, two newer rounds, then nothing newer.
         long[] times = [1700000000, 1700000060, 1700000120, 1700000120, 1700000180, 1700000240];
         var handler = new StubHandler(_ => Json(ChartAt(times[Math.Min(Interlocked.Increment(ref round) - 1, times.Length - 1)])));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
@@ -814,7 +963,7 @@ public class YahooTests
             var n = Interlocked.Increment(ref round);
             return n == 3 ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) : Json(ChartAt(1700000000 + (60 * n)));
         });
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
@@ -837,7 +986,7 @@ public class YahooTests
         await using var server = LoopbackServer.Start();
         var round = 0;
         var handler = new StubHandler(_ => Json(ChartAt(1700000000 + (60 * Interlocked.Increment(ref round)))));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
@@ -861,7 +1010,7 @@ public class YahooTests
     public async Task Stream_SilentWhilePollingFindsOnlyOldTrades_StaysConnected()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var round = 0;
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 7200 + Interlocked.Increment(ref round))));
         await using var provider = CreateProvider(handler, time, server.Uri);
@@ -881,7 +1030,7 @@ public class YahooTests
     public async Task Stream_SilentWhileTheSourceReportsTheMarketShut_StaysConnected()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 5, closed: true)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -901,7 +1050,7 @@ public class YahooTests
     public async Task Stream_StillSilentAfterAReconnect_NeedsTwiceAsManyRounds()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 5)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -931,7 +1080,7 @@ public class YahooTests
     public async Task Stream_SpeaksAfterAReconnect_NeedsTheShortWaitAgain()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 5)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -962,7 +1111,7 @@ public class YahooTests
     public async Task Stream_OnlyAcknowledgementsWhilePollingFindsNewerPrices_ConnectsAgain()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 5)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Aapl]);
@@ -995,7 +1144,7 @@ public class YahooTests
     public async Task Stream_AfterHoursSessionEndsWhileTheChartSaysShut_PublishesTheLastTradeAsClosed()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 7200, closed: true)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         var quotes = new System.Collections.Concurrent.ConcurrentQueue<Quote>();
@@ -1029,7 +1178,7 @@ public class YahooTests
     public async Task Stream_PreMarketSessionEndsWhileTheChartSaysShut_PublishesTheLastTradeAsClosed()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 7200, closed: true)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         var quotes = new System.Collections.Concurrent.ConcurrentQueue<Quote>();
@@ -1057,7 +1206,7 @@ public class YahooTests
     public async Task Stream_ChartWithoutExtendedPeriods_DoesNotEndTheSession()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 7200, closed: true, extendedPeriods: false)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         var quotes = new System.Collections.Concurrent.ConcurrentQueue<Quote>();
@@ -1091,7 +1240,7 @@ public class YahooTests
     public async Task Stream_UsChartWithoutExtendedPeriodsAfterTheSession_EndsTheSession(int marketHours)
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var now = time.GetUtcNow().ToUnixTimeSeconds();
         var handler = new StubHandler(_ => Json(UsChart(now - 7200, now + 86400, now + 110000)));
         await using var provider = CreateProvider(handler, time, server.Uri);
@@ -1120,7 +1269,7 @@ public class YahooTests
     public async Task Stream_UsChartThatClosedEarlyWithinThePostMarketSession_DoesNotEndIt()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var now = time.GetUtcNow().ToUnixTimeSeconds();
         var handler = new StubHandler(_ => Json(UsChart(now - 7200, now - 30000, now - 3600)));
         await using var provider = CreateProvider(handler, time, server.Uri);
@@ -1149,7 +1298,7 @@ public class YahooTests
     public async Task Stream_SymbolRemovedAndAddedAgain_ForgetsThePushedTrade()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 7200, closed: true)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         var quotes = new System.Collections.Concurrent.ConcurrentQueue<Quote>();
@@ -1178,7 +1327,7 @@ public class YahooTests
     public async Task Stream_OvernightSessionWhileTheChartSaysShut_IsNotClosed()
     {
         await using var server = LoopbackServer.Start();
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         var handler = new StubHandler(_ => Json(ChartAt(time.GetUtcNow().ToUnixTimeSeconds() - 7200, closed: true)));
         await using var provider = CreateProvider(handler, time, server.Uri);
         var quotes = new System.Collections.Concurrent.ConcurrentQueue<Quote>();
@@ -1211,7 +1360,7 @@ public class YahooTests
         var handler = new StubHandler(r => r.RequestUri!.AbsolutePath.EndsWith("AAPL", StringComparison.Ordinal)
             ? Json(ChartJson)
             : Json(ErrorJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         await provider.SetSubscriptionsAsync([Aapl, Msft, tesla]);
 
         await EventuallyAsync(() => provider.Status is { State: ProviderConnectionState.Connected, Message: { } message }
@@ -1229,7 +1378,7 @@ public class YahooTests
         var handler = new StubHandler(r => r.RequestUri!.AbsolutePath.EndsWith("MSFT", StringComparison.Ordinal)
             ? Json(ErrorJson)
             : Json(ChartJson));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         await provider.SetSubscriptionsAsync([Aapl, Msft]);
         await EventuallyAsync(() => provider.Status is { State: ProviderConnectionState.Connected, Message: { } message } && message.Contains("MSFT", StringComparison.Ordinal));
 
@@ -1247,7 +1396,7 @@ public class YahooTests
     {
         var port = TestWait.FreePort();
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, new Uri($"ws://127.0.0.1:{port}/"));
         await provider.SetSubscriptionsAsync([Aapl]);
         await EventuallyAsync(() =>
@@ -1282,6 +1431,13 @@ public class YahooTests
     }
 
     /// <summary>
+    /// The start of the clock of the tests: a Tuesday morning in New York with the market open, just before the times of the
+    /// charts the tests serve. The fallback only polls while the market is open, and the default of the fake clock is a
+    /// Saturday.
+    /// </summary>
+    private static readonly DateTimeOffset TradingHoursStart = new(2023, 11, 14, 15, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
     /// Creates a provider over a stub HTTP handler.
     /// </summary>
     /// <param name="handler">
@@ -1306,7 +1462,8 @@ public class YahooTests
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
             time,
-            NullLogger.Instance);
+            NullLogger.Instance,
+            TimeSpan.FromMinutes(1));
     }
 
     /// <summary>

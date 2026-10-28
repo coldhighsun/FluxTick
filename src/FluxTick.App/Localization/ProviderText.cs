@@ -63,11 +63,17 @@ public static class ProviderText
     /// <param name="definition">
     /// The option.
     /// </param>
+    /// <param name="owner">
+    /// The data source that owns the option. A label written for that source (<c>Option_{id}_{Key}_Label</c>) is used before
+    /// the one every source shares, for an option that means something else for it.
+    /// </param>
     /// <returns>
     /// The translated label, or the one the provider gave.
     /// </returns>
-    public static string OptionLabel(ProviderOptionDefinition definition) =>
-        Loc.Instance.Find($"Option_{definition.Key}_Label") ?? definition.Label;
+    public static string OptionLabel(ProviderOptionDefinition definition, ProviderDescriptor? owner = null) =>
+        (owner is null ? null : Loc.Instance.Find($"Option_{owner.Id}_{definition.Key}_Label"))
+        ?? Loc.Instance.Find($"Option_{definition.Key}_Label")
+        ?? definition.Label;
 
     /// <summary>
     /// Gets the hint of an option.

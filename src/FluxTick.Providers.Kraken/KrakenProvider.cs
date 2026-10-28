@@ -42,7 +42,8 @@ public sealed class KrakenProvider : CryptoExchangeProvider
 
     /// <inheritdoc />
     protected override string HistoryRequest(Asset asset) =>
-        $"/0/public/OHLC?pair={Uri.EscapeDataString(asset.Symbol)}&interval=1";
+        // Without a start the service answers with its last 720 candles, twelve times what the sparkline shows.
+        $"/0/public/OHLC?pair={Uri.EscapeDataString(asset.Symbol)}&interval=1&since={(TimeProvider.GetUtcNow() - HistoryWindow.Span).ToUnixTimeSeconds()}";
 
     /// <inheritdoc />
     protected override IReadOnlyList<PricePoint> ParseHistory(string json) => KrakenMessages.ParseOhlc(json);

@@ -6,6 +6,7 @@ using FluxTick.Providers.Common;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace FluxTick.Providers.Tests;
 
@@ -37,13 +38,13 @@ public class CryptoProviderWiringTests
     /// </summary>
     [Fact]
     public Task Coinbase_IsWiredCorrectly() => VerifyAsync(new Wiring(
-        (descriptor, endpoints, http) => new CoinbaseProvider(descriptor, endpoints, http, TimeProvider.System, NullLogger.Instance),
+        (descriptor, endpoints, http) => new CoinbaseProvider(descriptor, endpoints, http, new FakeTimeProvider(new DateTimeOffset(2026, 10, 22, 16, 0, 0, TimeSpan.Zero)), NullLogger.Instance),
         new CoinbaseProviderFactory().Descriptor,
         "BTC-USD",
         """{"type":"subscribe","product_ids":["BTC-USD"],"channels":["ticker"]}""",
         """{"type":"ticker","product_id":"BTC-USD","price":"81421.96","open_24h":"84474.36","time":"2026-10-22T15:34:42.413298Z"}""",
         81421.96m,
-        "/products/BTC-USD/candles?granularity=60",
+        "/products/BTC-USD/candles?granularity=60&start=2026-10-22T14:55:00Z&end=2026-10-22T16:00:00Z",
         "[[1792683420,1,1,1,81530.8,1],[1792683360,1,1,1,81515.88,2]]",
         "/products",
         """[{"id":"BTC-USD","status":"online"},{"id":"ETH-USD","status":"online"}]"""));
@@ -53,13 +54,13 @@ public class CryptoProviderWiringTests
     /// </summary>
     [Fact]
     public Task Kraken_IsWiredCorrectly() => VerifyAsync(new Wiring(
-        (descriptor, endpoints, http) => new KrakenProvider(descriptor, endpoints, http, TimeProvider.System, NullLogger.Instance),
+        (descriptor, endpoints, http) => new KrakenProvider(descriptor, endpoints, http, new FakeTimeProvider(new DateTimeOffset(2026, 10, 22, 16, 0, 0, TimeSpan.Zero)), NullLogger.Instance),
         new KrakenProviderFactory().Descriptor,
         "BTC/USD",
         """{"method":"subscribe","params":{"channel":"ticker","symbol":["BTC/USD"]}}""",
         """{"channel":"ticker","type":"update","data":[{"symbol":"BTC/USD","last":81418.9,"change":-3140.2,"timestamp":"2026-10-22T15:34:43.229705Z"}]}""",
         81418.9m,
-        "/0/public/OHLC?pair=BTC%2FUSD&interval=1",
+        "/0/public/OHLC?pair=BTC%2FUSD&interval=1&since=1792680900",
         """{"error":[],"result":{"BTC/USD":[[1792640280,"1","1","1","82722.4","1","1",1]],"last":1792640280}}""",
         "/0/public/AssetPairs",
         """{"error":[],"result":{"XXBTZUSD":{"wsname":"XBT/USD","status":"online"},"XETHZUSD":{"wsname":"ETH/USD","status":"online"}}}"""));

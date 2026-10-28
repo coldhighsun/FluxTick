@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.Providers.Common;
 
 namespace FluxTick.Core.Tests.TestDoubles;
 
@@ -12,7 +13,7 @@ namespace FluxTick.Core.Tests.TestDoubles;
 /// The options the provider was created with.
 /// </param>
 public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions options)
-    : MarketDataProviderBase(descriptor, TimeProvider.System), IHistoryProvider, ISymbolSearchProvider
+    : MarketDataProviderBase(descriptor, TimeProvider.System), IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// Gets the options the provider was created with.
@@ -72,6 +73,16 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
     /// The quote to publish.
     /// </param>
     public void Emit(Quote quote) => Publish(quote);
+
+    /// <summary>
+    /// Gets or sets the exchange whose hours the provider reports for every instrument, or <see langword="null"/> for a
+    /// provider that does not know the hours of its markets.
+    /// </summary>
+    public ExchangeHours? Hours { get; set; }
+
+    /// <inheritdoc />
+    public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
+        Hours?.GetState(now, lastTradeTime, holidayGrace) ?? MarketState.Unknown;
 
     /// <summary>
     /// Changes the reported status.
@@ -174,6 +185,11 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
     public List<FakeProvider> Created { get; } = [];
 
     /// <summary>
+    /// Gets or sets the exchange whose hours the created providers report, or <see langword="null"/> for none.
+    /// </summary>
+    public ExchangeHours? Hours { get; set; }
+
+    /// <summary>
     /// Gets or sets the exception the history of the providers created from now on fails with, or <see langword="null"/>.
     /// </summary>
     public Exception? HistoryFailure { get; set; }
@@ -184,7 +200,7 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)
     {
-        var provider = new FakeProvider(Descriptor, context.Options) { HistoryFailure = HistoryFailure };
+        var provider = new FakeProvider(Descriptor, context.Options) { HistoryFailure = HistoryFailure, Hours = Hours };
         Created.Add(provider);
         return provider;
     }

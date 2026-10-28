@@ -1047,7 +1047,12 @@ public sealed class MarketDataService : IAsyncDisposable
         }
 
         var latest = state.Latest;
-        var hours = MarketCalendar.GetState(state.Asset, now, latest?.Timestamp, latest?.Market is null ? null : ReportingSourceHolidayGrace);
+        var hours = MarketCalendar.GetState(state.Asset, now);
+        if (hours == MarketState.Unknown && slot.Provider is IMarketHoursProvider source)
+        {
+            hours = source.GetMarketState(state.Asset, now, latest?.Timestamp, latest?.Market is null ? null : ReportingSourceHolidayGrace);
+        }
+
         if (latest?.Market is not { } reported)
         {
             return hours;

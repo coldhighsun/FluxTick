@@ -163,7 +163,7 @@ public class SinaTests
     public async Task Provider_PublishesUnderTheSubscribedSymbol_AndSendsReferrer()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var typed = new Asset("sina", "SH600000", "浦发银行", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([typed]);
@@ -184,7 +184,7 @@ public class SinaTests
     public async Task Provider_BatchesSubscriptionsIntoOneRequest()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var ping = new Asset("sina", "sz000001", "平安银行", AssetClass.Equity);
         var composite = new Asset("sina", "sh000001", "上证指数", AssetClass.Index);
 
@@ -209,7 +209,7 @@ public class SinaTests
             Unreachable(),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
-            new FakeTimeProvider(),
+            new FakeTimeProvider(TradingHoursStart),
             NullLogger.Instance);
 
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -261,7 +261,7 @@ public class SinaTests
     public async Task Provider_UnknownSymbol_StillPublishesOthers()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var unknown = new Asset("sina", "sh999999", "?", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([Pufa, unknown]);
@@ -279,7 +279,7 @@ public class SinaTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         var typed = new Asset("sina", "SH600000", "浦发银行", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([typed]);
@@ -302,7 +302,7 @@ public class SinaTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         var ping = new Asset("sina", "sz000001", "平安银行", AssetClass.Equity);
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -328,7 +328,7 @@ public class SinaTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
 
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -351,7 +351,7 @@ public class SinaTests
     public async Task Fallback_StreamDownAndRequestsFail_BackOff()
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
         await provider.SetSubscriptionsAsync([Pufa]);
         await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
@@ -370,7 +370,7 @@ public class SinaTests
     public async Task Status_StreamDownButPollingWorks_IsConnected()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
         await provider.SetSubscriptionsAsync([Pufa]);
         await TestWait.EventuallyAsync(() => handler.Requests.Count == 1);
@@ -389,7 +389,7 @@ public class SinaTests
     public async Task Status_StreamDownAndPollingForbiddenRepeatedly_IsFailed()
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time);
 
         await provider.SetSubscriptionsAsync([Pufa]);
@@ -416,7 +416,7 @@ public class SinaTests
     {
         await using var server = LoopbackServer.Start();
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider(), server.Uri);
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart), server.Uri);
         var unknown = new Asset("sina", "sh999999", "?", AssetClass.Equity);
 
         await provider.SetSubscriptionsAsync([Pufa, unknown]);
@@ -435,7 +435,7 @@ public class SinaTests
         var round = 0;
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(
             QuoteLines.Replace("13:13:41", $"13:{13 + Math.Min(Interlocked.Increment(ref round), 40):00}:41", StringComparison.Ordinal)));
-        var time = new FakeTimeProvider();
+        var time = new FakeTimeProvider(TradingHoursStart);
         await using var provider = CreateProvider(handler, time, server.Uri);
         await provider.SetSubscriptionsAsync([Pufa]);
         await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
@@ -468,7 +468,7 @@ public class SinaTests
     public async Task Provider_Search_FiltersByAssetClass()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(SearchResponse));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var search = (ISymbolSearchProvider)provider;
 
         var indices = await search.SearchAsync("上证", AssetClass.Index);
@@ -523,7 +523,7 @@ public class SinaTests
     public async Task Provider_MoreThanOneBatch_SplitsIntoSeveralRequests()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var assets = Enumerable.Range(0, 120)
             .Select(i => new Asset("sina", $"sh{600000 + i}", $"S{i}", AssetClass.Equity))
             .ToArray();
@@ -545,7 +545,7 @@ public class SinaTests
     public async Task Provider_BeijingSymbol_IsPublished()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(BeijingLine));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         await provider.SetSubscriptionsAsync([new Asset("sina", "bj920950", "迅安科技", AssetClass.Equity)]);
         var quote = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
@@ -553,6 +553,13 @@ public class SinaTests
         quote.Price.Should().Be(20.5m);
         handler.Requests.Single().RequestUri!.AbsoluteUri.Should().EndWith("/list=bj920950");
     }
+
+    /// <summary>
+    /// The start of the clock of the tests: Tuesday 13:13:41 in Shanghai, in the afternoon session and the time of the quote
+    /// lines the tests serve. The fallback only polls while the market is open, and the default of the fake clock is a
+    /// Saturday.
+    /// </summary>
+    private static readonly DateTimeOffset TradingHoursStart = new(2026, 10, 27, 5, 13, 41, TimeSpan.Zero);
 
     /// <summary>
     /// Creates a provider over a stub HTTP handler.
@@ -569,15 +576,18 @@ public class SinaTests
     /// <returns>
     /// The provider.
     /// </returns>
-    private static SinaProvider CreateProvider(StubHttpHandler handler, FakeTimeProvider time, Uri? streamUri = null) =>
-        new(
+    private static SinaProvider CreateProvider(StubHttpHandler handler, FakeTimeProvider time, Uri? streamUri = null)
+    {
+        return new(
             new SinaProviderFactory().Descriptor,
             new Uri("https://quotes.example.test"),
             streamUri ?? Unreachable(),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
             time,
-            NullLogger.Instance);
+            NullLogger.Instance,
+            TimeSpan.FromMinutes(1));
+    }
 
     /// <summary>
     /// Lines of a currency pair and a future as captured: the pair has its bid, ask and last price, the future its last
@@ -662,7 +672,7 @@ public class SinaTests
     public async Task Provider_SearchCurrencyPairsAndFutures_UsesTheList(string query, AssetClass assetClass, string[] expected)
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(SearchResponse));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         var found = await ((ISymbolSearchProvider)provider).SearchAsync(query, assetClass);
 
@@ -678,7 +688,7 @@ public class SinaTests
     public async Task Provider_SearchWithoutClass_AddsTheListToTheStocks()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(SearchResponse));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
 
         var found = await ((ISymbolSearchProvider)provider).SearchAsync("gold", null);
 
@@ -694,7 +704,7 @@ public class SinaTests
     public async Task Provider_FutureTypedInLowerCase_IsRequestedAndPublishedUnderTheSubscribedSymbol()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(ForexAndFuturesLines));
-        await using var provider = CreateProvider(handler, new FakeTimeProvider());
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
         var gold = new Asset("sina", "hf_gc", "纽约黄金", AssetClass.Commodity);
 
         await provider.SetSubscriptionsAsync([gold]);

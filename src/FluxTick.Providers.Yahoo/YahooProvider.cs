@@ -12,8 +12,21 @@ namespace FluxTick.Providers.Yahoo;
 /// API gives every new instrument its first price (and the market state, which the stream does not carry for a closed
 /// market) and takes over while the stream is down.
 /// </summary>
-public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryProvider, ISymbolSearchProvider
+public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
+    /// <summary>
+    /// The US indices, which trade in New York hours.
+    /// </summary>
+    private static readonly HashSet<string> UsIndices = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX", "^NYA", "^NDX",
+    };
+
+    /// <summary>
+    /// The Hong Kong indices.
+    /// </summary>
+    private static readonly HashSet<string> HongKongIndices = new(StringComparer.OrdinalIgnoreCase) { "^HSI", "^HSCE" };
+
     /// <summary>
     /// The maximum number of requests in flight.
     /// </summary>
@@ -69,6 +82,10 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
     /// <param name="logger">
     /// The logger.
     /// </param>
+    /// <param name="quietInterval">
+    /// How long a connected stream may stay quiet during trading hours before REST is polled as well, or
+    /// <see langword="null"/> for the default.
+    /// </param>
     internal YahooProvider(
         ProviderDescriptor descriptor,
         Uri baseUri,
@@ -76,11 +93,54 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
         TimeSpan fallbackInterval,
         HttpClient http,
         TimeProvider timeProvider,
-        ILogger logger)
-        : base(descriptor, streamUri, fallbackInterval, timeProvider, logger)
+        ILogger logger,
+        TimeSpan? quietInterval = null)
+        : base(descriptor, streamUri, fallbackInterval, timeProvider, logger, quietInterval)
     {
         _baseUri = baseUri;
         _http = http;
+    }
+
+    /// <inheritdoc />
+    public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
+        ExchangeHours.StateOf(ExchangeOf(asset.Symbol), now, lastTradeTime, holidayGrace);
+
+    /// <summary>
+    /// Finds the exchange of a symbol. Only the US, Chinese A-share and Hong Kong markets are known.
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <returns>
+    /// The exchange, or <see langword="null"/> when it is not known.
+    /// </returns>
+    internal static ExchangeHours? ExchangeOf(string symbol)
+    {
+        if (symbol.StartsWith('^'))
+        {
+            return UsIndices.Contains(symbol) ? ExchangeHours.Us : HongKongIndices.Contains(symbol) ? ExchangeHours.HongKong : null;
+        }
+
+        var dot = symbol.LastIndexOf('.');
+        if (dot < 0)
+        {
+            // A symbol with an equals sign is a forex pair or a future; a five letter one that ends in X is a mutual fund,
+            // which is priced once a day.
+            return symbol.Contains('=') || (symbol.Length == 5 && symbol.EndsWith('X')) ? null : ExchangeHours.Us;
+        }
+
+        var suffix = symbol[(dot + 1)..];
+
+        // The letter A, B or C after the dot is the share class of a US company, such as BRK.B. Other single letters name
+        // exchanges, such as L for London.
+        return suffix is ['A' or 'B' or 'C' or 'a' or 'b' or 'c']
+            ? ExchangeHours.Us
+            : suffix.ToUpperInvariant() switch
+            {
+                "SS" or "SZ" or "BJ" => ExchangeHours.ChinaA,
+                "HK" => ExchangeHours.HongKong,
+                _ => null,
+            };
     }
 
     /// <inheritdoc />
@@ -355,8 +415,13 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
     /// </returns>
     private async Task<YahooChartData> FetchChartAsync(string symbol, bool intraday, CancellationToken cancellationToken)
     {
-        var interval = intraday ? "1m" : "1d";
-        var uri = EndpointOptions.Combine(_baseUri, $"/v8/finance/chart/{Uri.EscapeDataString(symbol)}?interval={interval}&range=1d");
+        // The minutes of the sparkline are asked for by time, not as a whole day: that is about 390 candles, and a market that
+        // is shut answers with the day before although nothing of it would show. A window without trades has no candles.
+        var now = TimeProvider.GetUtcNow();
+        var query = intraday
+            ? $"interval=1m&period1={(now - HistoryWindow.Span).ToUnixTimeSeconds()}&period2={now.ToUnixTimeSeconds()}"
+            : "interval=1d&range=1d";
+        var uri = EndpointOptions.Combine(_baseUri, $"/v8/finance/chart/{Uri.EscapeDataString(symbol)}?{query}");
         using var response = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {

@@ -19,6 +19,7 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
     /// </summary>
     public const string PollIntervalKey = ProviderOptionDefinition.PollIntervalKey;
 
+
     /// <summary>
     /// The option key of the streamer URL.
     /// </summary>
@@ -41,12 +42,13 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
         [
             new ProviderOptionDefinition(
                 PollIntervalKey,
-                "Poll interval",
+                "Fallback poll interval",
                 ProviderOptionType.Duration,
                 "00:00:05",
-                "How often prices are refreshed while the live stream is down. Polling too fast may get you rate limited.",
+                "While the live stream is down, how often prices are fetched from the API instead. Nothing is fetched while the market is not open. Polling too fast may get you rate limited.",
                 Min: 2,
                 Max: 300),
+            StreamingOptions.QuietPollInterval,
             new ProviderOptionDefinition(
                 WebSocketUrlKey,
                 "WebSocket endpoint",
@@ -78,6 +80,7 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
             context.Options.GetDuration(PollIntervalKey),
             http,
             context.TimeProvider,
-            context.LoggerFactory.CreateLogger<YahooProvider>());
+            context.LoggerFactory.CreateLogger<YahooProvider>(),
+            context.Options.GetDuration(ProviderOptionDefinition.QuietPollIntervalKey));
     }
 }
