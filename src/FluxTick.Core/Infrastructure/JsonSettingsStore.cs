@@ -103,6 +103,13 @@ public sealed class JsonSettingsStore(string path, ILogger<JsonSettingsStore> lo
         var temp = $"{path}.tmp";
         await using (var stream = File.Create(temp))
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                // The file may hold secrets such as API keys, and the default would let other users on the machine read it.
+                // On Windows the folder of the user is private already.
+                File.SetUnixFileMode(temp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
             await JsonSerializer.SerializeAsync(stream, settings, AppSettings.JsonOptions, cancellationToken).ConfigureAwait(false);
         }
 

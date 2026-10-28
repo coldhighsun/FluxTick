@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using FluxTick.Abstractions;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 using FluxTick.Core.Infrastructure;
@@ -56,6 +57,37 @@ public static class AppHost
     internal static readonly System.Globalization.CultureInfo LogCulture = System.Globalization.CultureInfo.GetCultureInfo("en");
 
     /// <summary>
+    /// Registers the settings store. Secret options such as API keys are protected where the settings are written;
+    /// everything above works with the plain values. Only Windows has protection built in (DPAPI, for the current user).
+    /// </summary>
+    /// <param name="services">
+    /// The services.
+    /// </param>
+    /// <param name="settingsPath">
+    /// The settings file.
+    /// </param>
+    /// <returns>
+    /// The services.
+    /// </returns>
+    internal static IServiceCollection AddSettingsStore(this IServiceCollection services, string settingsPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<ISecretProtector, DpapiSecretProtector>();
+        }
+        else
+        {
+            services.AddSingleton<ISecretProtector, NoSecretProtector>();
+        }
+
+        return services.AddSingleton<ISettingsStore>(sp => new ProtectedSettingsStore(
+            new JsonSettingsStore(settingsPath, sp.GetRequiredService<ILogger<JsonSettingsStore>>()),
+            sp.GetRequiredService<ISecretProtector>(),
+            () => sp.GetServices<IMarketDataProviderFactory>().Select(f => f.Descriptor),
+            sp.GetRequiredService<ILogger<ProtectedSettingsStore>>()));
+    }
+
+    /// <summary>
     /// Pins the language of the note ThrottledLogging adds about held back messages to <see cref="LogCulture"/>. Without
     /// it the note follows the culture of the thread that logs, and threads of the app differ in that.
     /// </summary>
@@ -99,8 +131,7 @@ public static class AppHost
         ConfigureThrottledLogging();
 
         services.AddFluxTickCore();
-        services.AddSingleton<ISettingsStore>(sp =>
-            new JsonSettingsStore(AppPaths.SettingsFile(demo), sp.GetRequiredService<ILogger<JsonSettingsStore>>()));
+        services.AddSettingsStore(AppPaths.SettingsFile(demo));
 
         // Data sources: add one line per provider. Nothing else in the app needs to change.
         services.AddMarketDataProvider<BinanceProviderFactory>();
