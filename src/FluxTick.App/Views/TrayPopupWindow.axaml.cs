@@ -153,7 +153,7 @@ public sealed partial class TrayPopupWindow : Window
         }
         else
         {
-            Measure(new Size(Width, double.PositiveInfinity));
+            Measure(new Size(MaxWidth, double.PositiveInfinity));
             size = DesiredSize;
         }
 
