@@ -107,14 +107,45 @@ public sealed partial class TrayPopupViewModel : ObservableObject
         var picked = TrayAssetSelection.Resolve(_rows, row => TrayAssetSelection.Key(row.Asset), _selection);
         if (!Items.SequenceEqual(picked))
         {
+            foreach (var row in Items)
+            {
+                row.PropertyChanged -= OnItemPropertyChanged;
+            }
+
             Items.Clear();
             foreach (var row in picked)
             {
+                row.PropertyChanged += OnItemPropertyChanged;
                 Items.Add(row);
             }
         }
 
         IsEmpty = picked.Count == 0;
+        HasAnyHolding = Items.Any(row => row.HasHolding);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether a listed instrument has a holding, so the popup keeps a column for its profit or
+    /// loss and the rows without a holding fill it with a placeholder.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasAnyHolding { get; set; }
+
+    /// <summary>
+    /// Follows a listed row gaining or losing its holding.
+    /// </summary>
+    /// <param name="sender">
+    /// The row.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AssetRowViewModel.HasHolding))
+        {
+            HasAnyHolding = Items.Any(row => row.HasHolding);
+        }
     }
 
     /// <summary>

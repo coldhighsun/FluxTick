@@ -16,6 +16,13 @@
         Title="FluxTick">
 
   <Window.Styles>
+    <!-- The placeholder only shows while some listed row has a holding, otherwise no row has a column for it. -->
+    <Style Selector="TextBlock.placeholder">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ItemsControl.holdings TextBlock.placeholder.noHolding">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
     <Style Selector="Grid.stopped">
       <Setter Property="Opacity" Value="0.55" />
     </Style>
@@ -29,7 +36,7 @@
       <!-- Every row has two lines in each column and the same height, with or without a holding, and the texts of a column
            are centered in it. The holding column shares its width between the rows: it has none while no instrument
            is held, and all rows keep their prices in line while one is. -->
-      <ItemsControl ItemsSource="{Binding Items}" Grid.IsSharedSizeScope="True">
+      <ItemsControl ItemsSource="{Binding Items}" Grid.IsSharedSizeScope="True" Classes.holdings="{Binding HasAnyHolding}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:AssetRowViewModel">
             <!-- Like the rows and cards of the window, an instrument whose prices stopped is dimmed and says why. -->
@@ -62,6 +69,9 @@
                   <TextBlock Text="{Binding PnlPercentText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
                              Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
                 </StackPanel>
+                <!-- A row without a holding fills the column while other rows have one, instead of leaving a gap. -->
+                <TextBlock Classes="placeholder muted mono" Classes.noHolding="{Binding !HasHolding}" Text="—"
+                           HorizontalAlignment="Center" Margin="10,0,0,0" />
               </Grid>
             </Grid>
           </DataTemplate>

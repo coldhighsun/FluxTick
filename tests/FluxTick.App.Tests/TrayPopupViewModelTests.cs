@@ -158,6 +158,29 @@ public class TrayPopupViewModelTests
     }
 
     /// <summary>
+    /// Verifies the popup keeps a profit and loss column only while a listed instrument has a holding.
+    /// </summary>
+    [Fact]
+    public void HasAnyHolding_FollowsTheHoldingsOfTheListedRows()
+    {
+        var rows = Rows(2);
+        var model = Model(rows, [TrayAssetSelection.Key("p", "S1")]);
+        model.HasAnyHolding.Should().BeFalse();
+
+        rows[1].SetHolding(100m, 1m, "USD");
+        model.HasAnyHolding.Should().BeFalse();
+
+        rows[0].SetHolding(100m, 1m, "USD");
+        model.HasAnyHolding.Should().BeTrue();
+
+        rows[0].SetHolding(null, null, null);
+        model.HasAnyHolding.Should().BeFalse();
+
+        model.SetSelection([TrayAssetSelection.Key("p", "S2")]);
+        model.HasAnyHolding.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies that the popup shows the total of the holdings of the main window and follows it.
     /// </summary>
     [Fact]
