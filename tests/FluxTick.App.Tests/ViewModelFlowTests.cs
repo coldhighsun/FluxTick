@@ -363,6 +363,22 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies the market status setting reaches existing rows and is persisted.
+    /// </summary>
+    [Fact]
+    public async Task ShowMarketStatus_Toggled_UpdatesRowsAndPersists()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        await h.Main.InitializeAsync();
+        h.Main.Rows.Single().ShowMarketStatus.Should().BeTrue();
+
+        h.Main.Settings.ShowMarketStatus = false;
+
+        h.Main.Rows.Single().ShowMarketStatus.Should().BeFalse();
+        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.ShowMarketStatus == false);
+    }
+
+    /// <summary>
     /// Emits the given prices for the Bitcoin asset in order, waiting for each one to reach its row.
     /// </summary>
     /// <param name="h">

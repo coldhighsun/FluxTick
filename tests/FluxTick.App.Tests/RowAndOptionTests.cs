@@ -227,6 +227,107 @@ public class RowAndOptionTests
     }
 
     /// <summary>
+    /// Verifies prices that stopped because the market is shut are told as closed, not as stale, are not drawn as a
+    /// warning, and still count in a total.
+    /// </summary>
+    [Theory]
+    [InlineData(MarketState.Closed, "Closed")]
+    [InlineData(MarketState.Break, "Break")]
+    public void Update_StaleInAShutMarket_SaysTheMarketIsShutAndStillCounts(MarketState market, string status)
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Stale) with { MarketState = market });
+
+        row.StatusText.Should().Be(status);
+        row.StatusIsNeutral.Should().BeTrue();
+        row.HasMarketBadge.Should().BeFalse("the status already says it");
+        row.IsPriceOutdated.Should().BeFalse();
+        row.IsDimmed.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a fault is told as a fault, whatever the market does.
+    /// </summary>
+    [Theory]
+    [InlineData(AssetHealth.Failed, "Source error")]
+    [InlineData(AssetHealth.StaleReconnecting, "Stale · reconnecting")]
+    public void Update_FaultInAShutMarket_StillSaysTheFault(AssetHealth health, string status)
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+
+        row.Update(Snapshot(110m, 100m, health) with { MarketState = MarketState.Closed });
+
+        row.StatusText.Should().Be(status);
+        row.StatusIsNeutral.Should().BeFalse();
+        row.IsPriceOutdated.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies the other states of the market get a chip, and the regular session and an unknown market get none.
+    /// </summary>
+    [Theory]
+    [InlineData(MarketState.PreMarket, "Pre-market")]
+    [InlineData(MarketState.AfterHours, "After hours")]
+    [InlineData(MarketState.Closed, "Closed")]
+    [InlineData(MarketState.Open, "")]
+    [InlineData(MarketState.Unknown, "")]
+    public void Update_LiveInAnyMarketState_ShowsTheChipOnlyOutsideTheRegularSession(MarketState market, string badge)
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+
+        row.Update(Snapshot(110m, 100m) with { MarketState = market });
+
+        row.MarketBadgeText.Should().Be(badge);
+        row.HasMarketBadge.Should().Be(badge.Length > 0);
+        row.HasStatus.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies turning the trading state off brings back "stale" and removes the chip, and turning it on shows them again.
+    /// </summary>
+    [Fact]
+    public void ShowMarketStatus_WhenTurnedOff_RestoresStaleAndHidesTheChip()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+        row.Update(Snapshot(110m, 100m, AssetHealth.Stale) with { MarketState = MarketState.Closed });
+
+        row.ShowMarketStatus = false;
+
+        row.StatusText.Should().Be("Stale");
+        row.StatusIsNeutral.Should().BeFalse();
+        row.IsPriceOutdated.Should().BeTrue("with the trading state off the price is stale again, as the row says");
+        row.HasMarketBadge.Should().BeFalse();
+
+        row.ShowMarketStatus = true;
+
+        row.StatusText.Should().Be("Closed");
+        row.IsPriceOutdated.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a listener of the health change never sees the price as outdated while the market is shut.
+    /// </summary>
+    [Fact]
+    public void Update_ToStaleInAShutMarket_NeverReportsThePriceAsOutdated()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+        row.Update(Snapshot(110m, 100m) with { MarketState = MarketState.Closed });
+        var seen = new List<bool>();
+        row.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AssetRowViewModel.IsPriceOutdated))
+            {
+                seen.Add(row.IsPriceOutdated);
+            }
+        };
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Stale) with { MarketState = MarketState.Closed });
+
+        seen.Should().NotContain(true);
+    }
+
+    /// <summary>
     /// Verifies unhealthy data is dimmed and labelled.
     /// </summary>
     [Theory]

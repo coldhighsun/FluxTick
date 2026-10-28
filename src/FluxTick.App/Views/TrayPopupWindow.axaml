@@ -49,7 +49,7 @@
                   <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
                              IsVisible="{Binding !HasStatus}"
                              Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
-                  <TextBlock Text="{Binding StatusText}" Classes="warn" FontSize="11" HorizontalAlignment="Right"
+                  <TextBlock Text="{Binding StatusText}" Classes="warn" Classes.muted="{Binding StatusIsNeutral}" FontSize="11" HorizontalAlignment="Right"
                              IsVisible="{Binding HasStatus}" />
                 </Panel>
               </StackPanel>
