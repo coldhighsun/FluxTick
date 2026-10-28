@@ -176,10 +176,14 @@ public sealed class SparklineTimeline
 /// <param name="Timeline">
 /// When the sparkline prices were traded, or <see langword="null"/> when that is not known.
 /// </param>
+/// <param name="MarketState">
+/// Whether the market of the instrument is trading; independent of the health, which says how fresh the data is.
+/// </param>
 public sealed record AssetSnapshot(
     Asset Asset,
     Quote? Quote,
     IReadOnlyList<decimal> Sparkline,
     AssetHealth Health,
     string? HealthDetail = null,
-    SparklineTimeline? Timeline = null);
+    SparklineTimeline? Timeline = null,
+    MarketState MarketState = MarketState.Unknown);

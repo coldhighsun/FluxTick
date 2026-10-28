@@ -154,6 +154,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Appearance.ThemeMode = ThemeMode.Dark;
         settings.Appearance.Language = LanguageMode.ZhCN;
         settings.Appearance.RollPriceOnUpdate = true;
+        settings.Appearance.ShowMarketStatus = false;
         settings.Appearance.AutoHideAtEdge = false;
         settings.Appearance.Layout = WatchlistLayout.Cards;
         settings.Appearance.Grouping = CardGrouping.Custom;
@@ -173,6 +174,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
         loaded.Appearance.Language.Should().Be(LanguageMode.ZhCN);
         loaded.Appearance.RollPriceOnUpdate.Should().BeTrue();
+        loaded.Appearance.ShowMarketStatus.Should().BeFalse();
         loaded.Appearance.AutoHideAtEdge.Should().BeFalse();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
         loaded.Appearance.Grouping.Should().Be(CardGrouping.Custom);
@@ -235,6 +237,8 @@ public sealed class RoutingAndSettingsTests : IDisposable
         new AppSettings().Appearance.RollPriceOnUpdate.Should().BeFalse();
         loaded!.Appearance.Opacity.Should().Be(0.8);
         loaded.Appearance.RollPriceOnUpdate.Should().BeFalse();
+        new AppSettings().Appearance.ShowMarketStatus.Should().BeTrue();
+        loaded.Appearance.ShowMarketStatus.Should().BeTrue("a file written before the setting existed keeps the default");
     }
 
     /// <summary>

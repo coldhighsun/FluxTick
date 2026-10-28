@@ -12,7 +12,8 @@ namespace FluxTick.Core.Application;
 public sealed record MarketDataServiceOptions
 {
     /// <summary>
-    /// Gets how long without a quote before an instrument is considered stale.
+    /// Gets how long without a quote before an instrument is considered stale. A polled source whose poll interval plus
+    /// half of this time is longer is given that instead, so that the time between two polls is not taken for silence.
     /// </summary>
     public TimeSpan StaleAfter { get; init; } = TimeSpan.FromMinutes(1);
 
@@ -66,6 +67,13 @@ public sealed class MarketDataService : IAsyncDisposable
     /// The number of history answers without a point after which an instrument is not asked again.
     /// </summary>
     private const int MaxEmptyHistoryAnswers = 3;
+
+    /// <summary>
+    /// How long a regular session has to be under way before no trade today means a holiday, for a source that reports the
+    /// state of the market itself. It is longer than the default, as such a source may lag by up to half an hour, and its
+    /// last trade is from the day before until the first delayed trade comes in.
+    /// </summary>
+    private static readonly TimeSpan ReportingSourceHolidayGrace = TimeSpan.FromMinutes(45);
 
     /// <summary>
     /// The wait before a failed history load is tried again; it doubles with each failure.
@@ -875,8 +883,14 @@ public sealed class MarketDataService : IAsyncDisposable
                 return;
             }
 
+            var received = _timeProvider.GetUtcNow();
+            if (state.Latest is { } previous && !previous.TimeIsEstimated && !quote.TimeIsEstimated && quote.Timestamp > previous.Timestamp)
+            {
+                state.AdvancedAt = received;
+            }
+
             state.Latest = quote;
-            state.LastReceivedAt = _timeProvider.GetUtcNow();
+            state.LastReceivedAt = received;
             state.Series.Add(quote.Price, quote.Timestamp);
             snapshot = BuildSnapshot(state);
             MarkPublished(state, snapshot);
@@ -919,9 +933,11 @@ public sealed class MarketDataService : IAsyncDisposable
                 // its last ones; an empty one stays as it is.
                 var slid = bucket != state.LastSparklineBucket && (state.LastSparklineCount > 0 || state.Series.AnyWithin(now));
                 state.LastSparklineBucket = bucket;
-                if (forceRaise || health != state.LastHealth || slid)
+                var market = MarketStateOf(state, now);
+                if (forceRaise || health != state.LastHealth || slid || market != state.LastMarketState)
                 {
                     state.LastHealth = health;
+                    state.LastMarketState = market;
                     changed.Add(state.Asset.Id);
                 }
             }
@@ -981,7 +997,53 @@ public sealed class MarketDataService : IAsyncDisposable
         var now = _timeProvider.GetUtcNow();
         var sparkline = state.Series.Snapshot(now);
         var timeline = new SparklineTimeline(state.Series.Times(now), now, state.Series.Window);
-        return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline);
+        return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline, MarketStateOf(state, now));
+    }
+
+    /// <summary>
+    /// Works out the trading state of an instrument: what the source reports with its quote, else the regular hours of the
+    /// market. Prices that stopped while the source keeps answering mean the market does not trade, but a source that went
+    /// quiet says nothing about it, so the state is then unknown and the row keeps its stale warning.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="now">
+    /// The current time.
+    /// </param>
+    /// <returns>
+    /// The trading state of its market.
+    /// </returns>
+    private MarketState MarketStateOf(AssetState state, DateTimeOffset now)
+    {
+        if (state.LastReceivedAt is not { } received
+            || !_slots.TryGetValue(state.Asset.ProviderId, out var slot)
+            || now - received > StaleAfterOf(slot))
+        {
+            return MarketState.Unknown;
+        }
+
+        var latest = state.Latest;
+        var hours = MarketCalendar.GetState(state.Asset, now, latest?.Timestamp, latest?.Market is null ? null : ReportingSourceHolidayGrace);
+        if (latest?.Market is not { } reported)
+        {
+            return hours;
+        }
+
+        // The source knows shortened days and, it is assumed, holidays, which the hours do not.
+        return reported switch
+        {
+            // It does not know the midday break of the Chinese and Hong Kong markets, which it reports as open.
+            MarketState.Open when hours == MarketState.Break => MarketState.Break,
+
+            // A session that is well under way with no trade yet today is a holiday that the source did not catch.
+            MarketState.Open when hours == MarketState.Closed => MarketState.Closed,
+
+            // A price that keeps advancing beats a report of a shut market, which may be about the day before when the
+            // source has not turned the page yet.
+            MarketState.Closed when state.AdvancedAt is { } advanced && now - advanced <= StaleAfterOf(slot) => hours,
+            _ => reported,
+        };
     }
 
     /// <summary>
@@ -998,6 +1060,7 @@ public sealed class MarketDataService : IAsyncDisposable
     private static void MarkPublished(AssetState state, AssetSnapshot snapshot)
     {
         state.LastHealth = snapshot.Health;
+        state.LastMarketState = snapshot.MarketState;
         state.LastSparklineCount = snapshot.Sparkline.Count;
         if (snapshot.Timeline is { } timeline)
         {
@@ -1048,7 +1111,7 @@ public sealed class MarketDataService : IAsyncDisposable
         // that for as long as the reconnecting goes on. The reason stays as the detail.
         if (status.State == ProviderConnectionState.Reconnecting)
         {
-            return state.LastReceivedAt is { } received && _timeProvider.GetUtcNow() - received > _options.StaleAfter
+            return state.LastReceivedAt is { } received && _timeProvider.GetUtcNow() - received > StaleAfterOf(slot)
                 ? (AssetHealth.StaleReconnecting, status.Message)
                 : (AssetHealth.Reconnecting, status.Message);
         }
@@ -1062,10 +1125,27 @@ public sealed class MarketDataService : IAsyncDisposable
         // the last price of a closed market with the time it was traded, which the receive time alone would not show).
         var now = _timeProvider.GetUtcNow();
         var quoteTime = state.Latest?.Timestamp ?? state.LastReceivedAt.Value;
-        return now - state.LastReceivedAt.Value > _options.StaleAfter || now - quoteTime > _options.StaleAfter
+        var staleAfter = StaleAfterOf(slot);
+        return now - state.LastReceivedAt.Value > staleAfter || now - quoteTime > staleAfter
             ? (AssetHealth.Stale, null)
             : (AssetHealth.Live, null);
     }
+
+    /// <summary>
+    /// Works out how long an instrument may go without a quote before it is stale: the configured time, or the poll
+    /// interval of its source plus half of that time when this is longer, as a polled source delivers once per interval
+    /// and may be late by a margin. The result grows evenly with the interval.
+    /// </summary>
+    /// <param name="slot">
+    /// The source of the instrument.
+    /// </param>
+    /// <returns>
+    /// The time.
+    /// </returns>
+    private TimeSpan StaleAfterOf(ProviderSlot slot) =>
+        slot.PollInterval is { } interval && interval + _options.StaleAfter / 2 > _options.StaleAfter
+            ? interval + _options.StaleAfter / 2
+            : _options.StaleAfter;
 
     /// <summary>
     /// Resolves the option values a provider really runs with: the stored value when valid, otherwise the declared
@@ -1142,9 +1222,20 @@ public sealed class MarketDataService : IAsyncDisposable
         public DateTimeOffset? LastReceivedAt { get; set; }
 
         /// <summary>
+        /// Gets or sets when a quote last arrived that was traded later than the one before it, or <see langword="null"/>
+        /// while the price has not moved since the first quote. A source that repeats an old price does not move it.
+        /// </summary>
+        public DateTimeOffset? AdvancedAt { get; set; }
+
+        /// <summary>
         /// Gets or sets the last health that was published.
         /// </summary>
         public AssetHealth? LastHealth { get; set; }
+
+        /// <summary>
+        /// Gets or sets the last trading state that was published.
+        /// </summary>
+        public MarketState? LastMarketState { get; set; }
 
         /// <summary>
         /// Gets or sets the number of sparkline points in the last snapshot that was raised.
@@ -1196,6 +1287,14 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </param>
     private sealed class ProviderSlot(string id, IMarketDataProvider provider, IReadOnlyDictionary<string, string> options)
     {
+        /// <summary>
+        /// Gets how often a polled source fetches prices, or <see langword="null"/> for a source that does not poll.
+        /// </summary>
+        public TimeSpan? PollInterval { get; } =
+            options.TryGetValue(ProviderOptionDefinition.PollIntervalKey, out var text) && ProviderOptionDefinition.TryParseDuration(text, out var interval)
+                ? interval
+                : null;
+
         /// <summary>
         /// Gets the provider id.
         /// </summary>

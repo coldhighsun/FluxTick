@@ -149,7 +149,10 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
     /// <param name="enabledByDefault">
     /// Whether the provider is enabled when no setting exists.
     /// </param>
-    public FakeProviderFactory(string id, AssetClass[] classes, bool enabledByDefault = true)
+    /// <param name="pollInterval">
+    /// The poll interval the provider declares as its option, or <see langword="null"/> for none.
+    /// </param>
+    public FakeProviderFactory(string id, AssetClass[] classes, bool enabledByDefault = true, string? pollInterval = null)
     {
         Descriptor = new ProviderDescriptor(
             id,
@@ -157,7 +160,11 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
             "Test provider",
             classes,
             ProviderUpdateMode.Streaming,
-            Options: [new ProviderOptionDefinition("Endpoint", "Endpoint", ProviderOptionType.String, "default")],
+            Options:
+            [
+                new ProviderOptionDefinition("Endpoint", "Endpoint", ProviderOptionType.String, "default"),
+                .. pollInterval is null ? Array.Empty<ProviderOptionDefinition>() : [new ProviderOptionDefinition("PollInterval", "Poll interval", ProviderOptionType.Duration, pollInterval)],
+            ],
             EnabledByDefault: enabledByDefault);
     }
 
