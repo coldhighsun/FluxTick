@@ -68,7 +68,7 @@ public class TrayAssetsSettingsTests
 
     /// <summary>
     /// Verifies the menu offers adding for an instrument that is not on the tray list and removing for one that is, and
-    /// that the row announces the change when the instrument moves on or off the list.
+    /// that the row marks the instrument and announces the change when the instrument moves on or off the list.
     /// </summary>
     [Fact]
     public async Task Menu_OffersAddingOrRemovingByMembership()
@@ -82,13 +82,15 @@ public class TrayAssetsSettingsTests
         var announced = new List<string?>();
         btc.PropertyChanged += (_, e) => announced.Add(e.PropertyName);
         (btc.CanAddToTray, btc.CanRemoveFromTray).Should().Be((true, false));
+        btc.ShowTrayMarker.Should().BeFalse();
 
         await h.Main.Tray.ToggleAsync(btc);
 
         await Harness.EventuallyAsync(() => btc.InTray);
         (btc.CanAddToTray, btc.CanRemoveFromTray).Should().Be((false, true));
         (aapl.CanAddToTray, aapl.CanRemoveFromTray).Should().Be((true, false));
-        announced.Should().Contain([nameof(AssetRowViewModel.CanAddToTray), nameof(AssetRowViewModel.CanRemoveFromTray)]);
+        (btc.ShowTrayMarker, aapl.ShowTrayMarker).Should().Be((true, false));
+        announced.Should().Contain([nameof(AssetRowViewModel.CanAddToTray), nameof(AssetRowViewModel.CanRemoveFromTray), nameof(AssetRowViewModel.ShowTrayMarker)]);
     }
 
     /// <summary>

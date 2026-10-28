@@ -24,6 +24,9 @@
           <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
             StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center"
             IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
+          <Path Data="M1.5 1.5h7v7h-7zM3 4h4M3 6h3" Stroke="{DynamicResource MutedBrush}"
+            StrokeThickness="1" StrokeJoin="Round" Width="10" Height="10" Stretch="None" VerticalAlignment="Center"
+            IsVisible="{Binding ShowTrayMarker}" ToolTip.Tip="{loc:T Row_TrayTip}" />
           <Border Classes="chip" VerticalAlignment="Center" IsVisible="{Binding HasMarketBadge}">
             <TextBlock Text="{Binding MarketBadgeText}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
           </Border>

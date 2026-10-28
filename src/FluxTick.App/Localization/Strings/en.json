@@ -123,6 +123,7 @@
   "Row_AlertAbove": "Alert when the price rises to {0}",
   "Row_AlertBelow": "Alert when the price falls to {0}",
   "Row_AlertTip": "Price alerts are on",
+  "Row_TrayTip": "Shown in the tray list",
   "Row_Change": "Change {0} ({1})",
   "Row_RangeHigh": "60 min high",
   "Row_RangeLow": "60 min low",

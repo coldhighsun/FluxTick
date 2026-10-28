@@ -159,6 +159,7 @@
   "Row_AlertAbove": "价格涨到 {0} 时提醒",
   "Row_AlertBelow": "价格跌到 {0} 时提醒",
   "Row_AlertTip": "已设置价格报警",
+  "Row_TrayTip": "已加入托盘列表",
   "Row_Change": "涨跌 {0} ({1})",
   "Row_RangeHigh": "60 分钟最高",
   "Row_RangeLow": "60 分钟最低",
