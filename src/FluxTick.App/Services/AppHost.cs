@@ -6,6 +6,7 @@ using FluxTick.Providers.Binance;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Common;
+using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
@@ -110,6 +111,7 @@ public static class AppHost
         services.AddMarketDataProvider<CoinbaseProviderFactory>();
         services.AddMarketDataProvider<KrakenProviderFactory>();
         services.AddMarketDataProvider<BybitProviderFactory>();
+        services.AddMarketDataProvider<EulerpoolProviderFactory>();
         services.AddMarketDataProvider<SimulatedProviderFactory>();
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();

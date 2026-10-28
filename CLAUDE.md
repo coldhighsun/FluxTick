@@ -25,7 +25,7 @@ Layering is enforced by project references:
 - `FluxTick.Abstractions` — the only thing a data source references: `IMarketDataProvider`, `MarketDataProviderBase` (quote channel, status, subscription diffing, disposal), `ProviderDescriptor`/`ProviderOptionDefinition`, `Quote`, `Asset`.
 - `FluxTick.Core` — provider registry/router, `MarketDataService` (quote aggregation, stale detection), alerts, holdings P/L and exchange rates (`Frankfurter`), `SettingsManager` + JSON store, `SparklineSeries`. No UI dependency.
 - `FluxTick.Providers.Common` — shared bases: `WebSocketProviderBase`, `PollingProviderBase`, `BatchQuotePollingProviderBase`, `CryptoExchangeProvider`, symbol search and parsing helpers.
-- `FluxTick.Providers.*` — one project per source (Binance, Okx, Coinbase, Kraken, Bybit, Yahoo, Tencent, Sina, Simulated), each = Provider + ProviderFactory (+ messages/parser).
+- `FluxTick.Providers.*` — one project per source (Binance, Okx, Coinbase, Kraken, Bybit, Yahoo, Tencent, Sina, Eulerpool, Simulated), each = Provider + ProviderFactory (+ messages/parser).
 - `FluxTick.App` — Avalonia desktop app and composition root (`Services/AppHost.cs`). Adding a data source is a project reference plus one `services.AddMarketDataProvider<TFactory>()` line there; nothing in Core or the UI changes. Full recipe, option semantics and contract tests: `docs/ADDING_A_PROVIDER.md`.
 
 Things that span several files:

@@ -2,6 +2,7 @@ using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
@@ -167,3 +168,7 @@ public sealed class KrakenProviderContractTests : ProviderContractTests<KrakenPr
 /// </summary>
 public sealed class BybitProviderContractTests : ProviderContractTests<BybitProviderFactory>;
 
+/// <summary>
+/// Contract tests for the Eulerpool provider.
+/// </summary>
+public sealed class EulerpoolProviderContractTests : ProviderContractTests<EulerpoolProviderFactory>;
