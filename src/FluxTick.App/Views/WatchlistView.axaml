@@ -99,7 +99,7 @@
     <ScrollViewer Name="CardsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{x:Static views:CardLayout.ListPadding}"
                   IsVisible="{Binding IsCardLayout}">
       <!-- The canvas lies over the sections, scrolls with them and carries the drop indicator of a card drag. -->
-      <Grid RowDefinitions="Auto,Auto">
+      <Grid>
       <ItemsControl Name="SectionsHost" ClipToBounds="False" ItemsSource="{Binding Sections}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:WatchSectionViewModel">
@@ -183,10 +183,7 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <!-- With custom groups, a card dropped here starts a new group; clicking it asks for a name the same way. -->
-      <views:NewGroupPlaceholder Name="NewGroupSlot" Grid.Row="1" IsVisible="{Binding IsCustomCardGrouping}"
-                                 Margin="9,6,9,10" Click="OnNewGroupSlotClicked" />
-      <Canvas Grid.RowSpan="2" IsHitTestVisible="False">
+      <Canvas IsHitTestVisible="False">
         <Border Name="DropIndicator" IsVisible="False" IsHitTestVisible="False" CornerRadius="8" Opacity="0.45"
                 BorderThickness="1.5" BorderBrush="{DynamicResource AccentBrush}" />
       </Canvas>

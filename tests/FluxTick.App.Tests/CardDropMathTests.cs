@@ -178,29 +178,4 @@ public class CardDropMathTests
     {
         CardDropMath.ComputeTarget([], [], new Point(0, 0), null).Should().BeNull();
     }
-
-    /// <summary>
-    /// Verifies the new group placeholder is hit inside its area and a few pixels around it, but not farther away.
-    /// </summary>
-    /// <param name="x">
-    /// The pointer x position.
-    /// </param>
-    /// <param name="y">
-    /// The pointer y position.
-    /// </param>
-    /// <param name="expected">
-    /// Whether the placeholder is hit.
-    /// </param>
-    [Theory]
-    [InlineData(200, 205, true)]
-    [InlineData(0, 190, true)]
-    [InlineData(200, 186, true)]
-    [InlineData(200, 150, false)]
-    [InlineData(200, 240, false)]
-    public void HitNewGroupSlot_PointerNearPlaceholder_HitsOnlyWithinReach(double x, double y, bool expected)
-    {
-        var slot = new Rect(0, 190, 400, 34);
-
-        CardDropMath.HitNewGroupSlot(slot, new Point(x, y)).Should().Be(expected);
-    }
 }

@@ -201,7 +201,7 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <!-- The same dashed placeholder as below the groups in the card layout; it asks for the name next to it. -->
+            <!-- The dashed "New group" button; it asks for the name next to it. -->
             <views:NewGroupPlaceholder Name="NewGroupButton" Margin="0,6,0,6" Click="OnNewGroupClicked" />
           </StackPanel>
         </ScrollViewer>

@@ -3,22 +3,10 @@
              xmlns:loc="using:FluxTick.App.Localization"
              x:Class="FluxTick.App.Views.NewGroupPlaceholder">
 
-  <!-- The dashed "+ New group" placeholder of the card layout and of the settings page. The colours live in styles,
-       not on the rectangle, so that the "dropping" class (set while a card is dragged over it) can change them. -->
-  <UserControl.Styles>
-    <Style Selector="Rectangle.outline">
-      <Setter Property="Stroke" Value="{DynamicResource BorderBrush}" />
-      <Setter Property="StrokeThickness" Value="1" />
-    </Style>
-    <Style Selector=".dropping Rectangle.outline">
-      <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
-      <Setter Property="StrokeThickness" Value="2" />
-    </Style>
-  </UserControl.Styles>
-
+  <!-- The dashed "+ New group" placeholder of the settings page. -->
   <Button Name="Inner" HorizontalAlignment="Stretch" Padding="0" Background="Transparent" AutomationProperties.Name="{loc:T Group_NewTitle}">
     <Grid Height="34">
-      <Rectangle Classes="outline" RadiusX="8" RadiusY="8" StrokeDashArray="4,3" />
+      <Rectangle RadiusX="8" RadiusY="8" StrokeThickness="1" StrokeDashArray="4,3" Stroke="{DynamicResource BorderBrush}" />
       <TextBlock Text="{loc:T Group_NewPlaceholder}" Classes="muted" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
     </Grid>
   </Button>

@@ -58,7 +58,7 @@ public sealed partial class SettingsView : UserControl
             : Task.CompletedTask;
 
     /// <summary>
-    /// Asks for the name of a new group next to the placeholder, the same way the card layout does.
+    /// Asks for the name of a new group next to the placeholder.
     /// </summary>
     /// <param name="sender">
     /// The placeholder.

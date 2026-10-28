@@ -56,7 +56,7 @@ public sealed partial class WatchlistView : UserControl
             _observed?.PropertyChanged += OnMainPropertyChanged;
         };
         SectionsHost.AddHandler(PointerPressedEvent, OnSectionsPointerPressedTunnel, RoutingStrategies.Tunnel);
-        _cardDrag = new CardDragController(SectionsHost, CardsScroller, DropIndicator, this, NewGroupSlot, () => DataContext as MainViewModel);
+        _cardDrag = new CardDragController(SectionsHost, CardsScroller, DropIndicator, this, () => DataContext as MainViewModel);
         _groupDrag = new GroupDragController(SectionsHost, CardsScroller, this, () => DataContext as MainViewModel);
         SectionsHost.AddHandler(ContextRequestedEvent, OnSectionsContextRequested, RoutingStrategies.Tunnel);
         Root.AddHandler(ContextRequestedEvent, OnRootContextRequested, RoutingStrategies.Tunnel);
@@ -307,23 +307,6 @@ public sealed partial class WatchlistView : UserControl
         if (commit && DataContext is MainViewModel vm && section.GroupId is { } id)
         {
             _ = vm.RenameGroupAsync(id, section.EditName);
-        }
-    }
-
-    /// <summary>
-    /// Asks for the name of a new group when the placeholder below the groups is clicked.
-    /// </summary>
-    /// <param name="sender">
-    /// The placeholder.
-    /// </param>
-    /// <param name="e">
-    /// The event data.
-    /// </param>
-    private void OnNewGroupSlotClicked(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel vm)
-        {
-            GroupNamePrompt.Show(NewGroupSlot, Loc.Get("Group_NewTitle"), PlacementMode.TopEdgeAlignedLeft, name => vm.CreateGroupAsync(name));
         }
     }
 
