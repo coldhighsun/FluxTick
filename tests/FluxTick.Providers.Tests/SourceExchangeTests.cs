@@ -1,5 +1,6 @@
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
+using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
 using FluxTick.Providers.Yahoo;
@@ -55,6 +56,40 @@ public class SourceExchangeTests
     [InlineData("^FTSE", null)]
     public void Yahoo_MapsSymbols(string symbol, string? expected) =>
         Name(YahooProvider.ExchangeOf(symbol)).Should().Be(expected);
+
+    /// <summary>
+    /// Verifies the tickers of Eulerpool: no suffix is a US listing, the listed suffixes have their exchange, and an
+    /// exchange that is not known has none rather than a wrong one.
+    /// </summary>
+    [Theory]
+    [InlineData("AAPL", "Us")]
+    [InlineData("0700.HK", "HongKong")]
+    [InlineData("SAP.DE", "Other")]
+    [InlineData("VOD.L", "Other")]
+    [InlineData("0700.XYZ", null)]
+    [InlineData("BRK.B", null)]
+    public void Eulerpool_MapsTickerSuffixes(string symbol, string? expected) =>
+        Name(EulerpoolExchanges.Of(symbol)).Should().Be(expected);
+
+    /// <summary>
+    /// Verifies each exchange is read in its own time zone: 11:00 in Berlin is open, 11:00 in New York is not yet.
+    /// </summary>
+    [Fact]
+    public void Eulerpool_ReadsEachExchangeInItsOwnZone()
+    {
+        var utc = new DateTimeOffset(2026, 10, 28, 10, 0, 0, TimeSpan.Zero); // 11:00 Berlin, 06:00 New York
+
+        EulerpoolExchanges.Of("SAP.DE")!.GetState(utc).Should().Be(MarketState.Open);
+        EulerpoolExchanges.Of("AAPL")!.GetState(utc).Should().Be(MarketState.PreMarket);
+    }
+
+    /// <summary>
+    /// Verifies a weekend is shut in Berlin.
+    /// </summary>
+    [Fact]
+    public void Eulerpool_Saturday_IsClosed() =>
+        EulerpoolExchanges.Of("SAP.DE")!.GetState(new DateTimeOffset(2026, 10, 31, 11, 0, 0, TimeSpan.FromHours(1)))
+            .Should().Be(MarketState.Closed);
 
     /// <summary>
     /// Names a shared exchange, or <c>Other</c> for one a source defines itself.

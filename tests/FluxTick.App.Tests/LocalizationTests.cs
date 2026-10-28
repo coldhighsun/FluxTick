@@ -312,7 +312,7 @@ public class LocalizationTests
     public void ProviderText_OptionLabel_PrefersTheLabelOfTheDataSource()
     {
         var poll = new ProviderOptionDefinition(ProviderOptionDefinition.PollIntervalKey, "Poll interval", ProviderOptionType.Duration, "00:00:05");
-        var streaming = new ProviderDescriptor("yahoo", "Yahoo", "A feed.", [AssetClass.Equity], ProviderUpdateMode.Streaming);
+        var streaming = new ProviderDescriptor("eulerpool", "Eulerpool", "A feed.", [AssetClass.Equity], ProviderUpdateMode.Streaming);
         var polling = new ProviderDescriptor("tencent", "Tencent", "A feed.", [AssetClass.Equity], ProviderUpdateMode.Polling);
 
         InChinese(() =>
