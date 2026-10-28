@@ -75,8 +75,9 @@
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
-            <!-- Four corners pointing out mean "fill the screen"; pointing in they mean "go back". -->
-            <Button Classes="icon" Width="24" ToolTip.Tip="{Binding FullScreenTip}" Click="OnFullScreenClicked" Classes.active="{Binding IsFullScreen}"
+            <!-- Four corners pointing out mean "fill the screen"; pointing in they mean "go back". Only the cards can fill the
+                 screen, so the list has no such button (IsCardLayout is also true while the window is full screen). -->
+            <Button Classes="icon" Width="24" IsVisible="{Binding IsCardLayout}" ToolTip.Tip="{Binding FullScreenTip}" Click="OnFullScreenClicked" Classes.active="{Binding IsFullScreen}"
                     AutomationProperties.Name="{loc:T Main_FullScreen}">
               <Panel>
                 <Path Data="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" IsVisible="{Binding !IsFullScreen}" />

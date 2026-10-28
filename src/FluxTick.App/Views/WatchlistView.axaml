@@ -60,7 +60,7 @@
     </Grid.ContextMenu>
     <ScrollViewer Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,0,6,0"
                   IsVisible="{Binding !IsCardLayout}">
-      <ItemsControl Name="RowsHost" ItemsSource="{Binding ListItems}">
+      <ItemsControl Name="RowsHost" VerticalAlignment="Top" ItemsSource="{Binding ListItems}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:AssetRowViewModel">
             <views:AssetRowView>
