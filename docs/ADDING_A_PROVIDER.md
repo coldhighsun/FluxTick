@@ -183,6 +183,10 @@ How the settings page stores options, so you know what your declaration promises
   their declared defaults, as a draft the user then saves. `Secret` options (keys, tokens) are left alone, because they are
   credentials rather than settings.
 
+### How `Secret` values are stored
+
+A `Secret` option is never written to `settings.json` as typed on Windows: `ProtectedSettingsStore` protects it with the Windows Data Protection API (current user, bound to `{providerId}:{Key}`) as the file is written and opens it as the file is read, so the settings manager, the providers and the settings page all work with the plain value. On macOS and Linux there is no built-in protection yet, so the value is stored as it is and the settings file is limited to its owner (mode 600). A protected value that cannot be opened (another user or machine) is not given to the settings, so the source asks for the key again; the text stays in the file, unchanged, until the user enters a new one or switches the source off, so a value that cannot be opened now is not lost by saving something else. Copies of the settings file made by earlier versions (such as `settings.json.bad`) may still hold the key as it was typed; the log says so after the first protected save, and they can be deleted. Your source needs to do nothing for this; just declare the option as `Secret`, and do not log it or store it anywhere else.
+
 ## 5. Register it
 
 In `src/FluxTick.App/Services/AppHost.cs`:
@@ -233,4 +237,4 @@ use a stub `HttpMessageHandler` plus `FakeTimeProvider` for polling behavior (se
 
 - Loading providers from DLLs at runtime (a `plugins/` folder). The contract is designed for it; it is a follow-up.
 - Automatic failover to the next provider in the order of the data sources.
-- Secure storage for `Secret` options: values are currently stored in `settings.json` in plain text.
+- Secure storage for `Secret` options on macOS and Linux (Keychain, libsecret). The protection sits behind `ISecretProtector`, so a platform implementation can be added without touching the sources.
