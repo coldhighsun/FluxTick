@@ -52,9 +52,26 @@ public sealed class UpdateServiceTests : IDisposable
     public void Dispose()
     {
         _github.Dispose();
-        if (Directory.Exists(_directory))
+        DeleteDirectory();
+    }
+
+    /// <summary>
+    /// Deletes the directory of the test. A service that was disposed may still be winding down its background loop, which
+    /// can hold the state file for a moment on Windows, so a file that is in use is tried again until it is let go.
+    /// </summary>
+    private void DeleteDirectory()
+    {
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(5);
+        while (Directory.Exists(_directory))
         {
-            Directory.Delete(_directory, recursive: true);
+            try
+            {
+                Directory.Delete(_directory, recursive: true);
+            }
+            catch (IOException) when (DateTimeOffset.UtcNow < deadline)
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(20));
+            }
         }
     }
 
