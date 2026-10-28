@@ -56,7 +56,7 @@
                     <TextBlock Text="{loc:T Settings_BossKey}" />
                     <TextBlock Text="{loc:T Settings_BossKeyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
-                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" IsCapturing="{Binding IsRecordingBossKey}" Width="130" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
+                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" EmptyText="{loc:T Settings_BossKeyNone}" RecordingText="{loc:T Settings_BossKeyPress}" IsCapturing="{Binding IsRecordingBossKey}" Width="130" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel VerticalAlignment="Center">
