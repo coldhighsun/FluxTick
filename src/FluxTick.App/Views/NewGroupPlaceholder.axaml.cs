@@ -4,7 +4,7 @@ using Avalonia.Interactivity;
 namespace FluxTick.App.Views;
 
 /// <summary>
-/// The dashed "New group" placeholder. Clicking it, or dropping a card on it in the card layout, starts a new group.
+/// The dashed "New group" placeholder. Clicking it starts a new group.
 /// </summary>
 public sealed partial class NewGroupPlaceholder : UserControl
 {

@@ -8,7 +8,6 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
 using Avalonia.VisualTree;
-using FluxTick.App.Localization;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -88,11 +87,6 @@ internal sealed class CardDragController
     private readonly Func<MainViewModel?> _viewModel;
 
     /// <summary>
-    /// The placeholder below the last group that creates a new group for a card dropped on it.
-    /// </summary>
-    private readonly Control _newGroupSlot;
-
-    /// <summary>
     /// The control that owns the host, used to find the top level.
     /// </summary>
     private readonly Control _owner;
@@ -158,17 +152,6 @@ internal sealed class CardDragController
     private DropTarget? _target;
 
     /// <summary>
-    /// The area of the new group placeholder when the drag started, in host coordinates, or <see langword="null"/>
-    /// when it is not shown.
-    /// </summary>
-    private Rect? _newGroupArea;
-
-    /// <summary>
-    /// Whether the pointer is over the new group placeholder, so that dropping would create a group.
-    /// </summary>
-    private bool _overNewGroup;
-
-    /// <summary>
     /// The sections as they were laid out when the drag started, with their cards other than the dragged one.
     /// </summary>
     private List<SectionState> _states = [];
@@ -208,15 +191,11 @@ internal sealed class CardDragController
     /// <param name="owner">
     /// The control that contains everything above.
     /// </param>
-    /// <param name="newGroupSlot">
-    /// The placeholder that creates a new group for a card dropped on it.
-    /// </param>
     /// <param name="viewModel">
     /// Supplies the main view model.
     /// </param>
-    public CardDragController(ItemsControl host, ScrollViewer scroller, Border indicator, Control owner, Control newGroupSlot, Func<MainViewModel?> viewModel)
+    public CardDragController(ItemsControl host, ScrollViewer scroller, Border indicator, Control owner, Func<MainViewModel?> viewModel)
     {
-        _newGroupSlot = newGroupSlot;
         _host = host;
         _scroller = scroller;
         _indicator = indicator;
@@ -337,19 +316,10 @@ internal sealed class CardDragController
         var row = _row;
         var source = _source;
         var originalIndex = _originalIndex;
-        var overNewGroup = _overNewGroup;
         e.Handled = true;
 
         // Clear the drag visuals before the cards are rearranged so none of them shows a stale offset.
         Reset();
-
-        // Dropped on the placeholder: ask for a name; the group is created, and the card moved into it, only once
-        // a name was typed.
-        if (overNewGroup && row is not null && _viewModel() is { } main)
-        {
-            GroupNamePrompt.Show(_newGroupSlot, Loc.Get("Group_NewTitle"), PlacementMode.TopEdgeAlignedLeft, name => main.CreateGroupAsync(name, row));
-            return;
-        }
 
         if (target is not { } drop || row is null || source is null || _viewModel() is not { } vm)
         {
@@ -525,7 +495,6 @@ internal sealed class CardDragController
             _areas.Add(new SectionArea(state.Section.Key, reference[i].Bounds, reference[i].Header, itemCount, state.Section.IsCollapsed));
         }
 
-        _newGroupArea = _newGroupSlot.IsEffectivelyVisible ? BoundsInHost(_newGroupSlot) : null;
         return _areas.Count > 0;
     }
 
@@ -547,15 +516,6 @@ internal sealed class CardDragController
         // section.
         var locked = vm.Grouping is CardGrouping.ByType or CardGrouping.ByProvider ? _source.Key : null;
         _target = CardDropMath.ComputeTarget(_slots, _areas, position, locked);
-
-        // Over the placeholder the card does not belong to any section yet, so the cards close up as if it left.
-        _overNewGroup = _newGroupArea is { } slotArea && CardDropMath.HitNewGroupSlot(slotArea, position);
-        if (_overNewGroup)
-        {
-            _target = null;
-        }
-
-        _newGroupSlot.Classes.Set("dropping", _overNewGroup);
 
         var gapKey = _target is { IsHeaderHighlight: false } drop ? drop.SectionKey : null;
         int? gapIndex = _target is { IsHeaderHighlight: false } gap ? gap.Index : null;
@@ -676,8 +636,6 @@ internal sealed class CardDragController
         _pointer = null;
         _dragging = false;
         _target = null;
-        _overNewGroup = false;
-        _newGroupArea = null;
         var animated = _animated;
         _slots = [];
         _areas = [];
@@ -702,7 +660,6 @@ internal sealed class CardDragController
         _keyHost = null;
 
         CloseDropSlots();
-        _newGroupSlot.Classes.Set("dropping", false);
         _indicator.IsVisible = false;
         if (card is not null)
         {

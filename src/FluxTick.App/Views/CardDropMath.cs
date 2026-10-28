@@ -57,11 +57,6 @@ internal readonly record struct DropTarget(string SectionKey, int Index, bool Is
 internal static class CardDropMath
 {
     /// <summary>
-    /// How far beyond its edges the new group placeholder still counts as hit.
-    /// </summary>
-    private const double NewGroupSlotReach = 6;
-
-    /// <summary>
     /// Finds where a dragged card would land for a pointer position.
     /// </summary>
     /// <param name="slots">
@@ -101,21 +96,6 @@ internal static class CardDropMath
         var cards = slots.Where(s => s.SectionKey == section.Key).OrderBy(s => s.Index).ToList();
         return new DropTarget(section.Key, cards.Count == 0 ? 0 : IndexFor(cards, section, point), IsHeaderHighlight: false);
     }
-
-    /// <summary>
-    /// Tells whether the pointer is over the placeholder that creates a new group. The area is widened a little so
-    /// the placeholder is easy to hit with a card in hand.
-    /// </summary>
-    /// <param name="slot">
-    /// The area of the placeholder.
-    /// </param>
-    /// <param name="point">
-    /// The pointer position in the same coordinate space.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> when dropping at the pointer would create a group.
-    /// </returns>
-    public static bool HitNewGroupSlot(Rect slot, Point point) => slot.Inflate(NewGroupSlotReach).Contains(point);
 
     /// <summary>
     /// Picks the section under the pointer, or the vertically nearest one when the pointer is in a gap.

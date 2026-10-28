@@ -52,20 +52,6 @@ public class XamlStyleRulesTests
     }
 
     /// <summary>
-    /// Verifies the outline of the new group placeholder leaves colour and thickness to the styles, which change
-    /// them while a card is dragged over it.
-    /// </summary>
-    [Fact]
-    public void NewGroupOutline_HasNoStrokeOfItsOwn()
-    {
-        var outlines = WithClass(Load("NewGroupPlaceholder.axaml"), "Rectangle", "outline");
-
-        var outline = outlines.Should().ContainSingle().Subject;
-        outline.Attribute("Stroke").Should().BeNull();
-        outline.Attribute("StrokeThickness").Should().BeNull();
-    }
-
-    /// <summary>
     /// Verifies every icon button of the header has the narrow width on the element itself, which is the only way to
     /// be sure it beats the width of the icon style.
     /// </summary>

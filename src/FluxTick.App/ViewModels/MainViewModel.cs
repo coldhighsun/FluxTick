@@ -297,7 +297,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <summary>
     /// Gets a value indicating whether the cards are shown in the custom groups: the card layout with the custom
     /// grouping, and not just the custom grouping, which stays selected in the list layout. Only then are the groups
-    /// visible, so this is when the new group placeholder and the New group menu entries are offered.
+    /// visible, so this is when the New group menu entries are offered.
     /// </summary>
     public bool IsCustomCardGrouping => IsCardLayout && Grouping == CardGrouping.Custom;
 
