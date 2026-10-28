@@ -300,6 +300,12 @@
                       <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
                         <TextBlock Text="{Binding Description}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="10" />
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasHomepage}">
+                          <TextBlock Text="{loc:T Settings_Website}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                          <Button Classes="link" Content="{Binding HomepageHost}" Command="{Binding OpenHomepageCommand}" FontSize="11"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center" ToolTip.Tip="{Binding HomepageUrl}"
+                                  AutomationProperties.Name="{Binding HomepageHost}" />
+                        </StackPanel>
 
                         <ItemsControl ItemsSource="{Binding Options}">
                           <ItemsControl.ItemTemplate>

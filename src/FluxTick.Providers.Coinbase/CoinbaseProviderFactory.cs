@@ -21,7 +21,7 @@ public sealed class CoinbaseProviderFactory : IMarketDataProviderFactory
         "Real-time crypto spot prices from Coinbase Exchange, pushed over a public WebSocket. No API key required.",
         [AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
-        Homepage: new Uri("https://docs.cdp.coinbase.com/exchange/docs/welcome"),
+        Homepage: new Uri("https://exchange.coinbase.com/"),
         Options: ExchangeEndpoints.Options(
             "wss://ws-feed.exchange.coinbase.com",
             "Change this if coinbase.com is unreachable from your network.",

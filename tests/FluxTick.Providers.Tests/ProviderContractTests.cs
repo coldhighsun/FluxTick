@@ -59,6 +59,32 @@ public abstract class ProviderContractTests<TFactory>
     }
 
     /// <summary>
+    /// Gets a value indicating whether the source has a site to link to; only a source that makes up its data has none.
+    /// </summary>
+    protected virtual bool HasHomepage => true;
+
+    /// <summary>
+    /// Verifies the settings page can link to the site of the source, and only to a secure address.
+    /// </summary>
+    [Fact]
+    public void Descriptor_Homepage_IsAnHttpsAddress()
+    {
+        var homepage = new TFactory().Descriptor.Homepage;
+
+        if (HasHomepage)
+        {
+            homepage.Should().NotBeNull("the card of the source links to its site");
+        }
+
+        if (homepage is not null)
+        {
+            homepage.IsAbsoluteUri.Should().BeTrue();
+            homepage.Scheme.Should().Be(Uri.UriSchemeHttps);
+            homepage.UserInfo.Should().BeEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies a source that needs a value such as an API key is off by default, since it cannot work until the user
     /// has entered it.
     /// </summary>
@@ -126,7 +152,11 @@ public abstract class ProviderContractTests<TFactory>
 /// <summary>
 /// Contract tests for the Simulated provider.
 /// </summary>
-public sealed class SimulatedProviderContractTests : ProviderContractTests<SimulatedProviderFactory>;
+public sealed class SimulatedProviderContractTests : ProviderContractTests<SimulatedProviderFactory>
+{
+    /// <inheritdoc />
+    protected override bool HasHomepage => false;
+}
 
 /// <summary>
 /// Contract tests for the Binance provider.

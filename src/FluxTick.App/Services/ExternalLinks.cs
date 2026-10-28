@@ -43,16 +43,57 @@ public static class ExternalLinks
     /// <see langword="true"/> when the browser was asked to open the page; <see langword="false"/> when the address may
     /// not be opened or no browser could be started.
     /// </returns>
-    public static bool TryOpenGitHub(string? url, Action<ProcessStartInfo>? start = null)
-    {
-        if (!IsGitHubUrl(url))
-        {
-            return false;
-        }
+    public static bool TryOpenGitHub(string? url, Action<ProcessStartInfo>? start = null) =>
+        IsGitHubUrl(url) && TryOpen(url!, start);
 
+    /// <summary>
+    /// Tells whether an address is a web page the app may send the user to: an https address with no user name or password in
+    /// it, which is how an address that hides where it leads would look. The address comes from the code of a data source, so
+    /// where it leads is not checked beyond that.
+    /// </summary>
+    /// <param name="url">
+    /// The address.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when it may be opened.
+    /// </returns>
+    public static bool IsWebUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && string.IsNullOrEmpty(uri.UserInfo);
+
+    /// <summary>
+    /// Opens a web page, such as the site of a data source, in the default browser, if <see cref="IsWebUrl"/> allows it.
+    /// </summary>
+    /// <param name="url">
+    /// The address.
+    /// </param>
+    /// <param name="start">
+    /// Starts the process; the default starts it for real. For tests.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when it was handed to the system.
+    /// </returns>
+    public static bool TryOpenWebsite(string? url, Action<ProcessStartInfo>? start = null) =>
+        IsWebUrl(url) && TryOpen(url!, start);
+
+    /// <summary>
+    /// Hands an address that was checked to the system.
+    /// </summary>
+    /// <param name="url">
+    /// The address.
+    /// </param>
+    /// <param name="start">
+    /// Starts the process, or <see langword="null"/> to start it for real.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when it was handed over.
+    /// </returns>
+    private static bool TryOpen(string url, Action<ProcessStartInfo>? start)
+    {
         try
         {
-            var info = new ProcessStartInfo(new Uri(url!).AbsoluteUri) { UseShellExecute = true };
+            var info = new ProcessStartInfo(new Uri(url).AbsoluteUri) { UseShellExecute = true };
             if (start is null)
             {
                 using var process = Process.Start(info);
