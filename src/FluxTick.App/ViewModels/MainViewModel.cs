@@ -1631,8 +1631,21 @@ public sealed partial class MainViewModel : LocalizedViewModel
             }
 
             var status = _market.GetProviderStatus(id);
-            chip.IsGood = status?.State == ProviderConnectionState.Connected;
-            chip.IsBad = status is null || status.State == ProviderConnectionState.Failed;
+            var good = status?.State == ProviderConnectionState.Connected;
+            var bad = status is null || status.State == ProviderConnectionState.Failed;
+
+            // Clear the flag that turns off first so a reader never sees both set at once.
+            if (good)
+            {
+                chip.IsBad = bad;
+                chip.IsGood = good;
+            }
+            else
+            {
+                chip.IsGood = good;
+                chip.IsBad = bad;
+            }
+
             chip.Tooltip = status switch
             {
                 null => Loc.Get("Chip_Off", chip.Name),
