@@ -129,6 +129,11 @@ public sealed record ProviderOptionDefinition(
     double? Max = null)
 {
     /// <summary>
+    /// The key of the option in which the polled sources keep how often they fetch prices.
+    /// </summary>
+    public const string PollIntervalKey = "PollInterval";
+
+    /// <summary>
     /// Validates a stored text value against this definition.
     /// </summary>
     /// <param name="value">

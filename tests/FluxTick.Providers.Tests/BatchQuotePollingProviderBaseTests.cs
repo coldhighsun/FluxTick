@@ -40,6 +40,27 @@ public class BatchQuotePollingProviderBaseTests
     }
 
     /// <summary>
+    /// Verifies a quote the service gave a time for carries it, and one without gets the time of the answer and says so.
+    /// </summary>
+    [Fact]
+    public async Task Poll_QuoteWithOrWithoutATime_MarksOnlyTheEstimatedOne()
+    {
+        var traded = new DateTimeOffset(2026, 10, 28, 3, 0, 0, TimeSpan.Zero);
+        await using var provider = new TestProvider(codes => [new ParsedQuote("a", 1m, null, traded), new ParsedQuote("b", 2m, null, null)]);
+        var timed = new Asset("batch", "a", "A", AssetClass.Equity);
+        var untimed = new Asset("batch", "b", "B", AssetClass.Equity);
+
+        await provider.SetSubscriptionsAsync([timed, untimed]);
+        var quotes = await TestWait.ReadQuotesAsync(provider, 2);
+
+        var withTime = quotes.Single(q => q.AssetId == timed.Id);
+        withTime.Timestamp.Should().Be(traded);
+        withTime.TimeIsEstimated.Should().BeFalse();
+        var withoutTime = quotes.Single(q => q.AssetId == untimed.Id);
+        withoutTime.TimeIsEstimated.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies instruments that share a code, here differing only in case, are requested once and all get the quote.
     /// </summary>
     [Fact]

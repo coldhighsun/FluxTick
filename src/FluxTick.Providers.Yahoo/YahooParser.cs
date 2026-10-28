@@ -38,6 +38,12 @@ internal static class YahooParser
     private static readonly long MaxUnixSeconds = DateTimeOffset.MaxValue.ToUnixTimeSeconds();
 
     /// <summary>
+    /// How long before the regular session the opening auction of a market without a pre-market period starts, such as
+    /// the Shanghai and Shenzhen markets, whose call auction is from 09:15.
+    /// </summary>
+    private static readonly TimeSpan OpeningAuction = TimeSpan.FromMinutes(15);
+
+    /// <summary>
     /// Parses a <c>v8/finance/chart</c> response.
     /// </summary>
     /// <param name="json">
@@ -49,14 +55,18 @@ internal static class YahooParser
     /// <param name="symbol">
     /// The symbol that was requested.
     /// </param>
+    /// <param name="now">
+    /// The time the response was received, or <see langword="null"/> for the current time.
+    /// </param>
     /// <returns>
     /// The quote and intraday history.
     /// </returns>
     /// <exception cref="YahooApiException">
     /// Yahoo reported an error or the response had no price.
     /// </exception>
-    public static YahooChartData ParseChart(string json, string providerId, string symbol)
+    public static YahooChartData ParseChart(string json, string providerId, string symbol, DateTimeOffset? now = null)
     {
+        var received = now ?? DateTimeOffset.UtcNow;
         using var document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("chart", out var chart))
         {
@@ -100,13 +110,114 @@ internal static class YahooParser
         }
 
         // A time that is missing, or that no date can hold, counts as not given: the quote is as old as the answer.
-        var timestamp = meta.TryGetProperty("regularMarketTime", out var time)
+        var tradeTime = meta.TryGetProperty("regularMarketTime", out var time)
             && time.TryGetInt64(out var seconds)
             && TryUnixTime(seconds, out var traded)
-            ? traded
-            : DateTimeOffset.UtcNow;
+            ? (DateTimeOffset?)traded
+            : null;
 
-        return new YahooChartData(new Quote(new AssetId(providerId, symbol), price, reference, timestamp), ParseHistory(result));
+        var quote = new Quote(new AssetId(providerId, symbol), price, reference, tradeTime ?? received)
+        {
+            Market = ParseMarketState(meta, received),
+            TimeIsEstimated = tradeTime is null,
+        };
+        return new YahooChartData(quote, ParseHistory(result));
+    }
+
+    /// <summary>
+    /// Works out the trading state of the market from the trading periods Yahoo gives for the current day. Yahoo knows
+    /// the holidays and shortened days of every exchange, which regular hours do not. Only shares, funds and indices are
+    /// told; the periods of currencies, futures and crypto cover the whole day.
+    /// </summary>
+    /// <param name="meta">
+    /// The <c>meta</c> object of the chart result.
+    /// </param>
+    /// <param name="now">
+    /// The time to tell the state of.
+    /// </param>
+    /// <returns>
+    /// The state, or <see langword="null"/> when Yahoo does not say.
+    /// </returns>
+    private static MarketState? ParseMarketState(JsonElement meta, DateTimeOffset now)
+    {
+        if (!meta.TryGetProperty("instrumentType", out var type)
+            || type.ValueKind != JsonValueKind.String
+            || type.GetString() is not ("EQUITY" or "ETF" or "INDEX")
+            || !meta.TryGetProperty("currentTradingPeriod", out var periods)
+            || periods.ValueKind != JsonValueKind.Object
+            || !TryGetPeriod(periods, "regular", out var regular))
+        {
+            return null;
+        }
+
+        var seconds = now.ToUnixTimeSeconds();
+        if (regular.Contains(seconds))
+        {
+            return MarketState.Open;
+        }
+
+        if ((TryGetPeriod(periods, "pre", out var pre) && pre.Contains(seconds))
+            || (seconds < regular.Start && seconds >= regular.Start - (long)OpeningAuction.TotalSeconds))
+        {
+            return MarketState.PreMarket;
+        }
+
+        return TryGetPeriod(periods, "post", out var post) && post.Contains(seconds) ? MarketState.AfterHours : MarketState.Closed;
+    }
+
+    /// <summary>
+    /// Reads one trading period.
+    /// </summary>
+    /// <param name="periods">
+    /// The <c>currentTradingPeriod</c> object.
+    /// </param>
+    /// <param name="name">
+    /// The name of the period: <c>pre</c>, <c>regular</c> or <c>post</c>.
+    /// </param>
+    /// <param name="period">
+    /// The period, when it was read.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the period is there with a start and an end.
+    /// </returns>
+    private static bool TryGetPeriod(JsonElement periods, string name, out TradingPeriod period)
+    {
+        period = default;
+        if (periods.TryGetProperty(name, out var element)
+            && element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("start", out var start)
+            && start.TryGetInt64(out var startSeconds)
+            && element.TryGetProperty("end", out var end)
+            && end.TryGetInt64(out var endSeconds))
+        {
+            period = new TradingPeriod(startSeconds, endSeconds);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A stretch of the trading day, in seconds since the Unix epoch.
+    /// </summary>
+    /// <param name="Start">
+    /// When it starts.
+    /// </param>
+    /// <param name="End">
+    /// When it ends.
+    /// </param>
+    private readonly record struct TradingPeriod(long Start, long End)
+    {
+        /// <summary>
+        /// Determines whether a time falls within the period; a period that is empty contains no time.
+        /// </summary>
+        /// <param name="seconds">
+        /// The time in seconds since the Unix epoch.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when it does.
+        /// </returns>
+        public bool Contains(long seconds) => seconds >= Start && seconds < End;
     }
 
     /// <summary>

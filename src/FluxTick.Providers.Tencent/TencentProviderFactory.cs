@@ -17,7 +17,7 @@ public sealed class TencentProviderFactory : IMarketDataProviderFactory
     /// <summary>
     /// The option key of the poll interval.
     /// </summary>
-    public const string PollIntervalKey = "PollInterval";
+    public const string PollIntervalKey = ProviderOptionDefinition.PollIntervalKey;
 
     /// <summary>
     /// The option key of the quote endpoint.
