@@ -176,6 +176,14 @@ internal static class SinaParser
 
         var time = fields.Length > Math.Max(layout.Date, layout.Time) ? ParseTime(fields[layout.Date], fields[layout.Time]) : null;
 
+        // The time of a stock line is the clock of the service, which goes on after the close and through the midday break
+        // while the line repeats the last price. Taken at its word the closing price would look live; it is dated to the end
+        // of the session instead.
+        if (time is { } stamped && SinaProvider.ExchangeOf(key) is { } exchange)
+        {
+            time = exchange.ClampToSessionEnd(stamped);
+        }
+
         // Before the opening auction, and for a suspended stock, the price is zero; the previous close is then the
         // price still in force. It is only published with the time the line carries, which tells the app how old
         // it is; without one it would look current, so the line is skipped.

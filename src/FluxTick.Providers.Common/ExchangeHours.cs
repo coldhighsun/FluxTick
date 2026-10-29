@@ -140,6 +140,41 @@ public sealed class ExchangeHours
     }
 
     /// <summary>
+    /// Pulls a time that lies after a regular session ended back to the end of that session. For sources that stamp a quote
+    /// with their own clock instead of the time of the trade, which would keep a closing price looking current for as
+    /// long as the source goes on sending it. A time inside a session, before the first one of the day or on a weekend is
+    /// returned as it is.
+    /// </summary>
+    /// <param name="time">
+    /// The time the source gave.
+    /// </param>
+    /// <returns>
+    /// The end of the last regular session that ended before the time on the same day, or the time itself.
+    /// </returns>
+    public DateTimeOffset ClampToSessionEnd(DateTimeOffset time)
+    {
+        if (Zone is not { } zone)
+        {
+            return time;
+        }
+
+        var local = TimeZoneInfo.ConvertTime(time, zone);
+        if (local.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            return time;
+        }
+
+        var clock = local.TimeOfDay;
+        if (_sessions.Any(s => s.State == MarketState.Open && clock >= s.Start && clock < s.End))
+        {
+            return time;
+        }
+
+        var ended = _sessions.Where(s => s.State == MarketState.Open && s.End <= clock).Select(s => s.End).DefaultIfEmpty().Max();
+        return ended == TimeSpan.Zero ? time : time - (clock - ended);
+    }
+
+    /// <summary>
     /// Gets the trading state for the exchange a source found for a symbol, for the body of
     /// <see cref="IMarketHoursProvider.GetMarketState"/>.
     /// </summary>
