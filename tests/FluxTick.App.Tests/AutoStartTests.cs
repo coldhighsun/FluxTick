@@ -160,6 +160,64 @@ public sealed class AutoStartTests
     [Fact]
     public void Build_PathWithSpaces_IsQuoted() =>
         AutoStartCommand.Build(@"C:\My Apps\FluxTick.exe").Should().Be("\"C:\\My Apps\\FluxTick.exe\"");
+
+    /// <summary>
+    /// Verifies a registered command counts as this app only when it names the running executable.
+    /// </summary>
+    /// <param name="command">
+    /// The registered command line.
+    /// </param>
+    /// <param name="processPath">
+    /// The path of the running process.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the command starts this executable.
+    /// </param>
+    [Theory]
+    [InlineData("\"C:\\Apps\\FluxTick.exe\"", @"C:\Apps\FluxTick.exe", true)]
+    [InlineData("\"c:\\apps\\fluxtick.exe\" --minimized", @"C:\Apps\FluxTick.exe", true)]
+    [InlineData("\"D:\\Other\\FluxTick.exe\"", @"C:\Apps\FluxTick.exe", false)]
+    [InlineData("", @"C:\Apps\FluxTick.exe", false)]
+    [InlineData("\"C:\\Apps\\FluxTick.exe\"", null, false)]
+    public void IsCurrentExecutable_Command_ComparesWithProcessPath(string command, string? processPath, bool expected) =>
+        AutoStartCommand.IsCurrentExecutable(command, processPath).Should().Be(expected);
+
+    /// <summary>
+    /// Verifies relative segments and a link to the executable resolve to the same file.
+    /// </summary>
+    [Fact]
+    public void IsCurrentExecutable_LinkAndRelativeSegments_ResolvesToSameFile()
+    {
+        // Arrange
+        var folder = Directory.CreateTempSubdirectory("fluxtick-autostart");
+        try
+        {
+            var exe = Path.Combine(folder.FullName, "FluxTick.exe");
+            File.WriteAllText(exe, string.Empty);
+            var link = Path.Combine(folder.FullName, "link.exe");
+            var linked = true;
+            try
+            {
+                File.CreateSymbolicLink(link, exe);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Creating links needs a privilege on some machines.
+                linked = false;
+            }
+
+            // Act and assert
+            AutoStartCommand.IsCurrentExecutable(AutoStartCommand.Build(Path.Combine(folder.FullName, ".", "FluxTick.exe")), exe).Should().BeTrue();
+            if (linked)
+            {
+                AutoStartCommand.IsCurrentExecutable(AutoStartCommand.Build(link), exe).Should().BeTrue();
+            }
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
 }
 
 /// <summary>
