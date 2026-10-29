@@ -32,7 +32,7 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
     /// <summary>
     /// How long to wait after the last keystroke before searching.
     /// </summary>
-    private static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(800);
 
     /// <summary>
     /// The settings store.
