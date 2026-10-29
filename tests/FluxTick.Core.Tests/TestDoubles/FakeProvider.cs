@@ -13,12 +13,22 @@ namespace FluxTick.Core.Tests.TestDoubles;
 /// The options the provider was created with.
 /// </param>
 public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions options)
-    : MarketDataProviderBase(descriptor, TimeProvider.System), IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+    : MarketDataProviderBase(descriptor, TimeProvider.System), IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCadenceProvider
 {
     /// <summary>
     /// Gets the options the provider was created with.
     /// </summary>
     public ProviderOptions Options { get; } = options;
+
+    /// <inheritdoc />
+    public TimeSpan? PollInterval { get; } = descriptor.OptionDefinitions.Any(o => o.Key == ProviderOptionDefinition.PollIntervalKey)
+        ? options.GetDuration(ProviderOptionDefinition.PollIntervalKey)
+        : null;
+
+    /// <inheritdoc />
+    public TimeSpan? QuietPollInterval { get; } = descriptor.OptionDefinitions.Any(o => o.Key == ProviderOptionDefinition.QuietPollIntervalKey)
+        ? options.GetDuration(ProviderOptionDefinition.QuietPollIntervalKey)
+        : null;
 
     /// <summary>
     /// Gets the subscription set after the latest change.
@@ -163,7 +173,10 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
     /// <param name="pollInterval">
     /// The poll interval the provider declares as its option, or <see langword="null"/> for none.
     /// </param>
-    public FakeProviderFactory(string id, AssetClass[] classes, bool enabledByDefault = true, string? pollInterval = null)
+    /// <param name="quietPollInterval">
+    /// The quiet-stream poll interval the provider declares as its option, or <see langword="null"/> for none.
+    /// </param>
+    public FakeProviderFactory(string id, AssetClass[] classes, bool enabledByDefault = true, string? pollInterval = null, string? quietPollInterval = null)
     {
         Descriptor = new ProviderDescriptor(
             id,
@@ -175,6 +188,7 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
             [
                 new ProviderOptionDefinition("Endpoint", "Endpoint", ProviderOptionType.String, "default"),
                 .. pollInterval is null ? Array.Empty<ProviderOptionDefinition>() : [new ProviderOptionDefinition("PollInterval", "Poll interval", ProviderOptionType.Duration, pollInterval)],
+                .. quietPollInterval is null ? Array.Empty<ProviderOptionDefinition>() : [new ProviderOptionDefinition("QuietPollInterval", "Quiet-stream poll interval", ProviderOptionType.Duration, quietPollInterval)],
             ],
             EnabledByDefault: enabledByDefault);
     }

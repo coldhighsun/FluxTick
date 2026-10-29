@@ -117,6 +117,49 @@ public abstract class ProviderContractTests<TFactory>
     }
 
     /// <summary>
+    /// Verifies a provider that declares a poll interval option tells the application the interval it runs with, so that a
+    /// quiet instrument is not judged stale sooner than the source can deliver.
+    /// </summary>
+    [Fact]
+    public async Task Create_WithPollIntervalOptions_ReportsThemAsQuoteCadence()
+    {
+        var factory = new TFactory();
+        var keys = factory.Descriptor.OptionDefinitions.Select(o => o.Key).ToHashSet();
+        var values = new Dictionary<string, string>();
+        if (keys.Contains(ProviderOptionDefinition.PollIntervalKey))
+        {
+            values[ProviderOptionDefinition.PollIntervalKey] = "00:00:07";
+        }
+
+        if (keys.Contains(ProviderOptionDefinition.QuietPollIntervalKey))
+        {
+            values[ProviderOptionDefinition.QuietPollIntervalKey] = "00:03:00";
+        }
+
+        await using var provider = factory.Create(new ProviderCreationContext(
+            new ProviderOptions(factory.Descriptor, values),
+            NullLoggerFactory.Instance,
+            TimeProvider.System));
+
+        if (values.Count == 0)
+        {
+            provider.Should().NotBeAssignableTo<IQuoteCadenceProvider>("a source without poll options has nothing to report");
+            return;
+        }
+
+        var cadence = provider.Should().BeAssignableTo<IQuoteCadenceProvider>().Subject;
+        cadence.PollInterval.Should().Be(TimeSpan.FromSeconds(7));
+        if (values.ContainsKey(ProviderOptionDefinition.QuietPollIntervalKey))
+        {
+            cadence.QuietPollInterval.Should().BeGreaterThanOrEqualTo(TimeSpan.FromMinutes(3), "the longest gap includes the quiet period");
+        }
+        else
+        {
+            cadence.QuietPollInterval.Should().BeNull();
+        }
+    }
+
+    /// <summary>
     /// Verifies a new provider is idle and stays idle without subscriptions, so no network I/O happens.
     /// </summary>
     [Fact]

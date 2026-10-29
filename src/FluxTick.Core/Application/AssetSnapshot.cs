@@ -18,14 +18,17 @@ public enum AssetHealth
     Live,
 
     /// <summary>
-    /// Nothing was received for longer than the staleness threshold, or what keeps arriving was traded too long ago to
-    /// be explained by a lagging feed.
+    /// Nothing was received (judged by the receive time) for longer than the source may stay silent, which is the usual
+    /// staleness threshold or, for a polled source, its poll interval (a streaming source's quiet-stream poll interval
+    /// as well) plus half of the threshold; or what keeps arriving was traded (judged by the trade time) more than 30
+    /// minutes ago, which a lagging feed does not explain.
     /// </summary>
     Stale,
 
     /// <summary>
-    /// Quotes keep arriving, but the trade time they carry is older than the staleness threshold, by no more than a
-    /// lagging feed would explain.
+    /// The source still answers, but the latest price was traded longer ago than the staleness threshold (for a polled
+    /// source, its poll interval plus half of the threshold, if longer) and no more than 30 minutes ago: a thin market
+    /// or a lagging feed.
     /// </summary>
     Delayed,
 

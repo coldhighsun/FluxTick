@@ -1121,7 +1121,7 @@ public sealed class MarketDataService : IAsyncDisposable
 
             // A price that keeps advancing beats a report of a shut market, which may be about the day before when the
             // source has not turned the page yet.
-            MarketState.Closed when state.AdvancedAt is { } advanced && now - advanced <= StaleAfterOf(slot) => hours,
+            MarketState.Closed when state.AdvancedAt is { } advanced && now - advanced <= DelayedAfterOf(slot) => hours,
             _ => reported,
         };
     }
@@ -1206,14 +1206,14 @@ public sealed class MarketDataService : IAsyncDisposable
         // Delayed when quotes keep arriving with a trade time that is old but within what a lagging feed explains.
         var now = _timeProvider.GetUtcNow();
         var quoteTime = state.Latest?.Timestamp ?? state.LastReceivedAt.Value;
-        var staleAfter = StaleAfterOf(slot);
+        var delayedAfter = DelayedAfterOf(slot);
         var quoteAge = now - quoteTime;
         if (IsSilent(state, slot, now) || quoteAge > DelayedUpTo)
         {
             return (AssetHealth.Stale, null);
         }
 
-        return quoteAge > staleAfter
+        return quoteAge > delayedAfter
             ? (AssetHealth.Delayed, null)
             : (AssetHealth.Live, null);
     }
@@ -1241,7 +1241,9 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <summary>
     /// Works out how long an instrument may go without a quote before it is stale: the configured time, or the poll
     /// interval of its source plus half of that time when this is longer, as a polled source delivers once per interval
-    /// and may be late by a margin. The result grows evenly with the interval.
+    /// and may be late by a margin. A streaming source whose instrument is quiet is heard from only once per quiet-poll
+    /// interval, which the source reports as the longest it can take, so the longer of the two intervals counts. The result
+    /// grows evenly with the interval.
     /// </summary>
     /// <param name="slot">
     /// The source of the instrument.
@@ -1250,8 +1252,35 @@ public sealed class MarketDataService : IAsyncDisposable
     /// The time.
     /// </returns>
     private TimeSpan StaleAfterOf(ProviderSlot slot) =>
-        slot.PollInterval is { } interval && interval + _options.StaleAfter / 2 > _options.StaleAfter
-            ? interval + _options.StaleAfter / 2
+        WithMargin(slot.Provider is IQuoteCadenceProvider { } cadence
+            ? TimeSpan.FromTicks(Math.Max(cadence.PollInterval?.Ticks ?? 0, cadence.QuietPollInterval?.Ticks ?? 0))
+            : null);
+
+    /// <summary>
+    /// Works out how old the trade time of a quote that keeps arriving may be before the price counts as delayed: the
+    /// configured time, or the poll interval of the source plus half of that time when this is longer. The quiet-stream
+    /// poll does not count here, as it only tops up a stream that has nothing new, whose quotes should not look live.
+    /// </summary>
+    /// <param name="slot">
+    /// The source of the instrument.
+    /// </param>
+    /// <returns>
+    /// The time.
+    /// </returns>
+    private TimeSpan DelayedAfterOf(ProviderSlot slot) => WithMargin((slot.Provider as IQuoteCadenceProvider)?.PollInterval);
+
+    /// <summary>
+    /// Adds the margin by which a poll may be late to its interval, when that exceeds the configured time.
+    /// </summary>
+    /// <param name="interval">
+    /// The interval between two polls, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>
+    /// The interval plus half of the configured time when this is longer than the configured time, otherwise the configured time.
+    /// </returns>
+    private TimeSpan WithMargin(TimeSpan? interval) =>
+        interval is { } value && value + _options.StaleAfter / 2 > _options.StaleAfter
+            ? value + _options.StaleAfter / 2
             : _options.StaleAfter;
 
     /// <summary>
@@ -1399,14 +1428,6 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </param>
     private sealed class ProviderSlot(string id, IMarketDataProvider provider, IReadOnlyDictionary<string, string> options)
     {
-        /// <summary>
-        /// Gets how often a polled source fetches prices, or <see langword="null"/> for a source that does not poll.
-        /// </summary>
-        public TimeSpan? PollInterval { get; } =
-            options.TryGetValue(ProviderOptionDefinition.PollIntervalKey, out var text) && ProviderOptionDefinition.TryParseDuration(text, out var interval)
-                ? interval
-                : null;
-
         /// <summary>
         /// Gets the provider id.
         /// </summary>

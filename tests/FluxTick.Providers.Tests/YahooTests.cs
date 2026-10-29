@@ -816,6 +816,98 @@ public class YahooTests
     }
 
     /// <summary>
+    /// Verifies an instrument that goes quiet while the stream keeps delivering for another is topped up over REST on its
+    /// own, and the busy one is not polled.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_OneInstrumentQuietOnABusyStream_PollsOnlyThatOne()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time, server.Uri);
+        await provider.SetSubscriptionsAsync([Aapl, Msft]);
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        await EventuallyAsync(() => handler.Requests.Count == 2);
+        var snapshots = handler.Requests.Count;
+
+        for (var i = 0; i < 6 && handler.Requests.Count == snapshots; i++)
+        {
+            await StepAsync(time, TimeSpan.FromSeconds(30));
+            await server.SendAsync(Convert.ToBase64String(Encode("AAPL", 190.5f + i, 1700000000000 + i)));
+        }
+
+        await EventuallyAsync(() => handler.Requests.Count > snapshots);
+        handler.Requests.Skip(snapshots).Should().OnlyContain(r => r.RequestUri!.ToString().Contains("MSFT"));
+    }
+
+    /// <summary>
+    /// Verifies the top-up of a quiet instrument backs off when the service pushes back, instead of asking again at the
+    /// pace of the quiet period.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_QuietInstrumentTopUpRateLimited_WaitsLongerBeforeAskingAgain()
+    {
+        await using var server = LoopbackServer.Start();
+        var snapshotsDone = false;
+        var handler = new StubHandler(_ => snapshotsDone ? new HttpResponseMessage(HttpStatusCode.TooManyRequests) : Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time, server.Uri);
+        await provider.SetSubscriptionsAsync([Aapl, Msft]);
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        await EventuallyAsync(() => handler.Requests.Count == 2);
+        snapshotsDone = true;
+
+        var tick = 0;
+        async Task BusyForAsync(TimeSpan total)
+        {
+            for (var elapsed = TimeSpan.Zero; elapsed < total; elapsed += TimeSpan.FromSeconds(30))
+            {
+                await StepAsync(time, TimeSpan.FromSeconds(30));
+                await server.SendAsync(Convert.ToBase64String(Encode("AAPL", 190.5f + tick, 1700000000000 + tick)));
+                tick++;
+            }
+        }
+
+        while (handler.Requests.Count == 2)
+        {
+            await BusyForAsync(TimeSpan.FromSeconds(30));
+        }
+
+        var afterFirst = handler.Requests.Count;
+
+        await BusyForAsync(TimeSpan.FromSeconds(90));
+        handler.Requests.Should().HaveCount(afterFirst, "after a refusal the top-up waits twice the quiet period");
+
+        await BusyForAsync(TimeSpan.FromSeconds(90));
+        handler.Requests.Count.Should().BeGreaterThan(afterFirst);
+    }
+
+    /// <summary>
+    /// Verifies an instrument of a market that is not trading is not topped up while the stream is busy with another.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_ClosedMarketInstrumentOnABusyStream_IsNotToppedUp()
+    {
+        await using var server = LoopbackServer.Start();
+        var hongKong = new Asset("yahoo", "0700.HK", "Tencent", AssetClass.Equity);
+        var handler = new StubHandler(_ => Json(ChartJson));
+        var time = new FakeTimeProvider(TradingHoursStart); // New York open, Hong Kong shut
+        await using var provider = CreateProvider(handler, time, server.Uri);
+        await provider.SetSubscriptionsAsync([Aapl, hongKong]);
+        await EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Connected);
+        await EventuallyAsync(() => handler.Requests.Count == 2);
+
+        for (var i = 0; i < 6; i++)
+        {
+            await StepAsync(time, TimeSpan.FromSeconds(30));
+            await server.SendAsync(Convert.ToBase64String(Encode("AAPL", 190.5f + i, 1700000000000 + i)));
+        }
+
+        handler.Requests.Should().HaveCount(2, "Hong Kong is shut and Apple keeps trading");
+    }
+
+    /// <summary>
     /// Verifies removing one of two instruments that differ only in the case of the symbol does not unsubscribe the symbol
     /// of the one that stays, and that the symbol is unsubscribed once the last one is gone.
     /// </summary>
