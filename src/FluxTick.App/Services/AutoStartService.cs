@@ -203,6 +203,7 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
                 // Only the path is repaired: an entry the user turned off in Windows must stay off.
                 using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
                 key.SetValue(ValueName, AutoStartCommand.Build(Environment.ProcessPath!));
+                logger.LogInformation("Start at sign-in entry pointed at {Executable}, as the one it named is gone", Environment.ProcessPath);
             }
             catch (Exception ex)
             {
@@ -256,6 +257,8 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
             {
                 key.DeleteValue(ValueName, throwOnMissingValue: false);
             }
+
+            logger.LogInformation("Start at sign-in turned {State}", enabled ? "on" : "off");
         }
         catch (Exception ex)
         {
