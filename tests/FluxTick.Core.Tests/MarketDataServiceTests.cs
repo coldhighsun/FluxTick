@@ -454,6 +454,24 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies that creating a provider and retiring it when it is switched off are both logged.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ProviderEnabledThenDisabled_LogsCreationAndRetirement()
+    {
+        var logs = new CollectingLoggerFactory();
+        await using var service = new MarketDataService(new ProviderRegistry([_crypto]), logs, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+
+        var settings = SettingsFor(Btc);
+        settings.Providers["crypto"] = new ProviderSettings { Enabled = false };
+        await service.ApplyAsync(settings);
+
+        logs.Messages.Should().Contain(m => m.StartsWith("Provider crypto created", StringComparison.Ordinal));
+        logs.Messages.Should().Contain(m => m.StartsWith("Retiring provider crypto: it is disabled", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Verifies an instrument whose provider is switched off is kept and marked, not dropped.
     /// </summary>
     [Fact]

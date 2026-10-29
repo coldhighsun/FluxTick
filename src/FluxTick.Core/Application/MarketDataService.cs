@@ -296,9 +296,15 @@ public sealed class MarketDataService : IAsyncDisposable
             search = _slots.TryGetValue(providerId, out var slot) ? slot.Provider as ISymbolSearchProvider : null;
         }
 
-        return search is null
-            ? []
-            : await search.SearchAsync(query, assetClass, cancellationToken).ConfigureAwait(false);
+        if (search is null)
+        {
+            _logger.LogInformation("Search on {ProviderId} skipped: the provider is not running or cannot search", providerId);
+            return [];
+        }
+
+        var found = await search.SearchAsync(query, assetClass, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Search on {ProviderId} for {Query} found {Count} instruments", providerId, query, found.Count);
+        return found;
     }
 
     /// <summary>
@@ -461,6 +467,7 @@ public sealed class MarketDataService : IAsyncDisposable
         foreach (var slot in slots)
         {
             var mine = watchlist.Where(a => a.ProviderId == slot.Id).ToArray();
+            _logger.LogDebug("Routing {Count} instruments to provider {ProviderId}", mine.Length, slot.Id);
             try
             {
                 await slot.Provider.SetSubscriptionsAsync(mine, cancellationToken).ConfigureAwait(false);
@@ -616,6 +623,8 @@ public sealed class MarketDataService : IAsyncDisposable
             {
                 if (!desired.TryGetValue(id, out var options) || !OptionsEqual(slot.Options, options))
                 {
+                    _logger.LogInformation(
+                        "Retiring provider {ProviderId}: {Reason}", id, desired.ContainsKey(id) ? "its options changed" : "it is disabled");
                     _slots.Remove(id);
                     retired.Add(slot);
 
@@ -694,6 +703,7 @@ public sealed class MarketDataService : IAsyncDisposable
                     return started;
                 }
 
+                _logger.LogInformation("Provider {ProviderId} created with {OptionCount} options", id, options.Count);
                 started.Add(id);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -812,6 +822,7 @@ public sealed class MarketDataService : IAsyncDisposable
 
                     snapshot = BuildSnapshot(state);
                     MarkPublished(state, snapshot);
+                    _logger.LogInformation("Seeded {AssetId} with {Count} history points", state.Asset.Id, points.Count);
                 }
             }
         }
@@ -957,6 +968,13 @@ public sealed class MarketDataService : IAsyncDisposable
                 var slid = bucket != state.LastSparklineBucket && (state.LastSparklineCount > 0 || state.Series.AnyWithin(now));
                 state.LastSparklineBucket = bucket;
                 var market = MarketStateOf(state, now);
+                if (health != state.LastHealth || market != state.LastMarketState)
+                {
+                    _logger.LogInformation(
+                        "{AssetId} health {PreviousHealth} -> {Health}, market {PreviousMarket} -> {Market}",
+                        state.Asset.Id, state.LastHealth, health, state.LastMarketState, market);
+                }
+
                 if (forceRaise || health != state.LastHealth || slid || market != state.LastMarketState)
                 {
                     state.LastHealth = health;

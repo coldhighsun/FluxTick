@@ -232,6 +232,9 @@ public sealed class AlertService : IDisposable
     /// </param>
     private void Fire(AlertRule rule, Asset asset, Quote quote)
     {
+        _logger.LogInformation(
+            "Alert {AlertId} fired for {AssetId}: {Condition} {Threshold}, price {Price} (repeat: {Repeat})",
+            rule.Id, asset.Id, rule.Condition, rule.Threshold, quote.Price, rule.Repeat);
         try
         {
             AlertTriggered?.Invoke(this, new AlertTriggeredEventArgs(rule, asset, quote));
@@ -267,6 +270,7 @@ public sealed class AlertService : IDisposable
                     rule.Enabled = false;
                 }
             }).ConfigureAwait(false);
+            _logger.LogInformation("Alert {AlertId} turned off after it fired", id);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

@@ -242,6 +242,7 @@ public sealed class ExchangeRateService : IDisposable
             _rates = rates;
             UpdatedAt = _time.GetUtcNow();
             SaveCache(rates);
+            _logger.LogInformation("Fetched {Count} exchange rates", rates.Count);
             RatesChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or NotSupportedException or TaskCanceledException or ExchangeRateException)
