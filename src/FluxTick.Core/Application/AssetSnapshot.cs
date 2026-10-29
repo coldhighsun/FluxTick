@@ -18,9 +18,16 @@ public enum AssetHealth
     Live,
 
     /// <summary>
-    /// The last quote is older than the staleness threshold.
+    /// Nothing was received for longer than the staleness threshold, or what keeps arriving was traded too long ago to
+    /// be explained by a lagging feed.
     /// </summary>
     Stale,
+
+    /// <summary>
+    /// Quotes keep arriving, but the trade time they carry is older than the staleness threshold, by no more than a
+    /// lagging feed would explain.
+    /// </summary>
+    Delayed,
 
     /// <summary>
     /// The provider lost its source and is retrying.

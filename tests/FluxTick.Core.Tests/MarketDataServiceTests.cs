@@ -668,6 +668,29 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies the closing price of a shut market, which keeps arriving with the time it was traded, is stale when that
+    /// was long ago and delayed when it was within the delay limit, and that the market state is reported either way.
+    /// </summary>
+    [Theory]
+    [InlineData(24 * 60, AssetHealth.Stale)]
+    [InlineData(31, AssetHealth.Stale)]
+    [InlineData(30, AssetHealth.Delayed)]
+    [InlineData(15, AssetHealth.Delayed)]
+    public async Task Health_QuoteOfAShutMarket_IsStaleBeyondTheDelayLimitAndKeepsTheMarketState(int minutesOld, AssetHealth expected)
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 26, 15, 0, 0, TimeSpan.Zero)); // Thanksgiving, 10:00 in New York
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromMinutes(minutesOld)) { Market = MarketState.Closed });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == expected);
+        service.GetSnapshots().Single().MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
     /// Verifies a report of a shut market is believed while the price only repeats, and not while it advances, which the
     /// source may report late on the day after a holiday.
     /// </summary>
@@ -1079,21 +1102,57 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
-    /// Verifies an instrument is stale when quotes keep arriving but carry a time older than the threshold, and live
+    /// Verifies an instrument is delayed when quotes keep arriving but carry a time older than the threshold, and live
     /// again once a quote with a fresh time arrives.
     /// </summary>
     [Fact]
-    public async Task Health_WithFreshlyReceivedButOldQuote_IsStaleUntilTimeAdvances()
+    public async Task Health_WithFreshlyReceivedButOldQuote_IsDelayedUntilTimeAdvances()
     {
         await using var service = NewService();
         await service.ApplyAsync(SettingsFor(Btc));
         var provider = _crypto.Created.Single();
 
         provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow().AddMinutes(-5)));
-        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Delayed);
 
         provider.Emit(new Quote(Btc.Id, 2m, null, _time.GetUtcNow()));
         await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+    }
+
+    /// <summary>
+    /// Verifies an instrument that receives nothing is stale, and becomes delayed once an old quote arrives again.
+    /// </summary>
+    [Fact]
+    public async Task Health_SilentThenOldQuote_IsStaleThenDelayed()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+
+        _time.Advance(TimeSpan.FromMinutes(5));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+
+        provider.Emit(new Quote(Btc.Id, 2m, null, _time.GetUtcNow().AddMinutes(-5)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Delayed);
+    }
+
+    /// <summary>
+    /// Verifies a delayed instrument whose quotes stop coming in becomes stale.
+    /// </summary>
+    [Fact]
+    public async Task Health_DelayedThenSilent_BecomesStale()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow().AddMinutes(-5)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Delayed);
+
+        _time.Advance(TimeSpan.FromMinutes(5));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
     }
 
     /// <summary>

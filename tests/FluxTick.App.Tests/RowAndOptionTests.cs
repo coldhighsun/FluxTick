@@ -247,6 +247,60 @@ public class RowAndOptionTests
     }
 
     /// <summary>
+    /// Verifies delayed prices keep coming in: they are labelled, never dimmed, drawn as a running line and not outdated,
+    /// and in a shut market the label gives way to the trading state.
+    /// </summary>
+    [Fact]
+    public void Update_Delayed_IsLabelledButNotStoppedOrOutdated()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Delayed) with { MarketState = MarketState.Open });
+
+        row.StatusText.Should().Be("Delayed");
+        row.IsStopped.Should().BeFalse();
+        row.IsDimmed.Should().BeFalse();
+        row.IsPriceOutdated.Should().BeFalse();
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Delayed) with { MarketState = MarketState.Closed });
+
+        row.StatusText.Should().Be("Closed");
+        row.IsPriceOutdated.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies turning the trading state off brings back the delayed label of a delayed price in a shut market.
+    /// </summary>
+    [Fact]
+    public void ShowMarketStatus_WhenTurnedOff_RestoresDelayed()
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+        row.Update(Snapshot(110m, 100m, AssetHealth.Delayed) with { MarketState = MarketState.Closed });
+
+        row.ShowMarketStatus = false;
+
+        row.StatusText.Should().Be("Delayed");
+        row.IsPriceOutdated.Should().BeFalse();
+
+        row.ShowMarketStatus = true;
+
+        row.StatusText.Should().Be("Closed");
+    }
+
+    /// <summary>
+    /// Verifies the tooltip of a small card, which has no status line, tells that the price is delayed.
+    /// </summary>
+    [Fact]
+    public void Tooltip_SmallCardWithDelayedPrice_MentionsDelayed()
+    {
+        var row = new AssetRowViewModel(Btc, "p") { CardSize = CardSize.Small };
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Delayed) with { MarketState = MarketState.Open });
+
+        row.Tooltip.Should().Contain("Delayed");
+    }
+
+    /// <summary>
     /// Verifies a fault is told as a fault, whatever the market does.
     /// </summary>
     [Theory]
@@ -332,6 +386,7 @@ public class RowAndOptionTests
     /// </summary>
     [Theory]
     [InlineData(AssetHealth.Stale, "Stale", true)]
+    [InlineData(AssetHealth.Delayed, "Delayed", false)]
     [InlineData(AssetHealth.Reconnecting, "Reconnecting", true)]
     [InlineData(AssetHealth.ProviderDisabled, "Source off", true)]
     [InlineData(AssetHealth.Live, "", false)]

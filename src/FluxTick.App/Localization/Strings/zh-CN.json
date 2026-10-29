@@ -254,6 +254,7 @@
   "Settings_BossKeyHint": "点击输入框后直接按下组合键；按退格键关闭",
   "Settings_BossKeyNone": "无",
   "Settings_BossKeyPress": "请按键",
+  "Status_Delayed": "报价延迟",
   "Status_NoSource": "无数据源",
   "Status_SourceError": "数据源错误",
   "Status_SourceOff": "数据源已关闭",
