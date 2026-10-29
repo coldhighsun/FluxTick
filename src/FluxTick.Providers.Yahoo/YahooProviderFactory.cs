@@ -33,7 +33,7 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
     public ProviderDescriptor Descriptor { get; } = new(
         ProviderId,
         "Yahoo Finance",
-        "Stocks, ETFs, indices, forex, commodities and crypto from the unofficial Yahoo Finance streamer, with the chart API as the first price and as a fallback while the stream is down. Data may be delayed.",
+        "Stocks, ETFs, indices, forex, commodities and crypto from the unofficial Yahoo Finance streamer, with the chart API as the first price and as a fallback while the stream is down. Data may be delayed: Chinese A-share and Hong Kong prices are 15 minutes old, so they show as stale and sit left of the end of the sparkline. Use Sina or Tencent for live A-share prices.",
         [AssetClass.Equity, AssetClass.Index, AssetClass.Forex, AssetClass.Commodity, AssetClass.Crypto],
         ProviderUpdateMode.Streaming,
         Homepage: new Uri("https://finance.yahoo.com/"),
