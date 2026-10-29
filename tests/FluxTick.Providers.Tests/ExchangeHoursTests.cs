@@ -39,6 +39,20 @@ public class ExchangeHoursTests
         ExchangeHours.ChinaA.GetState(At(utc)).Should().Be(expected);
 
     /// <summary>
+    /// Verifies a time after a session ended is pulled back to the end of that session, and any other time is kept.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-10-28 07:29", "2026-10-28 07:00")] // 15:29 after the close
+    [InlineData("2026-10-28 08:30", "2026-10-28 07:00")] // 16:30 after the close
+    [InlineData("2026-10-28 04:00", "2026-10-28 03:30")] // 12:00 midday break
+    [InlineData("2026-10-28 03:29", "2026-10-28 03:29")] // 11:29 morning session
+    [InlineData("2026-10-28 06:59", "2026-10-28 06:59")] // 14:59 afternoon session
+    [InlineData("2026-10-28 01:20", "2026-10-28 01:20")] // 09:20 before the first session
+    [InlineData("2026-10-31 07:29", "2026-10-31 07:29")] // Saturday
+    public void ClampToSessionEnd_ChinaA_DatesAfterHoursTimesToTheSessionEnd(string utc, string expected) =>
+        ExchangeHours.ChinaA.ClampToSessionEnd(At(utc)).Should().Be(At(expected));
+
+    /// <summary>
     /// Verifies the sessions of Hong Kong, including the closing auction.
     /// </summary>
     [Theory]

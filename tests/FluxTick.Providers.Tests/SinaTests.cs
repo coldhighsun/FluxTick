@@ -90,7 +90,20 @@ public class SinaTests
 
         quote.Price.Should().Be(5.13m);
         quote.PreviousClose.Should().Be(5.13m);
-        quote.Time.Should().Be(new DateTimeOffset(2026, 9, 22, 11, 45, 1, TimeSpan.FromHours(8)));
+        quote.Time.Should().Be(new DateTimeOffset(2026, 9, 22, 11, 30, 0, TimeSpan.FromHours(8)), "the clock of the service during the break is dated to the end of the morning session");
+    }
+
+    /// <summary>
+    /// Verifies a stock line stamped with the service clock after the close is dated to the close, so the closing price
+    /// does not look live while the service goes on sending it.
+    /// </summary>
+    [Fact]
+    public void ParseStream_StockAfterClose_DatesQuoteToTheClose()
+    {
+        var quote = SinaParser.ParseStream("sh600000=浦发银行,9.850,9.850,9.990,10.010,9.840,9.980,9.990,75394914,748543850.000,5228,9.990,0,0,0,0,0,0,0,0,0,0.000,0,0,0,0,0,0,0,0,2026-10-29,15:29:59,00,").Should().ContainSingle().Subject;
+
+        quote.Price.Should().Be(9.99m);
+        quote.Time.Should().Be(new DateTimeOffset(2026, 10, 29, 15, 0, 0, TimeSpan.FromHours(8)));
     }
 
     /// <summary>
