@@ -39,6 +39,16 @@ public sealed partial class WatchlistView : UserControl
     private readonly GroupDragController _groupDrag;
 
     /// <summary>
+    /// The group whose title is being edited in place, or <see langword="null"/> when none is.
+    /// </summary>
+    private WatchSectionViewModel? _renaming;
+
+    /// <summary>
+    /// The window whose clicks end an edit of a group title, while the view is attached to it.
+    /// </summary>
+    private TopLevel? _clickScope;
+
+    /// <summary>
     /// The view model whose changes are observed to time the automatic switch hint.
     /// </summary>
     private MainViewModel? _observed;
@@ -80,6 +90,18 @@ public sealed partial class WatchlistView : UserControl
             _observed?.PropertyChanged -= OnMainPropertyChanged;
             _observed = DataContext as MainViewModel;
             _observed?.PropertyChanged += OnMainPropertyChanged;
+        };
+        AttachedToVisualTree += (_, _) =>
+        {
+            // A click on a part of the window that takes no focus leaves the focus in the rename box, so the box cannot
+            // tell that the click landed elsewhere; the window sees every click, also those that were handled.
+            _clickScope = TopLevel.GetTopLevel(this);
+            _clickScope?.AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            _clickScope?.RemoveHandler(PointerPressedEvent, OnWindowPointerPressed);
+            _clickScope = null;
         };
         SectionsHost.AddHandler(PointerPressedEvent, OnSectionsPointerPressedTunnel, RoutingStrategies.Tunnel);
         _cardDrag = new CardDragController(SectionsHost, CardsScroller, DropIndicator, this, () => DataContext as MainViewModel);
@@ -237,9 +259,10 @@ public sealed partial class WatchlistView : UserControl
     /// <param name="section">
     /// The section of the group.
     /// </param>
-    private static void StartRename(ToggleButton header, WatchSectionViewModel section)
+    private void StartRename(ToggleButton header, WatchSectionViewModel section)
     {
         section.BeginRename();
+        _renaming = section;
         var box = header.GetVisualParent()?.GetVisualChildren().OfType<TextBox>().FirstOrDefault();
         Dispatcher.UIThread.Post(
             () =>
@@ -261,7 +284,17 @@ public sealed partial class WatchlistView : UserControl
     /// </param>
     private void OnRenameMenuClicked(object? sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem { Parent: ContextMenu { PlacementTarget: ToggleButton header, DataContext: WatchSectionViewModel section } })
+        // The entry takes the section from its data context and looks for the header itself: what a menu item reports as
+        // its parent or its menu's placement target is not something to rely on across Avalonia versions.
+        if (sender is not MenuItem { DataContext: WatchSectionViewModel section })
+        {
+            return;
+        }
+
+        var header = SectionsHost.GetVisualDescendants()
+            .OfType<ToggleButton>()
+            .FirstOrDefault(b => b.Name == "SectionHeader" && ReferenceEquals(b.DataContext, section));
+        if (header is not null)
         {
             StartRename(header, section);
         }
@@ -296,7 +329,31 @@ public sealed partial class WatchlistView : UserControl
     }
 
     /// <summary>
-    /// Commits the new title when the rename box loses focus.
+    /// Cancels the edit of a group title when a click lands anywhere but in the rename box; the old title stays.
+    /// </summary>
+    /// <param name="sender">
+    /// The window.
+    /// </param>
+    /// <param name="e">
+    /// The pointer event data.
+    /// </param>
+    private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_renaming is not { IsEditing: true } section)
+        {
+            return;
+        }
+
+        var inBox = (e.Source as Visual)?.FindAncestorOfType<TextBox>(includeSelf: true) is { Name: "RenameBox" };
+        if (!inBox)
+        {
+            EndRename(section, commit: false);
+        }
+    }
+
+    /// <summary>
+    /// Commits the new title when the rename box loses focus other than through a click elsewhere in the window, which
+    /// <see cref="OnWindowPointerPressed"/> has already cancelled.
     /// </summary>
     /// <param name="sender">
     /// The rename box.
@@ -330,6 +387,7 @@ public sealed partial class WatchlistView : UserControl
         }
 
         section.IsEditing = false;
+        _renaming = null;
         if (commit && DataContext is MainViewModel vm && section.GroupId is { } id)
         {
             _ = vm.RenameGroupAsync(id, section.EditName);

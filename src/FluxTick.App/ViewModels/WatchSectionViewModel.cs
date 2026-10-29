@@ -119,7 +119,7 @@ public sealed partial class WatchSectionViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanDelete))]
-    [NotifyPropertyChangedFor(nameof(DeleteMenuHeader))]
+    [NotifyPropertyChangedFor(nameof(DeleteBlockedTip))]
     public partial string DeleteBlockedReason { get; set; } = string.Empty;
 
     /// <summary>
@@ -128,9 +128,10 @@ public sealed partial class WatchSectionViewModel : ObservableObject
     public bool CanDelete => Kind == WatchSectionKind.Group && DeleteBlockedReason.Length == 0;
 
     /// <summary>
-    /// Gets the text of the delete entry in the header menu, which names the reason when the entry is disabled.
+    /// Gets the tip of the delete entry in the header menu, which names the reason when the entry is disabled, or
+    /// <see langword="null"/> when the group can be deleted.
     /// </summary>
-    public string DeleteMenuHeader => DeleteBlockedReason.Length == 0 ? Loc.Get("Section_DeleteGroup") : Loc.Get("Section_DeleteGroupBlocked", DeleteBlockedReason);
+    public string? DeleteBlockedTip => DeleteBlockedReason.Length == 0 ? null : DeleteBlockedReason;
 
     /// <summary>
     /// Starts editing the title in place. Only user-defined groups can be renamed.
