@@ -203,6 +203,7 @@
   "Settings_BossKeyHint": "Click the box and press the keys. Backspace turns it off.",
   "Settings_BossKeyNone": "None",
   "Settings_BossKeyPress": "Press keys",
+  "Status_Delayed": "Delayed",
   "Status_NoSource": "No source",
   "Status_SourceError": "Source error",
   "Status_SourceOff": "Source off",

@@ -88,6 +88,7 @@ public class LocalizationTests
         loc.Select(Loc.SimplifiedChinese).Should().BeFalse();
 
         loc["Status_Stale"].Should().Be("数据过期");
+        loc["Status_Delayed"].Should().Be("报价延迟");
         loc.Language.Should().Be(Loc.SimplifiedChinese);
         properties.Should().Contain("Item[]");
         changes.Should().Be(1);

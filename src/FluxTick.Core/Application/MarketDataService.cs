@@ -14,6 +14,8 @@ public sealed record MarketDataServiceOptions
     /// <summary>
     /// Gets how long without a quote before an instrument is considered stale. A polled source whose poll interval plus
     /// half of this time is longer is given that instead, so that the time between two polls is not taken for silence.
+    /// It is also how old the trade time of a quote that keeps arriving may be before the instrument counts as delayed;
+    /// beyond a fixed 30 minutes that is stale again, so a value above that leaves no room for delayed.
     /// </summary>
     public TimeSpan StaleAfter { get; init; } = TimeSpan.FromMinutes(1);
 
@@ -87,6 +89,13 @@ public sealed class MarketDataService : IAsyncDisposable
     /// last trade is from the day before until the first delayed trade comes in.
     /// </summary>
     private static readonly TimeSpan ReportingSourceHolidayGrace = TimeSpan.FromMinutes(45);
+
+    /// <summary>
+    /// How old the trade time of a quote that keeps arriving may be before the instrument counts as stale instead of
+    /// delayed. A feed that lags by a fixed time, such as the 15 minutes of some exchanges, is delayed; a source that
+    /// keeps answering with a quote older than this is stuck or the market is shut, and its price is not to be trusted.
+    /// </summary>
+    private static readonly TimeSpan DelayedUpTo = TimeSpan.FromMinutes(30);
 
     /// <summary>
     /// The wait before a failed history load is tried again; it doubles with each failure.
@@ -1084,9 +1093,7 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </returns>
     private MarketState MarketStateOf(AssetState state, DateTimeOffset now)
     {
-        if (state.LastReceivedAt is not { } received
-            || !_slots.TryGetValue(state.Asset.ProviderId, out var slot)
-            || now - received > StaleAfterOf(slot))
+        if (!_slots.TryGetValue(state.Asset.ProviderId, out var slot) || IsSilent(state, slot, now))
         {
             return MarketState.Unknown;
         }
@@ -1184,8 +1191,8 @@ public sealed class MarketDataService : IAsyncDisposable
         // that for as long as the reconnecting goes on. The reason stays as the detail.
         if (status.State == ProviderConnectionState.Reconnecting)
         {
-            return state.LastReceivedAt is { } received && _timeProvider.GetUtcNow() - received > StaleAfterOf(slot)
-                ? (AssetHealth.StaleReconnecting, status.Message)
+            return state.LastReceivedAt is not null && IsSilent(state, slot, _timeProvider.GetUtcNow())
+                ?(AssetHealth.StaleReconnecting, status.Message)
                 : (AssetHealth.Reconnecting, status.Message);
         }
 
@@ -1194,15 +1201,42 @@ public sealed class MarketDataService : IAsyncDisposable
             return (AssetHealth.Waiting, null);
         }
 
-        // Stale when nothing was received lately, or when what keeps arriving is an old price (a polled source repeats
+        // Stale when nothing was received lately, or when what keeps arriving is a much older price (a polled source repeats
         // the last price of a closed market with the time it was traded, which the receive time alone would not show).
+        // Delayed when quotes keep arriving with a trade time that is old but within what a lagging feed explains.
         var now = _timeProvider.GetUtcNow();
         var quoteTime = state.Latest?.Timestamp ?? state.LastReceivedAt.Value;
         var staleAfter = StaleAfterOf(slot);
-        return now - state.LastReceivedAt.Value > staleAfter || now - quoteTime > staleAfter
-            ? (AssetHealth.Stale, null)
+        var quoteAge = now - quoteTime;
+        if (IsSilent(state, slot, now) || quoteAge > DelayedUpTo)
+        {
+            return (AssetHealth.Stale, null);
+        }
+
+        return quoteAge > staleAfter
+            ? (AssetHealth.Delayed, null)
             : (AssetHealth.Live, null);
     }
+
+    /// <summary>
+    /// Determines whether nothing has been received for an instrument for longer than it may go without a quote. This is
+    /// the one test of silence, shared by the health and the trading state, which judge by the receive time, not by the
+    /// trade time of the quote.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="slot">
+    /// The source of the instrument.
+    /// </param>
+    /// <param name="now">
+    /// The current time.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when nothing was received yet or the last quote came in too long ago.
+    /// </returns>
+    private bool IsSilent(AssetState state, ProviderSlot slot, DateTimeOffset now) =>
+        state.LastReceivedAt is not { } received || now - received > StaleAfterOf(slot);
 
     /// <summary>
     /// Works out how long an instrument may go without a quote before it is stale: the configured time, or the poll

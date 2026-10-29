@@ -513,15 +513,17 @@ public sealed partial class AssetRowViewModel : ObservableObject
 
     /// <summary>
     /// Gets a value indicating whether the prices are not coming in, whatever the reason (stale, reconnecting, failed,
-    /// switched off), which the sparkline shows as a gray dashed line from the last price on.
+    /// switched off), which the sparkline shows as a gray dashed line from the last price on. Delayed prices keep coming
+    /// in, only with an old trade time, so they do not count.
     /// </summary>
-    public bool IsStopped => Health is not (AssetHealth.Live or AssetHealth.Waiting);
+    public bool IsStopped => Health is not (AssetHealth.Live or AssetHealth.Waiting or AssetHealth.Delayed);
 
     /// <summary>
     /// Gets a value indicating whether the last price is too old to count in a total: the prices went stale, the source
     /// failed or is off or missing. A source that is reconnecting is not outdated yet, so that a short break does not
     /// make the holdings of a whole source drop out of the total and come back. Prices that stopped because the market
-    /// is shut are the closing prices and still count, while the trading state is shown.
+    /// is shut are the closing prices and still count, while the trading state is shown. Delayed prices are still the
+    /// latest the source delivers, so they count too.
     /// </summary>
     public bool IsPriceOutdated =>
         Health is AssetHealth.StaleReconnecting or AssetHealth.Failed or AssetHealth.ProviderDisabled or AssetHealth.ProviderMissing
@@ -719,10 +721,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// The snapshot.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> when the prices are stale and the market is closed or on a break.
+    /// <see langword="true"/> when the prices are stale or delayed and the market is closed or on a break.
     /// </returns>
     private static bool IsClosingPrice(AssetSnapshot snapshot) =>
-        snapshot.Health == AssetHealth.Stale && snapshot.MarketState is MarketState.Closed or MarketState.Break;
+        (snapshot.Health is AssetHealth.Stale or AssetHealth.Delayed)
+        && (snapshot.MarketState is MarketState.Closed or MarketState.Break);
 
     /// <summary>
     /// Notifies bindings of derived properties when the health changes.
@@ -749,6 +752,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     private static string StatusOf(AssetSnapshot snapshot) => snapshot.Health switch
     {
         AssetHealth.Stale => Loc.Get("Status_Stale"),
+        AssetHealth.Delayed => Loc.Get("Status_Delayed"),
         AssetHealth.StaleReconnecting => Loc.Get("Status_StaleReconnecting"),
         AssetHealth.Reconnecting => Loc.Get("Provider_Reconnecting"),
         AssetHealth.Failed => Loc.Get("Status_SourceError"),

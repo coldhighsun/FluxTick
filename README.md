@@ -45,10 +45,12 @@ commodities side by side, from the data sources *you* choose.
 - **Floating widget**: borderless, translucent, always on top, draggable, resizable, lockable; can hide at a screen edge and hides to the tray.
 - **You pick the data source**: enable or disable sources, tune their options and choose the default source per
   asset class in **Settings**. Move any instrument to another source with **Change data source…**.
-- **Honest about data quality**: rows show `Stale`, `Reconnecting` or `Source off` instead of silently showing old
-  prices. A price is `Stale` when nothing came in for the stale threshold (one minute by default) or what comes in
-  was traded longer ago than that (a closed market). Stale prices are left out of the holdings total, and price
-  alerts wait while a source is stale or reconnecting.
+- **Honest about data quality**: rows show `Stale`, `Delayed`, `Reconnecting` or `Source off` instead of silently
+  showing old prices. A price is `Delayed` when quotes keep coming in but were traded longer ago than the stale
+  threshold (one minute by default), up to 30 minutes (a delayed feed). It is `Stale` when nothing came in for the
+  threshold, or when what comes in was traded more than 30 minutes ago (a stuck source, a closed market). Stale
+  prices are left out of the holdings total unless the market is shut; delayed ones still count. Price alerts wait while a source is stale,
+  delayed or reconnecting.
 - **Language**: Simplified Chinese or English, switchable at runtime; Auto follows the system language.
 - **Up/down colors**: green-up or red-up, automatic by UI language (red-up for Chinese).
 - **Cross-platform**: Windows, Linux and macOS (built on [Avalonia](https://avaloniaui.net/) and .NET 10).
@@ -60,7 +62,7 @@ commodities side by side, from the data sources *you* choose.
 | Source | Covers | Mode | Notes |
 | --- | --- | --- | --- |
 | **Binance** | Crypto spot pairs | WebSocket stream (~1 s) | No API key. If `binance.com` is blocked, set the endpoints to `wss://data-stream.binance.vision/ws` and `https://data-api.binance.vision` in Settings. |
-| **Yahoo Finance** | Stocks, ETFs, indices, forex, futures, crypto | WebSocket stream | Unofficial API; may be rate limited or change without notice. No API key. **Chinese A-share and Hong Kong prices are 15 minutes old**, so they show as `Stale`; use Sina or Tencent for live A-share prices. Falls back to polling the chart API (default 5 s) while the stream is down. |
+| **Yahoo Finance** | Stocks, ETFs, indices, forex, futures, crypto | WebSocket stream | Unofficial API; may be rate limited or change without notice. No API key. **Chinese A-share and Hong Kong prices are 15 minutes old**, so they show as `Delayed`; use Sina or Tencent for live A-share prices. Falls back to polling the chart API (default 5 s) while the stream is down. |
 | **Tencent Finance** | A-shares, Hong Kong and US stocks, ETFs, indices | Polling (default 5 s) | Unofficial API; may be delayed or change without notice. No API key. Search by name, code or pinyin. Sparkline history covers A-shares and Hong Kong only. Off by default. |
 | **Sina Finance** | A-shares, ETFs, indices, currency pairs, international commodity futures | WebSocket stream | Unofficial API; may be rate limited, delayed or change without notice. No API key. Symbols match Tencent's (`sh600000`), but an instrument stays with the source it was added from. Search finds stocks, main indices, and common currency pairs and futures; type ETF codes, and other pairs (`fx_seurusd`) or futures (`hf_GC`) as Sina's codes. Sparkline history covers A-shares, funds and currency pairs. Off by default. |
 | **Eulerpool** | Stocks and ETFs worldwide (tickers with an exchange suffix, e.g. `AAPL`, `SAP.DE`) | WebSocket stream | Needs an API key (free at eulerpool.com/developers; see [API keys](#api-keys)). A free key only gets delayed one-second prices; live trades need a paid plan. Search by name, ticker or ISIN. Off by default. |

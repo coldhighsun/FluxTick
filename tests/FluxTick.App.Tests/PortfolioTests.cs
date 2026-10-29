@@ -189,6 +189,29 @@ public class PortfolioTests
     }
 
     /// <summary>
+    /// Verifies that a holding whose price is delayed but still coming in counts in the total and is not mentioned as stale.
+    /// </summary>
+    [Fact]
+    public async Task RefreshPortfolio_DelayedPrice_StillCounts()
+    {
+        await using var h = new Harness(HeldSettings("CNY"));
+        await h.Rates.RefreshAsync();
+        await h.Main.InitializeAsync();
+        h.Main.Rows.Single(r => r.Symbol == "BTC").Update(new AssetSnapshot(Btc, new Quote(Btc.Id, 110m, 100m, DateTimeOffset.UnixEpoch), [100m, 110m], AssetHealth.Delayed));
+        h.Main.Rows.Single(r => r.Symbol == "AAPL").Update(Snapshot(Aapl, 770m));
+
+        h.Main.RefreshPortfolio();
+        var delayed = h.Main.PortfolioText;
+
+        h.Main.Rows.Single(r => r.Symbol == "BTC").Update(new AssetSnapshot(Btc, new Quote(Btc.Id, 110m, 100m, DateTimeOffset.UnixEpoch), [100m, 110m], AssetHealth.Live));
+        h.Main.RefreshPortfolio();
+
+        delayed.Should().NotContain(Loc.Get("Portfolio_Stale", 1));
+        delayed.Should().Be(h.Main.PortfolioText, "a delayed price counts exactly as a live one");
+        delayed.Should().NotContain("+10.00 USD", "the delayed holding adds to the live one instead of being left out");
+    }
+
+    /// <summary>
     /// Verifies that the closing price of a shut market counts in the total, and that turning the trading state off, which
     /// makes it stale again, works the total out again without waiting for a quote.
     /// </summary>

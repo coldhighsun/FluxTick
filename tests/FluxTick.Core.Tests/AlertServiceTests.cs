@@ -283,6 +283,34 @@ public sealed class AlertServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// Verifies a delayed price, which keeps arriving but was traded a while ago, does not fire a rule either.
+    /// </summary>
+    [Fact]
+    public async Task DelayedPrice_DoesNotFire()
+    {
+        var provider = await StartAsync(AlertCondition.PriceAbove, 100, repeat: true);
+
+        var delayed = new TaskCompletionSource();
+        _market.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.Health == AssetHealth.Delayed && snapshot.Quote?.Price == 101m)
+            {
+                delayed.TrySetResult();
+            }
+        };
+        provider.Emit(new Quote(Btc.Id, 99m, null, _time.GetUtcNow().AddMinutes(-6)));
+        provider.Emit(new Quote(Btc.Id, 101m, null, _time.GetUtcNow().AddMinutes(-5)));
+        await delayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        _fired.Should().BeEmpty();
+
+        // The same crossing on live prices fires.
+        await EmitAsync(provider, 99);
+        await EmitAsync(provider, 101);
+        _fired.Should().ContainSingle();
+    }
+
+    /// <summary>
     /// Verifies a change that is not about the alerts leaves them as they are, while turning off Repeat of a rule takes
     /// effect at once: the rule then disables itself after it fires.
     /// </summary>
