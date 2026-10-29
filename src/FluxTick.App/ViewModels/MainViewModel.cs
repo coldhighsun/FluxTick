@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluxTick.Abstractions;
@@ -152,6 +153,12 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// Serializes applying settings to the market data service.
     /// </summary>
     private readonly SemaphoreSlim _applyLock = new(1, 1);
+
+    /// <summary>
+    /// The part of the settings the market data service was last given, see <see cref="MarketKeyOf"/>; it is applied
+    /// again only when this changes.
+    /// </summary>
+    private string? _appliedMarketKey;
 
     /// <summary>
     /// Whether the sections are being rebuilt, so that collapse changes made by the rebuild itself are not saved again.
@@ -1236,7 +1243,16 @@ public sealed partial class MainViewModel : LocalizedViewModel
         await _applyLock.WaitAsync();
         try
         {
-            await _market.ApplyAsync(_settings.Current);
+            // Most changes (the window moved, a group collapsed, a theme chosen) leave the instruments and the data sources
+            // as they were; applying those again would route every source and raise every card for nothing.
+            var settings = _settings.Current;
+            var key = MarketKeyOf(settings);
+            if (key != _appliedMarketKey)
+            {
+                await _market.ApplyAsync(settings);
+                _appliedMarketKey = key;
+            }
+
             Ui.Post(() =>
             {
                 SyncRows();
@@ -1253,6 +1269,23 @@ public sealed partial class MainViewModel : LocalizedViewModel
             _applyLock.Release();
         }
     }
+
+    /// <summary>
+    /// Describes what the market data service takes from the settings: the instruments, in order, and the settings of the
+    /// data sources. Two settings with the same key give the service the same work.
+    /// </summary>
+    /// <param name="settings">
+    /// The settings.
+    /// </param>
+    /// <returns>
+    /// The key.
+    /// </returns>
+    internal static string MarketKeyOf(AppSettings settings) =>
+        JsonSerializer.Serialize(new
+        {
+            Watchlist = settings.Watchlist.Select(e => new { e.ProviderId, e.Symbol, e.DisplayName, e.AssetClass }),
+            settings.Providers,
+        });
 
     /// <summary>
     /// Aligns the rows with the persisted watchlist: adds, removes and reorders rows and refreshes their values.
