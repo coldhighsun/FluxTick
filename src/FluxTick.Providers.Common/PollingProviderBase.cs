@@ -127,6 +127,10 @@ public abstract class PollingProviderBase : LoggingProviderBase
             _priced.TryRemove(asset.Id, out _);
         }
 
+        Logger.LogInformation(
+            "{Provider} subscriptions: {Count} instruments (+{Added} -{Removed}), polling {Running}",
+            Descriptor.DisplayName, current.Count, added.Count, removed.Count, current.Count > 0 ? "on" : "off");
+
         if (current.Count == 0)
         {
             await _loop.StopAsync().ConfigureAwait(false);

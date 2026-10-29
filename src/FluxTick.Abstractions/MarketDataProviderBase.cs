@@ -305,6 +305,19 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     }
 
     /// <summary>
+    /// Called when the status changed, before <see cref="StatusChanged"/> is raised. Override to log the transition.
+    /// </summary>
+    /// <param name="previous">
+    /// The status before.
+    /// </param>
+    /// <param name="current">
+    /// The status now.
+    /// </param>
+    protected virtual void OnStatusChanged(ProviderStatus previous, ProviderStatus current)
+    {
+    }
+
+    /// <summary>
     /// Updates the status and raises <see cref="StatusChanged"/> when it changed.
     /// </summary>
     /// <param name="state">
@@ -319,6 +332,7 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
         var previous = Interlocked.Exchange(ref _status, next);
         if (previous != next)
         {
+            OnStatusChanged(previous, next);
             try
             {
                 StatusChanged?.Invoke(this, next);

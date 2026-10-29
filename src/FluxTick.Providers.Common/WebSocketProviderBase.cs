@@ -239,6 +239,10 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
                 var connectAssets = CurrentSubscriptions;
                 var connectUri = BuildConnectionUri(connectAssets);
 
+                // Host and path only: the query may carry credentials.
+                Logger.LogInformation(
+                    "{Provider} connecting to {Host}{Path}", Descriptor.DisplayName, connectUri.Host, connectUri.AbsolutePath);
+
                 // A middlebox that accepts the connection but never completes the handshake must not hang the loop.
                 using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
@@ -301,10 +305,12 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
             }
 
             SetStreamStatus(ProviderConnectionState.Reconnecting, failure);
+            var delay = backoff + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+            Logger.LogInformation(
+                "{Provider} reconnecting in {Delay:F1} s ({Reason})", Descriptor.DisplayName, delay.TotalSeconds, failure ?? "-");
             try
             {
-                await Task.Delay(backoff + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500)), TimeProvider, cancellationToken)
-                    .ConfigureAwait(false);
+                await Task.Delay(delay, TimeProvider, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
