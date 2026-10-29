@@ -33,7 +33,7 @@ public sealed class CoinbaseProviderFactory : IMarketDataProviderFactory
         new CoinbaseProvider(
             Descriptor,
             ExchangeEndpoints.Read(context.Options, Descriptor),
-            ExchangeEndpoints.CreateHttpClient(),
+            ExchangeEndpoints.CreateHttpClient(context.LoggerFactory.CreateLogger<CoinbaseProvider>()),
             context.TimeProvider,
             context.LoggerFactory.CreateLogger<CoinbaseProvider>());
 }

@@ -70,7 +70,8 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
 
         var http = AppHttpClient.Create(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
-            decompress: true);
+            decompress: true,
+            logger: context.LoggerFactory.CreateLogger<YahooProvider>());
 
         return new YahooProvider(
             Descriptor,

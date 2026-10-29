@@ -72,11 +72,14 @@ public sealed record ExchangeEndpoints(Uri WebSocket, Uri Rest)
     /// Creates the HTTP client of a provider: a 15 second timeout and a product user agent, which some exchange APIs
     /// require.
     /// </summary>
+    /// <param name="logger">
+    /// The logger that records the requests, or <see langword="null"/> to record none.
+    /// </param>
     /// <returns>
     /// A new client; the provider that receives it owns and disposes it.
     /// </returns>
-    public static HttpClient CreateHttpClient()
+    public static HttpClient CreateHttpClient(Microsoft.Extensions.Logging.ILogger? logger = null)
     {
-        return AppHttpClient.Create("FluxTick");
+        return AppHttpClient.Create("FluxTick", logger: logger);
     }
 }

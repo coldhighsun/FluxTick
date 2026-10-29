@@ -94,6 +94,26 @@ public static class AppHost
     internal static void ConfigureThrottledLogging() => ThrottledLogger.Language = LogCulture;
 
     /// <summary>
+    /// The environment variable that sets the minimum level of the log file, for example <c>Debug</c> to also record every
+    /// request.
+    /// </summary>
+    internal const string LogLevelVariable = "FLUXTICK_LOG_LEVEL";
+
+    /// <summary>
+    /// Reads the minimum level of the log file.
+    /// </summary>
+    /// <param name="value">
+    /// The text of the setting, which may be null or empty.
+    /// </param>
+    /// <returns>
+    /// The level the text names, or <see cref="Serilog.Events.LogEventLevel.Information"/> when it names none.
+    /// </returns>
+    internal static Serilog.Events.LogEventLevel ParseLogLevel(string? value) =>
+        Enum.TryParse<Serilog.Events.LogEventLevel>(value?.Trim(), ignoreCase: true, out var level) && Enum.IsDefined(level)
+            ? level
+            : Serilog.Events.LogEventLevel.Information;
+
+    /// <summary>
     /// The logger that writes the log file, kept so that the entries still waiting for the background writer can be flushed.
     /// </summary>
     private static Logger? s_logger;
@@ -117,8 +137,9 @@ public static class AppHost
     {
         var services = new ServiceCollection();
 
+        var levelSwitch = new LoggingLevelSwitch(ParseLogLevel(Environment.GetEnvironmentVariable(LogLevelVariable)));
         var serilog = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.ControlledBy(levelSwitch)
             .WriteTo.Async(file => file.File(
                 AppPaths.LogFile,
                 rollingInterval: RollingInterval.Day,
@@ -127,6 +148,12 @@ public static class AppHost
                 retainedFileCountLimit: 5))
             .CreateLogger();
         s_logger = serilog;
+        serilog.Information(
+            "FluxTick {Version} starting on {OS} (demo: {Demo}, log level: {LogLevel})",
+            SemanticVersion.TryFromAssembly(typeof(AppHost).Assembly, out var appVersion) ? appVersion.ToString() : "unknown",
+            System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            demo,
+            levelSwitch.MinimumLevel);
         services.AddLogging(builder => builder.AddSerilog(serilog, dispose: true));
         ConfigureThrottledLogging();
 
@@ -182,9 +209,13 @@ public static class AppHost
         // The demo mode is offline: it converts with fixed rates and keeps nothing on disk. The provider owns its client, which
         // lives as long as the app, so its connections are renewed now and then to follow a change of the address of the
         // server.
-        services.AddSingleton<IExchangeRateProvider>(_ => demo
+        services.AddSingleton<IExchangeRateProvider>(sp => demo
             ? new DemoRateProvider()
-            : new FrankfurterRateProvider(AppHttpClient.Create("FluxTick", decompress: true, connectionLifetime: TimeSpan.FromMinutes(5))));
+            : new FrankfurterRateProvider(AppHttpClient.Create(
+                "FluxTick",
+                decompress: true,
+                connectionLifetime: TimeSpan.FromMinutes(5),
+                logger: sp.GetRequiredService<ILogger<FrankfurterRateProvider>>())));
         services.AddSingleton(sp => new ExchangeRateService(
             sp.GetRequiredService<IExchangeRateProvider>(),
             sp.GetRequiredService<ILogger<ExchangeRateService>>(),

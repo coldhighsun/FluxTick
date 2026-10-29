@@ -33,7 +33,7 @@ public sealed class BinanceProviderFactory : IMarketDataProviderFactory
         new BinanceProvider(
             Descriptor,
             ExchangeEndpoints.Read(context.Options, Descriptor),
-            ExchangeEndpoints.CreateHttpClient(),
+            ExchangeEndpoints.CreateHttpClient(context.LoggerFactory.CreateLogger<BinanceProvider>()),
             context.TimeProvider,
             context.LoggerFactory.CreateLogger<BinanceProvider>());
 }
