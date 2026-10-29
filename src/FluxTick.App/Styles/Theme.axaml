@@ -456,4 +456,9 @@
   <Style Selector="TabControl.settings > TabItem:selected /template/ Border#PART_LayoutRoot">
     <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
+  <!-- A menu a pixel too tall for its pop-up window, as on a 150% screen, would show scroll arrows for that pixel.
+       Menus are short, so none of them scrolls. -->
+  <Style Selector="ContextMenu /template/ ScrollViewer, MenuFlyoutPresenter /template/ ScrollViewer, MenuItem /template/ ScrollViewer">
+    <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+  </Style>
 </Styles>
