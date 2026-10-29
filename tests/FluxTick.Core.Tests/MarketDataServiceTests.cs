@@ -1241,6 +1241,57 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a failed history load is retried once its wait is over although the settings do not change, which is how
+    /// a source that was down at startup gets its sparkline later.
+    /// </summary>
+    [Fact]
+    public async Task HistoryFails_IsRetriedByTheHealthTimerWithoutAnApply()
+    {
+        var factory = new EmptyHistoryFactory(new HttpRequestException("down"));
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => factory.Provider?.HistoryRequests == 1);
+        await Task.Delay(100);
+
+        _time.Advance(TimeSpan.FromSeconds(10));
+        await Task.Delay(30);
+        factory.Provider!.HistoryRequests.Should().Be(1, "the wait after a failure is not over");
+
+        _time.Advance(TimeSpan.FromSeconds(25));
+        await WaitUntilAsync(() => factory.Provider.HistoryRequests == 2);
+    }
+
+    /// <summary>
+    /// Verifies the health timer gives up on a source whose history keeps failing, so that it is not asked for as long as
+    /// the application runs; applying the settings asks again.
+    /// </summary>
+    [Fact]
+    public async Task HistoryKeepsFailing_TheHealthTimerStopsAskingAfterAFewTries()
+    {
+        var factory = new EmptyHistoryFactory(new HttpRequestException("down"));
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => factory.Provider?.HistoryRequests == 1);
+
+        for (var i = 0; i < 30; i++)
+        {
+            await Task.Delay(30);
+            _time.Advance(TimeSpan.FromMinutes(5));
+        }
+
+        await Task.Delay(100);
+        var asked = factory.Provider!.HistoryRequests;
+        asked.Should().Be(5, "the first load and four retries by the timer");
+
+        _time.Advance(TimeSpan.FromMinutes(30));
+        await Task.Delay(100);
+        factory.Provider.HistoryRequests.Should().Be(asked, "the timer no longer asks");
+
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => factory.Provider.HistoryRequests == asked + 1);
+    }
+
+    /// <summary>
     /// Verifies the sparkline only shows the last hour: once the seeded history is older than that it is gone, and the
     /// change is published without a new quote.
     /// </summary>

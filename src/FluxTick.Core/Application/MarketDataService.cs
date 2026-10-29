@@ -69,6 +69,13 @@ public sealed class MarketDataService : IAsyncDisposable
     private const int MaxEmptyHistoryAnswers = 3;
 
     /// <summary>
+    /// The number of failed history loads after which the health timer stops asking again. With the wait doubling from
+    /// 30 seconds, that is about 15 minutes of trying; a source that is still failing then is asked again only when the
+    /// settings are applied, not for as long as the application runs.
+    /// </summary>
+    private const int MaxTimerSeedRetries = 5;
+
+    /// <summary>
     /// The number of quotes in a row, each traded before the one shown, that are ignored as late answers; the next one is
     /// taken as a time that really went back.
     /// </summary>
@@ -193,7 +200,21 @@ public sealed class MarketDataService : IAsyncDisposable
         _timeProvider = timeProvider;
         _options = options ?? new MarketDataServiceOptions();
         _logger = loggerFactory.CreateLogger<MarketDataService>();
-        _healthTimer = timeProvider.CreateTimer(_ => RefreshHealth(), null, _options.HealthInterval, _options.HealthInterval);
+        _healthTimer = timeProvider.CreateTimer(
+            _ =>
+            {
+                RefreshHealth();
+
+                // A tick that was already running when the service was disposed must not start loads on providers that
+                // are being closed.
+                if (!_disposed)
+                {
+                    SeedEmptySeries(failedOnly: true);
+                }
+            },
+            null,
+            _options.HealthInterval,
+            _options.HealthInterval);
         _statusPump = Task.Run(PumpStatusAsync);
     }
 
@@ -756,7 +777,12 @@ public sealed class MarketDataService : IAsyncDisposable
     /// that is not empty is no reason to skip it: a source that sends its first price right away has put a live point in
     /// before this runs.
     /// </summary>
-    private void SeedEmptySeries()
+    /// <param name="failedOnly">
+    /// Whether to start only the loads that failed before, fewer than <see cref="MaxTimerSeedRetries"/> times, and whose
+    /// wait is over. The health timer does this, so that a failed load is retried although nothing changes the settings;
+    /// the empty answers of a market without data stay counted per route.
+    /// </param>
+    private void SeedEmptySeries(bool failedOnly = false)
     {
         List<(AssetState State, IHistoryProvider History)> work = [];
         var now = _timeProvider.GetUtcNow();
@@ -765,6 +791,7 @@ public sealed class MarketDataService : IAsyncDisposable
             foreach (var state in _assets.Values)
             {
                 if (state is { Seeded: false, Seeding: false }
+                    && (!failedOnly || state.SeedFailures is > 0 and < MaxTimerSeedRetries)
                     && state.NextSeedAttempt <= now
                     && _slots.TryGetValue(state.Asset.ProviderId, out var slot)
                     && slot.Provider is IHistoryProvider history)
@@ -830,8 +857,8 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             _logger.LogWarning(ex, "Could not load history for {AssetId}", state.Asset.Id);
 
-            // Asking again with every route, which happens with every change of the settings, would hammer a source that
-            // keeps failing: wait longer after each failure, up to a cap.
+            // Asking again with every route and every tick of the health timer would hammer a source that keeps failing:
+            // wait longer after each failure, up to a cap.
             lock (_gate)
             {
                 state.SeedFailures++;
