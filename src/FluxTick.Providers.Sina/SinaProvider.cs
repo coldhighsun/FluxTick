@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Text;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,7 @@ namespace FluxTick.Providers.Sina;
 /// are part of the address of the stream, so a change of the watchlist connects again. The quote service gives every new
 /// instrument its first price and takes over while the stream is down.
 /// </summary>
-public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class SinaProvider : RestBackedWebSocketProviderBase, IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -31,6 +32,22 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearc
     /// The host of the symbol search service.
     /// </summary>
     private static readonly Uri SearchBase = new("https://suggest3.sinajs.cn");
+
+    /// <summary>
+    /// The host of the minute candles of the A-share stocks and funds.
+    /// </summary>
+    private static readonly Uri StockHistoryBase = new("https://quotes.sina.cn");
+
+    /// <summary>
+    /// The host of the minute candles of the currency pairs.
+    /// </summary>
+    private static readonly Uri ForexHistoryBase = new("https://vip.stock.finance.sina.com.cn");
+
+    /// <summary>
+    /// The number of one-minute candles to request, for the span of <see cref="HistoryWindow"/>. The services take a
+    /// count of candles, not a time range.
+    /// </summary>
+    private static readonly int HistoryCandles = (int)HistoryWindow.Span.TotalMinutes;
 
     /// <summary>
     /// The quote endpoint.
@@ -106,6 +123,28 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, ISymbolSearc
         QuoteText.HasPrefix(symbol, "sh") || QuoteText.HasPrefix(symbol, "sz") || QuoteText.HasPrefix(symbol, "bj")
             ? ExchangeHours.ChinaA
             : null;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
+    {
+        var code = SinaParser.ToRequestCode(asset.Symbol);
+        if (!SinaParser.HasMinuteHistory(code))
+        {
+            return [];
+        }
+
+        var forex = SinaParser.IsForex(code);
+        var uri = forex
+            ? EndpointOptions.Combine(ForexHistoryBase, $"/forex/api/jsonp.php/var/NewForexService.getMinKline?symbol={Uri.EscapeDataString(code)}&scale=1&datalen={HistoryCandles}")
+            : EndpointOptions.Combine(StockHistoryBase, $"/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol={Uri.EscapeDataString(code)}&scale=1&ma=no&datalen={HistoryCandles}");
+        var text = Encoding.UTF8.GetString(await GetBytesAsync(uri, cancellationToken).ConfigureAwait(false));
+        var candles = forex ? SinaParser.ParseForexMinutes(text) : SinaParser.ParseStockMinutes(text);
+
+        // A candle is labelled with the end of its minute, so the one under way is dated in the future; its price is the
+        // live price, which the quotes bring, and a point ahead of the clock would sit beyond the end of the sparkline.
+        var now = TimeProvider.GetUtcNow();
+        return [.. candles.Where(p => p.Timestamp <= now)];
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default)

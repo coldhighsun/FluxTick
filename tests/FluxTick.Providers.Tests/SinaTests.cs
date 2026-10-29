@@ -555,6 +555,144 @@ public class SinaTests
     }
 
     /// <summary>
+    /// Minute candles of a stock as captured, one without a usable close and one without a usable time.
+    /// </summary>
+    private const string StockCandles = """
+        [{"day":"2026-10-27 13:10:00","open":"228.300","high":"228.300","low":"228.010","close":"228.030","volume":"71100","amount":"1.0"},{"day":"2026-10-27 13:11:00","open":"1","high":"1","low":"1","close":"0.000","volume":"1","amount":"1"},{"day":"bad","close":"1.000"},{"day":"2026-10-27 13:12:00","open":"227.900","high":"228.120","low":"227.830","close":"227.950","volume":"89800","amount":"2.0"}]
+        """;
+
+    /// <summary>
+    /// Minute candles of a currency pair as captured, after the line of script the service puts in front.
+    /// </summary>
+    private const string ForexCandles = """
+        /*<script>location.href='//sina.com';</script>*/
+        var([{"d":"2026-10-27 13:12:00","o":5.2056,"l":5.2029,"h":5.2056,"c":5.2029,"p":0.1922},{"d":"2026-10-27 13:13:00","o":5.2056,"l":5.2029,"h":5.2056,"c":5.2056}]);
+        """;
+
+    /// <summary>
+    /// Verifies the candles of a stock are read as the close at the Beijing time of each candle.
+    /// </summary>
+    [Fact]
+    public void ParseStockMinutes_Candles_ReturnsClosesAtBeijingTime()
+    {
+        var points = SinaParser.ParseStockMinutes(StockCandles);
+
+        points.Should().Equal(
+            new PricePoint(new DateTimeOffset(2026, 10, 27, 13, 10, 0, TimeSpan.FromHours(8)), 228.03m),
+            new PricePoint(new DateTimeOffset(2026, 10, 27, 13, 12, 0, TimeSpan.FromHours(8)), 227.95m));
+    }
+
+    /// <summary>
+    /// Verifies the candles of a currency pair are found behind the script line and read as numbers.
+    /// </summary>
+    [Fact]
+    public void ParseForexMinutes_Candles_ReturnsClosesAtBeijingTime()
+    {
+        var points = SinaParser.ParseForexMinutes(ForexCandles);
+
+        points.Should().Equal(
+            new PricePoint(new DateTimeOffset(2026, 10, 27, 13, 12, 0, TimeSpan.FromHours(8)), 5.2029m),
+            new PricePoint(new DateTimeOffset(2026, 10, 27, 13, 13, 0, TimeSpan.FromHours(8)), 5.2056m));
+    }
+
+    /// <summary>
+    /// Verifies an answer without candles, which the service gives for the indices, is an empty history.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("/*<script>location.href='//sina.com';</script>*/")]
+    public void ParseStockMinutes_NoCandles_ReturnsEmpty(string text)
+    {
+        SinaParser.ParseStockMinutes(text).Should().BeEmpty();
+        SinaParser.ParseForexMinutes(text).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies which codes have minute history: stocks, funds and currency pairs, not indices or futures.
+    /// </summary>
+    [Theory]
+    [InlineData("sh600000", true)]
+    [InlineData("sz159915", true)]
+    [InlineData("bj920950", true)]
+    [InlineData("fx_seurusd", true)]
+    [InlineData("sh000001", false)]
+    [InlineData("sz399006", false)]
+    [InlineData("bj899050", false)]
+    [InlineData("hf_GC", false)]
+    public void HasMinuteHistory_Code_IsTrueForStocksFundsAndCurrencyPairs(string code, bool expected)
+    {
+        SinaParser.HasMinuteHistory(code).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the history of a stock asks the stock service for the minutes of the sparkline by count and keeps the
+    /// real times of the candles.
+    /// </summary>
+    [Fact]
+    public async Task Provider_StockHistory_RequestsTheLastCandlesAndKeepsTheirTimes()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(StockCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var history = await provider.GetHistoryAsync(new Asset("sina", "SH600000", "x", AssetClass.Equity));
+
+        history.Select(p => p.Price).Should().Equal(228.03m, 227.95m);
+        history[0].Timestamp.Should().Be(new DateTimeOffset(2026, 10, 27, 13, 10, 0, TimeSpan.FromHours(8)));
+        var request = handler.Requests.Single();
+        request.RequestUri!.Host.Should().Be("quotes.sina.cn");
+        request.RequestUri.Query.Should().Be("?symbol=sh600000&scale=1&ma=no&datalen=65");
+        request.Headers.Referrer.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Verifies the candle under way, which the service labels with the end of its minute and so with a time that has not
+    /// come yet, is left out of the history.
+    /// </summary>
+    [Fact]
+    public async Task Provider_StockHistory_CandleUnderWay_IsLeftOut()
+    {
+        var withFuture = StockCandles.Replace("]", """,{"day":"2026-10-27 13:14:00","close":"228.500"}]""", StringComparison.Ordinal);
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(withFuture));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var history = await provider.GetHistoryAsync(new Asset("sina", "sh600000", "x", AssetClass.Equity));
+
+        history.Select(p => p.Price).Should().Equal(228.03m, 227.95m);
+    }
+
+    /// <summary>
+    /// Verifies the history of a currency pair asks the currency service.
+    /// </summary>
+    [Fact]
+    public async Task Provider_ForexHistory_RequestsTheCurrencyService()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(ForexCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var history = await provider.GetHistoryAsync(new Asset("sina", "fx_ssgdcny", "x", AssetClass.Forex));
+
+        history.Should().HaveCount(2);
+        var request = handler.Requests.Single();
+        request.RequestUri!.Host.Should().Be("vip.stock.finance.sina.com.cn");
+        request.RequestUri.Query.Should().Be("?symbol=fx_ssgdcny&scale=1&datalen=65");
+    }
+
+    /// <summary>
+    /// Verifies an instrument without minute history, such as an index, is answered without a request.
+    /// </summary>
+    [Fact]
+    public async Task Provider_IndexHistory_IsEmptyWithoutARequest()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json("[]"));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        (await provider.GetHistoryAsync(new Asset("sina", "sh000001", "x", AssetClass.Index))).Should().BeEmpty();
+        handler.Requests.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// The start of the clock of the tests: Tuesday 13:13:41 in Shanghai, in the afternoon session and the time of the quote
     /// lines the tests serve. The fallback only polls while the market is open, and the default of the fake clock is a
     /// Saturday.
