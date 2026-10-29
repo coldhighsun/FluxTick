@@ -55,7 +55,7 @@ public sealed class TencentProviderFactory : IMarketDataProviderFactory
     public IMarketDataProvider Create(ProviderCreationContext context)
     {
         var quoteUri = EndpointOptions.GetHttpUri(context.Options, Descriptor, QuoteUrlKey);
-        var http = AppHttpClient.Create(decompress: true);
+        var http = AppHttpClient.Create(decompress: true, logger: context.LoggerFactory.CreateLogger<TencentProvider>());
         return new TencentProvider(
             Descriptor,
             quoteUri,

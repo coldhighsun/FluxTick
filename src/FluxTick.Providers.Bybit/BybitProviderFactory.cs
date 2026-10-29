@@ -33,7 +33,7 @@ public sealed class BybitProviderFactory : IMarketDataProviderFactory
         new BybitProvider(
             Descriptor,
             ExchangeEndpoints.Read(context.Options, Descriptor),
-            ExchangeEndpoints.CreateHttpClient(),
+            ExchangeEndpoints.CreateHttpClient(context.LoggerFactory.CreateLogger<BybitProvider>()),
             context.TimeProvider,
             context.LoggerFactory.CreateLogger<BybitProvider>());
 }

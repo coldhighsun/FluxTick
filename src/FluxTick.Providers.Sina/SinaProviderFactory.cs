@@ -68,7 +68,7 @@ public sealed class SinaProviderFactory : IMarketDataProviderFactory
     {
         var quoteUri = EndpointOptions.GetHttpUri(context.Options, Descriptor, QuoteUrlKey);
         var streamUri = EndpointOptions.GetWebSocketUri(context.Options, Descriptor, WebSocketUrlKey);
-        var http = AppHttpClient.Create(decompress: true);
+        var http = AppHttpClient.Create(decompress: true, logger: context.LoggerFactory.CreateLogger<SinaProvider>());
         return new SinaProvider(
             Descriptor,
             quoteUri,

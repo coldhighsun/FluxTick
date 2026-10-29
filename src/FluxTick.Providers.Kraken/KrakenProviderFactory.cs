@@ -33,7 +33,7 @@ public sealed class KrakenProviderFactory : IMarketDataProviderFactory
         new KrakenProvider(
             Descriptor,
             ExchangeEndpoints.Read(context.Options, Descriptor),
-            ExchangeEndpoints.CreateHttpClient(),
+            ExchangeEndpoints.CreateHttpClient(context.LoggerFactory.CreateLogger<KrakenProvider>()),
             context.TimeProvider,
             context.LoggerFactory.CreateLogger<KrakenProvider>());
 }

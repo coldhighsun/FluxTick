@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.Logging;
 
 namespace FluxTick.Providers.Common;
 
@@ -26,10 +27,13 @@ public static class AppHttpClient
     /// How long a connection is reused before a new one is made, which lets a client that lives for long follow a change
     /// of the address of the server, or <see langword="null"/> to keep the default (unlimited).
     /// </param>
+    /// <param name="logger">
+    /// The logger that records the requests, or <see langword="null"/> to record none.
+    /// </param>
     /// <returns>
     /// A new client, which owns its handler; whoever receives it disposes it.
     /// </returns>
-    public static HttpClient Create(string? userAgent = null, bool decompress = false, TimeSpan? connectionLifetime = null)
+    public static HttpClient Create(string? userAgent = null, bool decompress = false, TimeSpan? connectionLifetime = null, ILogger? logger = null)
     {
         var handler = new SocketsHttpHandler
         {
@@ -40,7 +44,8 @@ public static class AppHttpClient
             handler.PooledConnectionLifetime = lifetime;
         }
 
-        var http = new HttpClient(handler) { Timeout = RequestTimeout };
+        HttpMessageHandler outer = logger is null ? handler : new LoggingHttpHandler(handler, logger);
+        var http = new HttpClient(outer) { Timeout = RequestTimeout };
         if (userAgent is not null)
         {
             http.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);

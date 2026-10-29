@@ -33,7 +33,7 @@ public sealed class OkxProviderFactory : IMarketDataProviderFactory
         new OkxProvider(
             Descriptor,
             ExchangeEndpoints.Read(context.Options, Descriptor),
-            ExchangeEndpoints.CreateHttpClient(),
+            ExchangeEndpoints.CreateHttpClient(context.LoggerFactory.CreateLogger<OkxProvider>()),
             context.TimeProvider,
             context.LoggerFactory.CreateLogger<OkxProvider>());
 }

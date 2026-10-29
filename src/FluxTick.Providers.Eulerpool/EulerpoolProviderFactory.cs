@@ -87,7 +87,7 @@ public sealed class EulerpoolProviderFactory : IMarketDataProviderFactory
             streamUri,
             context.Options.GetString(ApiKeyKey).Trim(),
             context.Options.GetDuration(PollIntervalKey),
-            AppHttpClient.Create(decompress: true),
+            AppHttpClient.Create(decompress: true, logger: context.LoggerFactory.CreateLogger<EulerpoolProvider>()),
             context.TimeProvider,
             context.LoggerFactory.CreateLogger<EulerpoolProvider>(),
             context.Options.GetDuration(ProviderOptionDefinition.QuietPollIntervalKey));
