@@ -758,6 +758,8 @@ public sealed partial class App : Application
             return;
         }
 
+        _services?.GetService<ILogger<App>>()?.LogInformation("The desktop {TrayState} a tray", hasTray ? "shows" : "does not show");
+
         _window.ShowInTaskbar = !hasTray;
         if (!hasTray && ++_taskbarAttempts < TaskbarMaxAttempts)
         {
@@ -817,6 +819,10 @@ public sealed partial class App : Application
             _services?.GetService<ILogger<App>>()?.LogWarning("The boss key {Hotkey} is taken by another program", next);
             _toasts?.Show(Loc.Get("BossKey_FailedTitle"), Loc.Get("BossKey_FailedBody", next));
         }
+        else
+        {
+            _services?.GetService<ILogger<App>>()?.LogInformation("The boss key {Hotkey} is registered", next);
+        }
     }
 
     /// <summary>
@@ -861,6 +867,7 @@ public sealed partial class App : Application
                 },
                 SetTrayVisible: SetTrayIconsVisible,
                 OnError: ex => _services?.GetService<ILogger<App>>()?.LogWarning(ex, "A step of the boss key failed")));
+        _services?.GetService<ILogger<App>>()?.LogInformation("The boss key was pressed");
         _bossController.Toggle();
     }
 

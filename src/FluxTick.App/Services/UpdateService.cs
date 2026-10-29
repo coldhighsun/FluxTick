@@ -469,7 +469,11 @@ public sealed class UpdateService : IDisposable
     /// <returns>
     /// A task that completes once the check finished.
     /// </returns>
-    public Task CheckAsync(bool manual) => _controller?.CheckAsync(manual) ?? Task.CompletedTask;
+    public Task CheckAsync(bool manual)
+    {
+        _logger.LogInformation("Checking for updates (manual: {Manual}, available: {Available})", manual, _controller is not null);
+        return _controller?.CheckAsync(manual) ?? Task.CompletedTask;
+    }
 
     /// <summary>
     /// Downloads the package of the newer release into the updates directory and verifies its checksum.
