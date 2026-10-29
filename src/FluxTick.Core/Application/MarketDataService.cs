@@ -921,7 +921,8 @@ public sealed class MarketDataService : IAsyncDisposable
 
     /// <summary>
     /// Applies a quote to the matching instrument and notifies listeners. A quote whose trade time is older than the
-    /// one shown is not applied, unless one of the two times is only an estimate.
+    /// one shown is not applied, unless one of the two times is only an estimate. The one shown again only counts as
+    /// received, and is raised only if that changes the health or the trading state.
     /// </summary>
     /// <param name="quote">
     /// The quote to apply.
@@ -958,6 +959,18 @@ public sealed class MarketDataService : IAsyncDisposable
             }
 
             state.OlderQuotesInARow = 0;
+
+            // A source repeats the quote of a shut market to show it is still there. That says the source is not silent and
+            // nothing else, so unless it changes what is shown there is no snapshot to build, no point for the sparkline and
+            // nothing to raise; the timer picks up whatever the passing time changes.
+            if (quote == state.Latest)
+            {
+                state.LastReceivedAt = received;
+                if (ComputeHealth(state).Health == state.LastHealth && MarketStateOf(state, received) == state.LastMarketState)
+                {
+                    return;
+                }
+            }
 
             state.Latest = quote;
             state.LastReceivedAt = received;

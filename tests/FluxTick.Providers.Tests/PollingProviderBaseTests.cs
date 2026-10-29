@@ -153,6 +153,99 @@ public class PollingProviderBaseTests
     }
 
     /// <summary>
+    /// Verifies a shut market is not polled but its last quote is repeated with the original trade time, so that a
+    /// listener does not take the silence for a source that went quiet.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_ShutMarket_RepeatsTheLastQuoteWithoutPolling()
+    {
+        var time = new FakeTimeProvider();
+        await using var provider = new HoursProvider(time);
+        await provider.SetSubscriptionsAsync([Coin]);
+        await TestWait.EventuallyAsync(() => provider.Published.Count == 1);
+        var first = provider.Published[0];
+        provider.Shut(Coin.Symbol);
+
+        await AdvanceUntilAsync(time, Interval, () => provider.Published.Count >= 4);
+
+        provider.Calls.Should().Be(1, "a shut market has nothing new to fetch");
+        provider.Published.Should().OnlyContain(q => q == first);
+    }
+
+    /// <summary>
+    /// Verifies a market that is open is polled and its quotes are not repeated.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_OpenMarket_PollsAndDoesNotRepeat()
+    {
+        var time = new FakeTimeProvider();
+        await using var provider = new HoursProvider(time);
+        await provider.SetSubscriptionsAsync([Coin]);
+
+        await AdvanceUntilAsync(time, Interval, () => provider.Published.Count >= 3);
+
+        // Every poll publishes a price of its own, so a repeat would show as a price seen twice.
+        provider.Published.Select(q => q.Price).Should().OnlyHaveUniqueItems();
+    }
+
+    /// <summary>
+    /// Verifies an instrument that has no price yet is polled even if its market is shut, and nothing is repeated.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_ShutMarketWithoutAPrice_PollsAndRepeatsNothing()
+    {
+        var time = new FakeTimeProvider();
+        await using var provider = new HoursProvider(time, publish: false);
+        provider.Shut(Coin.Symbol);
+        await provider.SetSubscriptionsAsync([Coin]);
+
+        await AdvanceUntilAsync(time, Interval, () => provider.Calls >= 2);
+
+        provider.Published.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies the sign of life of a shut market goes on at the poll interval while the polls of the instruments that are
+    /// open are held back by a service that pushes back.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_PollsOfOpenMarketsBackOff_ShutMarketKeepsRepeatingEveryInterval()
+    {
+        var time = new FakeTimeProvider();
+        var open = new Asset("test", "O", "O", AssetClass.Equity);
+        await using var provider = new HoursProvider(time);
+        await provider.SetSubscriptionsAsync([Coin, open]);
+        await TestWait.EventuallyAsync(() => provider.Published.Count == 2);
+        provider.Shut(Coin.Symbol);
+        provider.FailPolls = true;
+
+        await AdvanceUntilAsync(time, Interval, () => provider.Published.Count(q => q.AssetId == Coin.Id) >= 9);
+
+        provider.Calls.Should().BeLessThan(6, "the failing polls back off, while the repeats keep their pace");
+    }
+
+    /// <summary>
+    /// Verifies a repeated quote is not taken for news: the quote remembered stays the newest one, so a repeat does not
+    /// bring an older quote back.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_ShutMarketAfterANewerQuote_RepeatsTheNewestQuote()
+    {
+        var time = new FakeTimeProvider();
+        await using var provider = new HoursProvider(time);
+        await provider.SetSubscriptionsAsync([Coin]);
+        await TestWait.EventuallyAsync(() => provider.Published.Count == 1);
+        time.Advance(Interval);
+        await TestWait.EventuallyAsync(() => provider.Published.Count == 2);
+        var newest = provider.Published[^1];
+        provider.Shut(Coin.Symbol);
+
+        await AdvanceUntilAsync(time, Interval, () => provider.Published.Count >= 4);
+
+        provider.Published.Skip(2).Should().OnlyContain(q => q == newest);
+    }
+
+    /// <summary>
     /// Creates a successful outcome.
     /// </summary>
     /// <returns>
@@ -251,6 +344,117 @@ public class PollingProviderBaseTests
             var outcome = script(call);
             Interlocked.Increment(ref _completed);
             return outcome;
+        }
+    }
+
+    /// <summary>
+    /// A polling provider that knows its market hours and publishes one quote per instrument and cycle, with a price of
+    /// its own every time.
+    /// </summary>
+    /// <param name="time">
+    /// The fake clock.
+    /// </param>
+    /// <param name="publish">
+    /// Whether a cycle publishes quotes.
+    /// </param>
+    private sealed class HoursProvider(FakeTimeProvider time, bool publish = true)
+        : PollingProviderBase(
+            new ProviderDescriptor("test", "Test", "A test source.", [AssetClass.Equity], ProviderUpdateMode.Polling),
+            Interval,
+            time,
+            NullLogger.Instance),
+        IMarketHoursProvider
+    {
+        /// <summary>
+        /// The number of cycles started.
+        /// </summary>
+        private int _calls;
+
+        /// <summary>
+        /// The quotes published so far, which are read from other threads.
+        /// </summary>
+        private readonly List<Quote> _published = [];
+
+        /// <summary>
+        /// The symbols whose market is shut, which are read from other threads.
+        /// </summary>
+        private readonly HashSet<string> _shut = [];
+
+        /// <summary>
+        /// Gets the number of cycles started.
+        /// </summary>
+        public int Calls => Volatile.Read(ref _calls);
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the cycles fail with a push back.
+        /// </summary>
+        public bool FailPolls { get; set; }
+
+        /// <summary>
+        /// Gets a copy of the quotes published so far.
+        /// </summary>
+        public IReadOnlyList<Quote> Published
+        {
+            get
+            {
+                lock (_published)
+                {
+                    return [.. _published];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Shuts the market of a symbol.
+        /// </summary>
+        /// <param name="symbol">
+        /// The symbol.
+        /// </param>
+        public void Shut(string symbol)
+        {
+            lock (_shut)
+            {
+                _shut.Add(symbol);
+            }
+        }
+
+        /// <inheritdoc />
+        public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null)
+        {
+            lock (_shut)
+            {
+                return _shut.Contains(asset.Symbol) ? MarketState.Closed : MarketState.Open;
+            }
+        }
+
+        /// <inheritdoc />
+        protected override Task<PollOutcome> PollOnceAsync(IReadOnlyCollection<Asset> assets, CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (FailPolls)
+            {
+                return Task.FromResult(new PollOutcome(0, 1, "pushed back", BackOff: true));
+            }
+
+            if (publish)
+            {
+                foreach (var asset in assets)
+                {
+                    Publish(new Quote(asset.Id, call, null, time.GetUtcNow()));
+                }
+            }
+
+            return Task.FromResult(new PollOutcome(1, 0, null, BackOff: false));
+        }
+
+        /// <inheritdoc />
+        protected override void OnQuotePublished(Quote quote)
+        {
+            base.OnQuotePublished(quote);
+            lock (_published)
+            {
+                _published.Add(quote);
+            }
         }
     }
 }

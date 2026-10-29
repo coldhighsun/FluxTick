@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using FluxTick.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -58,9 +57,10 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
     private readonly BackgroundLoop _loop;
 
     /// <summary>
-    /// The instruments that have published a price, which may be skipped while their market is not trading.
+    /// The latest quote of every instrument that has published a price. Such an instrument may be skipped while its market
+    /// is not trading, and its quote is then repeated as a sign of life.
     /// </summary>
-    private readonly ConcurrentDictionary<AssetId, byte> _priced = new();
+    private readonly QuoteRepeater _repeater;
 
     /// <summary>
     /// The number of consecutive cycles without a single success.
@@ -87,6 +87,7 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
     {
         _interval = interval;
         _loop = new BackgroundLoop(ShutdownToken);
+        _repeater = new QuoteRepeater(IsSubscribed);
     }
 
     /// <inheritdoc />
@@ -119,7 +120,7 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
     protected virtual ValueTask DisposeResourcesAsync() => ValueTask.CompletedTask;
 
     /// <inheritdoc />
-    protected override void OnQuotePublished(Quote quote) => _priced[quote.AssetId] = 0;
+    protected override void OnQuotePublished(Quote quote) => _repeater.Remember(quote);
 
     /// <inheritdoc />
     protected override async Task OnSubscriptionsChangedAsync(
@@ -130,7 +131,7 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
     {
         foreach (var asset in removed)
         {
-            _priced.TryRemove(asset.Id, out _);
+            _repeater.Forget(asset.Id);
         }
 
         Logger.LogInformation(
@@ -192,14 +193,13 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
         var delay = _interval;
         while (!cancellationToken.IsCancellationRequested)
         {
-            // A market that is shut has nothing new; the status stays as the last poll left it. An instrument without a
-            // price yet is polled shut or not, until it has one.
-            var assets = CurrentSubscriptions.Where(a => !_priced.ContainsKey(a.Id) || !IsOutsideTrading(a)).ToArray();
+            var assets = Split(out var shut);
+            _repeater.Repeat(shut, Publish);
             var backOff = assets.Length > 0 && await PollAndReportAsync(assets, cancellationToken).ConfigureAwait(false);
             delay = backOff ? Backoff.Double(delay, MaxBackoff) : _interval;
             try
             {
-                await Task.Delay(delay, TimeProvider, cancellationToken).ConfigureAwait(false);
+                await WaitAsync(delay, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -207,6 +207,50 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
             }
         }
     }
+
+    /// <summary>
+    /// Waits until the next cycle. A wait that grew because the service pushes back is cut into poll intervals, at the end of
+    /// which the quotes of shut markets are repeated, as their sign of life must not stop for as long as the polls of other
+    /// instruments are held back.
+    /// </summary>
+    /// <param name="delay">
+    /// How long to wait.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that ends the wait.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the wait is over.
+    /// </returns>
+    private async Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        var remaining = delay;
+        while (remaining > TimeSpan.Zero)
+        {
+            var step = remaining < _interval ? remaining : _interval;
+            await Task.Delay(step, TimeProvider, cancellationToken).ConfigureAwait(false);
+            remaining -= step;
+            if (remaining > TimeSpan.Zero)
+            {
+                Split(out var shut);
+                _repeater.Repeat(shut, Publish);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Splits the subscriptions by whether their market is trading. A market that is shut has nothing new; the status stays
+    /// as the last poll left it, and its latest quote is repeated by the caller (see <see cref="QuoteRepeater"/>). An
+    /// instrument without a price yet is polled shut or not, until it has one.
+    /// </summary>
+    /// <param name="shut">
+    /// The instruments whose market is shut.
+    /// </param>
+    /// <returns>
+    /// The instruments to poll.
+    /// </returns>
+    private Asset[] Split(out Asset[] shut) =>
+        _repeater.Split(CurrentSubscriptions, IsOutsideTrading, askUnpriced: true, out shut);
 
     /// <summary>
     /// Runs one cycle and updates the provider status from its outcome. An unexpected exception is a failed cycle,
