@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
 
@@ -243,6 +244,110 @@ internal static class SinaParser
         symbol.StartsWith("sh000", StringComparison.Ordinal)
         || symbol.StartsWith("sz399", StringComparison.Ordinal)
         || symbol.StartsWith("bj899", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Tells whether the minute history service has candles for a code: the A-share stocks and funds, whose candles come
+    /// from the stock service, and the currency pairs, whose candles come from the currency service. The service has none
+    /// for the exchange indices and the code of a future is not known to either.
+    /// </summary>
+    /// <param name="code">
+    /// The code as requested, in lower case.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the code has minute history.
+    /// </returns>
+    public static bool HasMinuteHistory(string code) =>
+        IsForex(code) || (Markets.Any(m => QuoteText.HasPrefix(code, m)) && !IsIndex(code));
+
+    /// <summary>
+    /// Tells whether a code is a currency pair.
+    /// </summary>
+    /// <param name="code">
+    /// The code.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> for the codes that start with <c>fx_</c>.
+    /// </returns>
+    public static bool IsForex(string code) => KindOf(code) == AssetClass.Forex;
+
+    /// <summary>
+    /// Parses the minute candles of an A-share stock or fund, <c>[{"day":"2026-10-29 10:30:00","close":"228.030",…},…]</c>.
+    /// </summary>
+    /// <param name="text">
+    /// The response body.
+    /// </param>
+    /// <returns>
+    /// The close of each candle at its time, oldest first; empty when the service has no candles.
+    /// </returns>
+    public static IReadOnlyList<PricePoint> ParseStockMinutes(string text) => ParseMinutes(text, "day", "close");
+
+    /// <summary>
+    /// Parses the minute candles of a currency pair, <c>var([{"d":"2026-10-29 10:32:00","c":5.2029,…},…]);</c> after a
+    /// line of script that is of no use.
+    /// </summary>
+    /// <param name="text">
+    /// The response body.
+    /// </param>
+    /// <returns>
+    /// The close of each candle at its time, oldest first; empty when the service has no candles.
+    /// </returns>
+    public static IReadOnlyList<PricePoint> ParseForexMinutes(string text) => ParseMinutes(text, "d", "c");
+
+    /// <summary>
+    /// Reads the array of candles in a body, whatever surrounds it. Candles without a readable time or a positive close are
+    /// skipped.
+    /// </summary>
+    /// <param name="text">
+    /// The response body.
+    /// </param>
+    /// <param name="timeName">
+    /// The name of the property with the time of a candle, Beijing time.
+    /// </param>
+    /// <param name="closeName">
+    /// The name of the property with the close of a candle.
+    /// </param>
+    /// <returns>
+    /// The points, in the order of the candles.
+    /// </returns>
+    private static IReadOnlyList<PricePoint> ParseMinutes(string text, string timeName, string closeName)
+    {
+        var start = text.IndexOf("[{", StringComparison.Ordinal);
+        var end = text.LastIndexOf(']');
+        if (start < 0 || end < start)
+        {
+            return [];
+        }
+
+        using var document = JsonDocument.Parse(text[start..(end + 1)]);
+        var points = new List<PricePoint>();
+        foreach (var candle in document.RootElement.EnumerateArray())
+        {
+            if (candle.ValueKind == JsonValueKind.Object
+                && candle.TryGetProperty(timeName, out var day)
+                && day.ValueKind == JsonValueKind.String
+                && ParseCandleTime(day.GetString()) is { } time
+                && JsonValues.TryGetDecimal(candle, closeName, out var close)
+                && close > 0m)
+            {
+                points.Add(new PricePoint(time, close));
+            }
+        }
+
+        return points;
+    }
+
+    /// <summary>
+    /// Parses the time of a candle, <c>yyyy-MM-dd HH:mm:ss</c> in Beijing time. The service labels a candle with the end of
+    /// its minute, so the candle that is still under way carries a time that has not come yet.
+    /// </summary>
+    /// <param name="text">
+    /// The text.
+    /// </param>
+    /// <returns>
+    /// The time, or <see langword="null"/> when it cannot be read.
+    /// </returns>
+    private static DateTimeOffset? ParseCandleTime(string? text) =>
+        text?.Split(' ') is [var date, var time] ? ParseTime(date, time) : null;
 
     /// <summary>
     /// Parses the quote time of a line, which is Beijing time.

@@ -33,7 +33,7 @@ public sealed class SinaProviderFactory : IMarketDataProviderFactory
     public ProviderDescriptor Descriptor { get; } = new(
         ProviderId,
         "Sina Finance",
-        "A-share stocks, ETFs and indices (Shanghai, Shenzhen, Beijing), currency pairs and international commodity futures from the public quote stream of Sina, with the quote service as the first price and as a fallback while the stream is down. Symbols look like sh600000 or sz000001, the same as Tencent's; currency pairs and futures use the codes of Sina, such as fx_seurusd or hf_GC. Instruments stay with the source they were added from, so to use Sina add them again under it. No API key required. Unofficial; data may be delayed or rate limited.",
+        "A-share stocks, ETFs and indices (Shanghai, Shenzhen, Beijing), currency pairs and international commodity futures from the public quote stream of Sina, with the quote service as the first price and as a fallback while the stream is down. Symbols look like sh600000 or sz000001, the same as Tencent's; currency pairs and futures use the codes of Sina, such as fx_seurusd or hf_GC. Instruments stay with the source they were added from, so to use Sina add them again under it. Minute history covers A-shares, funds and currency pairs. No API key required. Unofficial; data may be delayed or rate limited.",
         [AssetClass.Equity, AssetClass.Index, AssetClass.Forex, AssetClass.Commodity],
         ProviderUpdateMode.Streaming,
         Homepage: new Uri("https://finance.sina.com.cn/"),
