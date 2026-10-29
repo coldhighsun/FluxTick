@@ -247,6 +247,29 @@ public class RowAndOptionTests
     }
 
     /// <summary>
+    /// Verifies a price that still looks live in a shut market, because the source keeps repeating it, is told as closed.
+    /// </summary>
+    /// <param name="market">
+    /// The trading state.
+    /// </param>
+    /// <param name="status">
+    /// The expected status text.
+    /// </param>
+    [Theory]
+    [InlineData(MarketState.Closed, "Closed")]
+    [InlineData(MarketState.Break, "Break")]
+    public void Update_LiveInAShutMarket_SaysTheMarketIsShut(MarketState market, string status)
+    {
+        var row = new AssetRowViewModel(Btc, "p");
+
+        row.Update(Snapshot(110m, 100m, AssetHealth.Live) with { MarketState = market });
+
+        row.StatusText.Should().Be(status);
+        row.StatusIsNeutral.Should().BeTrue();
+        row.IsPriceOutdated.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies delayed prices keep coming in: they are labelled, never dimmed, drawn as a running line and not outdated,
     /// and in a shut market the label gives way to the trading state.
     /// </summary>
@@ -323,7 +346,6 @@ public class RowAndOptionTests
     [Theory]
     [InlineData(MarketState.PreMarket, "Pre-market")]
     [InlineData(MarketState.AfterHours, "After hours")]
-    [InlineData(MarketState.Closed, "Closed")]
     [InlineData(MarketState.Open, "")]
     [InlineData(MarketState.Unknown, "")]
     public void Update_LiveInAnyMarketState_ShowsTheChipOnlyOutsideTheRegularSession(MarketState market, string badge)

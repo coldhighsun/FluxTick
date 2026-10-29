@@ -721,10 +721,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// The snapshot.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> when the prices are stale or delayed and the market is closed or on a break.
+    /// <see langword="true"/> when the prices are live, stale or delayed and the market is closed or on a break.
     /// </returns>
     private static bool IsClosingPrice(AssetSnapshot snapshot) =>
-        (snapshot.Health is AssetHealth.Stale or AssetHealth.Delayed)
+        // The trading hours decide first: a source may go on sending the last price of a shut market, which looks live.
+        (snapshot.Health is AssetHealth.Live or AssetHealth.Stale or AssetHealth.Delayed)
         && (snapshot.MarketState is MarketState.Closed or MarketState.Break);
 
     /// <summary>
