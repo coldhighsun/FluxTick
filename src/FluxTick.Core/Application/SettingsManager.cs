@@ -125,6 +125,10 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
 
         var adopted = loaded ?? fallback;
         var normalized = adopted.Normalize();
+        logger.LogInformation(
+            "Settings {Source}{Normalized}",
+            loaded is null ? "not found, using the defaults of a first run" : "loaded",
+            normalized ? " and normalized" : string.Empty);
         Volatile.Write(ref _current, adopted);
         if (loaded is null || normalized)
         {
@@ -223,6 +227,7 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
             try
             {
                 await store.SaveAsync(next, cancellationToken).ConfigureAwait(false);
+                logger.LogInformation("Settings changed and saved");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

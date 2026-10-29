@@ -37,6 +37,11 @@ public sealed class AlertServiceTests : IAsyncDisposable
     private readonly SettingsManager _settings = new(new MemoryStore(), NullLogger<SettingsManager>.Instance);
 
     /// <summary>
+    /// The logger of the service under test.
+    /// </summary>
+    private readonly ListLogger<AlertService> _log = new();
+
+    /// <summary>
     /// The service under test.
     /// </summary>
     private readonly AlertService _alerts;
@@ -52,7 +57,7 @@ public sealed class AlertServiceTests : IAsyncDisposable
     public AlertServiceTests()
     {
         _market = new MarketDataService(new ProviderRegistry([_crypto]), NullLoggerFactory.Instance, _time);
-        _alerts = new AlertService(_market, _settings, NullLogger<AlertService>.Instance);
+        _alerts = new AlertService(_market, _settings, _log);
         _alerts.AlertTriggered += (_, e) =>
         {
             lock (_fired)
@@ -172,6 +177,22 @@ public sealed class AlertServiceTests : IAsyncDisposable
         await EmitAsync(provider, 103);
 
         _fired.Should().ContainSingle().Which.Quote.Price.Should().Be(101);
+    }
+
+    /// <summary>
+    /// Verifies a rule that fires is logged once, with its id, the instrument and the price.
+    /// </summary>
+    [Fact]
+    public async Task PriceAbove_Fires_LogsTheAlertOnce()
+    {
+        var provider = await StartAsync(AlertCondition.PriceAbove, 100, repeat: true);
+
+        await EmitAsync(provider, 99);
+        await EmitAsync(provider, 101);
+        await EmitAsync(provider, 102);
+
+        _log.Messages.Where(m => m.StartsWith("Alert r1 fired", StringComparison.Ordinal)).Should().ContainSingle()
+            .Which.Should().Contain("101");
     }
 
     /// <summary>
