@@ -1059,6 +1059,88 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a source that repeats the last quote of a shut market is not taken for a quiet one: the market stays
+    /// closed for as long as the quote keeps coming, however long the shut market lasts.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_ShutMarketRepeatsItsLastQuote_StaysClosed()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var microsoft = new Asset("yahoo", "MSFT", "Microsoft", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple, microsoft));
+        var provider = yahoo.Created.Single();
+        var quote = new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromHours(20));
+        provider.Emit(quote);
+        await WaitUntilAsync(() => service.GetSnapshots().Single(s => s.Asset == apple).MarketState == MarketState.Closed);
+
+        for (var i = 0; i < 10; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(30));
+            provider.Emit(quote);
+        }
+
+        // The quotes are handled in order, so the other instrument shows once all the repeats have been handled.
+        provider.Emit(new Quote(microsoft.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromHours(20)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single(s => s.Asset == microsoft).Quote is not null);
+        service.GetSnapshots().Single(s => s.Asset == apple).MarketState.Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a quote shown again changes nothing that is shown, so no snapshot is raised for it, while the next quote
+    /// with a new price is raised as usual.
+    /// </summary>
+    [Fact]
+    public async Task HandleQuote_SameQuoteAgain_RaisesNoSnapshot()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var snapshots = 0;
+        service.SnapshotChanged += (_, _) => Interlocked.Increment(ref snapshots);
+        var quote = new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromHours(20));
+        yahoo.Created.Single().Emit(quote);
+        await WaitUntilAsync(() => Volatile.Read(ref snapshots) == 1);
+
+        yahoo.Created.Single().Emit(quote);
+        yahoo.Created.Single().Emit(quote);
+        yahoo.Created.Single().Emit(quote with { Price = 2m });
+
+        // The quotes are handled in order, so the new price is raised after the repeats, which raised nothing.
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote?.Price == 2m);
+        Volatile.Read(ref snapshots).Should().Be(2);
+    }
+
+    /// <summary>
+    /// Verifies a quote shown again that ends the silence of the source is raised at once, as the state of the market it
+    /// restores is part of what is shown.
+    /// </summary>
+    [Fact]
+    public async Task HandleQuote_SameQuoteAfterSilence_RestoresTheMarketState()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero)); // Saturday
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        var quote = new Quote(apple.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromHours(20));
+        yahoo.Created.Single().Emit(quote);
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+        time.Advance(TimeSpan.FromMinutes(5));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Unknown);
+        var restored = new TaskCompletionSource<MarketState>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.SnapshotChanged += (_, snapshot) => restored.TrySetResult(snapshot.MarketState);
+
+        yahoo.Created.Single().Emit(quote);
+
+        (await restored.Task.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(MarketState.Closed);
+    }
+
+    /// <summary>
     /// Verifies a source that keeps reconnecting turns its instruments stale once the last quote is older than the
     /// threshold, with the reason of the reconnecting as the detail, instead of staying "reconnecting" for good.
     /// </summary>

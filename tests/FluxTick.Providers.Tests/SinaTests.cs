@@ -395,6 +395,32 @@ public class SinaTests
     }
 
     /// <summary>
+    /// Verifies a market that closed is no longer asked for prices, but its last quote is repeated with its trade time, so
+    /// that the silence is not taken for a source that went quiet.
+    /// </summary>
+    [Fact]
+    public async Task Fallback_MarketShutAfterAPrice_RepeatsTheLastQuoteWithoutRequests()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Gbk(QuoteLines));
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, time);
+        await provider.SetSubscriptionsAsync([Pufa]);
+        var first = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
+        var requests = handler.Requests.Count;
+        time.Advance(TimeSpan.FromHours(2));
+
+        var repeated = TestWait.ReadQuotesAsync(provider, 1);
+        while (!repeated.IsCompleted)
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromMilliseconds(30));
+        }
+
+        (await repeated).Single().Should().Be(first);
+        handler.Requests.Should().HaveCount(requests, "a market that is shut has nothing new to ask for");
+    }
+
+    /// <summary>
     /// Verifies the source is reported as failed when neither the stream nor the quote service delivers, as when the
     /// referrer is refused.
     /// </summary>

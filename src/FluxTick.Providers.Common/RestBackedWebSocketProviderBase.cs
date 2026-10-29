@@ -102,6 +102,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
     /// </summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<AssetId, long> _lastQuoteAt = new();
 
+    /// <summary>
+    /// The latest quote of every instrument, repeated for instruments whose market is shut, as no request is made for them.
+    /// </summary>
+    private readonly QuoteRepeater _repeater;
+
 
     /// <summary>
     /// How many published quotes moved the price of an instrument forward with a trade that is recent, from any source.
@@ -155,6 +160,7 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
         _fallbackInterval = fallbackInterval;
         _quietStreamInterval = quietStreamInterval ?? TimeSpan.FromMinutes(5);
         _fallback = new BackgroundLoop(ShutdownToken);
+        _repeater = new QuoteRepeater(IsSubscribed);
     }
 
     /// <summary>
@@ -270,6 +276,13 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
     /// <inheritdoc />
     protected override void OnQuotePublished(Quote quote)
     {
+        // A repeated quote is a sign of life of a shut market, not a trade or a quote that arrived, and moves nothing here.
+        if (QuoteRepeater.IsRepeating)
+        {
+            return;
+        }
+
+        _repeater.Remember(quote);
         // Only an entry that exists is updated, so a quote that races with the removal of its instrument cannot bring it back.
         if (_lastQuoteAt.TryGetValue(quote.AssetId, out var lastQuoteAt))
         {
@@ -351,6 +364,7 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
             foreach (var asset in removed)
             {
                 _lastQuoteAt.TryRemove(asset.Id, out _);
+                _repeater.Forget(asset.Id);
             }
 
             // The problem of an instrument that went is no longer shown.
@@ -459,7 +473,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
 
                 // A market that is not trading has nothing new, and the stream delivers the pre-market and after hours.
                 var subscribed = CurrentSubscriptions;
-                var assets = subscribed.Where(a => !IsOutsideTrading(a)).ToArray();
+                var assets = _repeater.Split(subscribed, IsOutsideTrading, askUnpriced: false, out var shut);
+
+                // Nothing is asked for a shut market, and a reader takes the silence for a source that went quiet: repeat
+                // its last quote, with its trade time, every round, whatever the push back does to the polls.
+                _repeater.Repeat(shut, Publish);
                 SetOutsideTrading(subscribed.Count > 0 && assets.Length == 0);
 
                 var sinceLastPoll = lastPoll is { } quiet ? TimeProvider.GetElapsedTime(quiet) : TimeSpan.MaxValue;
