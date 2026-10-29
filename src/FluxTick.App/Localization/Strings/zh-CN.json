@@ -170,7 +170,7 @@
   "Provider_sina_Name": "新浪财经",
   "Provider_tencent_Desc": "通过轮询腾讯公开行情服务获取 A 股、港股、美股、ETF 和指数行情，无需 API 密钥。非官方接口，数据可能有延迟。分钟历史仅覆盖 A 股和港股。",
   "Provider_tencent_Name": "腾讯财经",
-  "Provider_yahoo_Desc": "通过非官方的 Yahoo Finance 实时推送获取股票、ETF、指数、外汇、大宗商品和加密货币行情，首个价格以及推送中断期间由 API 提供，数据可能有延迟。",
+  "Provider_yahoo_Desc": "通过非官方的 Yahoo Finance 实时推送获取股票、ETF、指数、外汇、大宗商品和加密货币行情，首个价格以及推送中断期间由 API 提供，数据可能有延迟：A 股和港股的价格晚 15 分钟，因此会显示为过期，趋势图上的点也不在最右端；需要实时 A 股行情请使用新浪或腾讯数据源。",
   "Provider_yahoo_Name": "雅虎财经",
   "Row_AlertAbove": "价格涨到 {0} 时提醒",
   "Row_AlertBelow": "价格跌到 {0} 时提醒",
