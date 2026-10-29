@@ -55,6 +55,17 @@ public abstract class LoggingProviderBase : MarketDataProviderBase
     protected bool PublishToSubscribers(ParsedQuote quote) => PublishToSubscribers(quote.Key, quote.Price, quote.PreviousClose, quote.Time);
 
     /// <inheritdoc />
+    protected override void OnStatusChanged(ProviderStatus previous, ProviderStatus current)
+    {
+        // A change of the detail alone (for example a new retry count) is not a transition.
+        var level = previous.State == current.State ? LogLevel.Debug : LogLevel.Information;
+        Logger.Log(
+            level,
+            "{Provider} status {Previous} -> {Current}: {Detail}",
+            Descriptor.DisplayName, previous.State, current.State, current.Message ?? "-");
+    }
+
+    /// <inheritdoc />
     protected override void OnStatusListenerFailed(Exception exception) =>
         Logger.LogWarning(exception, "A listener of the {Provider} status failed", Descriptor.DisplayName);
 }

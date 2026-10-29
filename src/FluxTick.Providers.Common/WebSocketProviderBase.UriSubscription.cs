@@ -61,6 +61,7 @@ public abstract partial class WebSocketProviderBase
     /// </param>
     private void RequestReconnect(ClientWebSocket socket)
     {
+        Logger.LogInformation("{Provider} reconnecting to apply a subscription change", Descriptor.DisplayName);
         Volatile.Write(ref _reconnectFor, socket);
         try
         {

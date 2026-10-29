@@ -172,6 +172,10 @@ public abstract partial class WebSocketProviderBase
             sent.Remove(asset.Id);
         }
 
+        Logger.LogInformation(
+            "{Provider} subscription change: +{Added} [{AddedIds}] -{Removed} [{RemovedIds}]",
+            Descriptor.DisplayName, toAdd.Length, string.Join(",", toAdd.Select(a => a.Id)), toRemove.Length, string.Join(",", toRemove.Select(a => a.Id)));
+
         var delivered = true;
         try
         {
@@ -248,6 +252,7 @@ public abstract partial class WebSocketProviderBase
 
             var assets = CurrentSubscriptions;
             MarkConnected(socket, assets);
+            Logger.LogInformation("{Provider} connected, subscribing to {Count} instruments", Descriptor.DisplayName, assets.Count);
             if (assets.Count > 0)
             {
                 foreach (var message in BuildSubscribeMessages(assets))
