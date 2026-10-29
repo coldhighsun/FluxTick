@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 
 namespace FluxTick.Core.Application;
@@ -200,7 +202,8 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
                 await TryRecoverAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            var next = Current.Clone();
+            var before = Current;
+            var next = before.Clone();
             if (!mutate(next))
             {
                 return false;
@@ -227,7 +230,10 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
             try
             {
                 await store.SaveAsync(next, cancellationToken).ConfigureAwait(false);
-                logger.LogInformation("Settings changed and saved");
+                if (logger.IsEnabled(LogLevel.Information))
+                {
+                    logger.LogInformation("Settings changed and saved: {Changes}", DescribeChanges(before, next));
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -239,6 +245,78 @@ public sealed class SettingsManager(ISettingsStore store, ILogger<SettingsManage
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Names what a change altered, for the log: the paths of the settings that differ, such as <c>window.x</c> or
+    /// <c>watchlist</c>, as in the settings file, two levels deep at most. Only paths are named, never values, as the
+    /// options of a data source may hold a secret.
+    /// </summary>
+    /// <param name="before">
+    /// The settings before the change.
+    /// </param>
+    /// <param name="after">
+    /// The settings after the change.
+    /// </param>
+    /// <returns>
+    /// The paths separated by commas, or a note when nothing differs or the settings cannot be compared.
+    /// </returns>
+    internal static string DescribeChanges(AppSettings before, AppSettings after)
+    {
+        try
+        {
+            var paths = new List<string>();
+            CollectChanges(
+                JsonSerializer.SerializeToNode(before, AppSettings.JsonOptions),
+                JsonSerializer.SerializeToNode(after, AppSettings.JsonOptions),
+                string.Empty,
+                0,
+                paths);
+            return paths.Count > 0 ? string.Join(", ", paths) : "(normalized only)";
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
+        {
+            return "(could not compare)";
+        }
+    }
+
+    /// <summary>
+    /// Adds the paths where two settings trees differ. Objects are compared property by property down to two levels;
+    /// anything deeper, and every list, is compared as a whole.
+    /// </summary>
+    /// <param name="before">
+    /// The node before the change.
+    /// </param>
+    /// <param name="after">
+    /// The node after the change.
+    /// </param>
+    /// <param name="path">
+    /// The path of the nodes.
+    /// </param>
+    /// <param name="depth">
+    /// How many levels of objects lie above the nodes.
+    /// </param>
+    /// <param name="paths">
+    /// Receives the paths that differ.
+    /// </param>
+    private static void CollectChanges(JsonNode? before, JsonNode? after, string path, int depth, List<string> paths)
+    {
+        if (before is JsonObject left && after is JsonObject right && depth < 2)
+        {
+            foreach (var name in left.Select(p => p.Key).Union(right.Select(p => p.Key)))
+            {
+                left.TryGetPropertyValue(name, out var oldValue);
+                right.TryGetPropertyValue(name, out var newValue);
+                CollectChanges(oldValue, newValue, path.Length == 0 ? name : $"{path}.{name}", depth + 1, paths);
+            }
+
+            return;
+        }
+
+        if (!JsonNode.DeepEquals(before, after))
+        {
+            paths.Add(path);
         }
     }
 
