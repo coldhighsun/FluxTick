@@ -951,6 +951,31 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies moving an instrument to another data source keeps it on the tray list, at the same position, and does not
+    /// put an instrument that was not on it there.
+    /// </summary>
+    [Fact]
+    public async Task ChangeSource_KeepsTheTrayListChoice()
+    {
+        var settings = Harness.WatchlistOf(
+            new Asset(Harness.Stocks, "A", "A", AssetClass.Equity),
+            new Asset(Harness.Stocks, "B", "B", AssetClass.Equity),
+            new Asset(Harness.Stocks, "C", "C", AssetClass.Equity));
+        settings.General.TrayAssets = [TrayAssetSelection.Key(Harness.Stocks, "A"), TrayAssetSelection.Key(Harness.Stocks, "B")];
+        await using var h = new Harness(settings);
+        await h.Main.InitializeAsync();
+
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[1]);
+        await h.AddAsset.AddCommand.ExecuteAsync(new Asset(Harness.Plain, "B", "B", AssetClass.Equity));
+        h.Main.ChangeSourceCommand.Execute(h.Main.Rows[2]);
+        await h.AddAsset.AddCommand.ExecuteAsync(new Asset(Harness.Plain, "C", "C", AssetClass.Equity));
+
+        h.Store.Stored!.General.TrayAssets.Should().Equal(
+            TrayAssetSelection.Key(Harness.Stocks, "A"),
+            TrayAssetSelection.Key(Harness.Plain, "B"));
+    }
+
+    /// <summary>
     /// Verifies moving an instrument to another data source keeps what the user holds of it.
     /// </summary>
     [Fact]

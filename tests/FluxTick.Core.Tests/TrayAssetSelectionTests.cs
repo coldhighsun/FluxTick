@@ -181,6 +181,44 @@ public class TrayAssetSelectionTests
     }
 
     /// <summary>
+    /// Verifies an instrument that changed its data source keeps its position on the list.
+    /// </summary>
+    [Fact]
+    public void Replace_KeyOnTheList_TakesTheNewKeyAtTheSamePosition()
+    {
+        var list = new List<string> { "p|A", "p|B", "p|C" };
+
+        var replaced = TrayAssetSelection.Replace(list, "p|B", "q|B");
+
+        replaced.Should().BeTrue();
+        list.Should().Equal("p|A", "q|B", "p|C");
+    }
+
+    /// <summary>
+    /// Verifies an instrument that was not on the list does not get onto it by changing its data source.
+    /// </summary>
+    [Fact]
+    public void Replace_KeyNotOnTheList_DoesNothing()
+    {
+        var list = new List<string> { "p|A" };
+
+        TrayAssetSelection.Replace(list, "p|B", "q|B").Should().BeFalse();
+        list.Should().Equal("p|A");
+    }
+
+    /// <summary>
+    /// Verifies the key is not repeated when the new one was on the list already.
+    /// </summary>
+    [Fact]
+    public void Replace_NewKeyAlreadyOnTheList_OnlyDropsTheOldKey()
+    {
+        var list = new List<string> { "p|B", "p|A", "q|B" };
+
+        TrayAssetSelection.Replace(list, "p|B", "q|B").Should().BeTrue();
+        list.Should().Equal("p|A", "q|B");
+    }
+
+    /// <summary>
     /// Verifies the choice survives a clone, which is how settings are saved.
     /// </summary>
     [Fact]
