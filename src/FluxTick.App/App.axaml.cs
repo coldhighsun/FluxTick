@@ -372,8 +372,8 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Points the start at sign-in entry at this executable when the one it names is gone, which happens when the app was
-    /// moved. An entry that names another copy that still exists is left as the user set it.
+    /// Points an existing start at sign-in entry at this executable when it names another file, which happens when the app
+    /// was moved or another copy registered itself. A missing entry is left as it is.
     /// </summary>
     private void RefreshAutoStartEntry()
     {

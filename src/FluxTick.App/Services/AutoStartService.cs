@@ -31,8 +31,8 @@ public interface IAutoStartService
     void SetEnabled(bool enabled);
 
     /// <summary>
-    /// Points the registration at this executable when it names one that no longer exists, as happens after the app was
-    /// moved. A registration of another copy that still exists, and the absence of a registration, are left as they are.
+    /// Points an existing registration at this executable when it names another file, as happens after the app was moved
+    /// or another copy registered itself. The absence of a registration is left as it is.
     /// </summary>
     void RepairIfMoved();
 }
@@ -74,6 +74,61 @@ public static class AutoStartCommand
     /// The command line.
     /// </returns>
     public static string Build(string processPath) => $"\"{processPath}\"";
+
+    /// <summary>
+    /// Determines whether a registered command line starts the running executable, so that an entry left by another copy
+    /// of the app is not mistaken for this one.
+    /// </summary>
+    /// <param name="command">
+    /// The registered command line.
+    /// </param>
+    /// <param name="processPath">
+    /// The path of the running process, or <see langword="null"/> when unknown.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the command names the same file as <paramref name="processPath"/>.
+    /// </returns>
+    public static bool IsCurrentExecutable(string command, string? processPath)
+    {
+        var executable = ExecutableOf(command);
+        if (executable is null || string.IsNullOrEmpty(processPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(ResolveRealPath(executable), ResolveRealPath(processPath), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Resolves a path to the file it really names: relative segments are removed and a link on the file or on its folder
+    /// (a symbolic link or junction) is followed.
+    /// </summary>
+    /// <param name="path">
+    /// The path to resolve.
+    /// </param>
+    /// <returns>
+    /// The full path of the target.
+    /// </returns>
+    private static string ResolveRealPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var folder = Path.GetDirectoryName(full);
+        if (folder is not null && Directory.Exists(folder)
+            && new DirectoryInfo(folder).ResolveLinkTarget(returnFinalTarget: true) is { } folderTarget)
+        {
+            full = Path.Combine(folderTarget.FullName, Path.GetFileName(full));
+        }
+
+        // A path that does not exist (the app was moved) has nothing to follow and is compared as written.
+        return File.Exists(full) ? new FileInfo(full).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? full : full;
+    }
 
     /// <summary>
     /// Reads the executable out of a registered command line, which is quoted or ends at the first space.
@@ -195,15 +250,14 @@ public sealed class WindowsAutoStartService(ILogger<WindowsAutoStartService> log
             return;
         }
 
-        var executable = AutoStartCommand.ExecutableOf(command);
-        if (executable is null || !File.Exists(executable))
+        if (!AutoStartCommand.IsCurrentExecutable(command, Environment.ProcessPath))
         {
             try
             {
                 // Only the path is repaired: an entry the user turned off in Windows must stay off.
                 using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
                 key.SetValue(ValueName, AutoStartCommand.Build(Environment.ProcessPath!));
-                logger.LogInformation("Start at sign-in entry pointed at {Executable}, as the one it named is gone", Environment.ProcessPath);
+                logger.LogInformation("Start at sign-in entry pointed at {Executable}, as it named another file", Environment.ProcessPath);
             }
             catch (Exception ex)
             {
