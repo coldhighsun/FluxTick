@@ -35,7 +35,7 @@ public readonly record struct PollOutcome(
 /// instruments, the delay that doubles while the service pushes back, and the translation of cycle results into
 /// the provider status; derived classes only fetch and publish quotes.
 /// </summary>
-public abstract class PollingProviderBase : LoggingProviderBase
+public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadenceProvider
 {
     /// <summary>
     /// The number of consecutive failed cycles before the provider reports <see cref="ProviderConnectionState.Failed"/>.
@@ -88,6 +88,12 @@ public abstract class PollingProviderBase : LoggingProviderBase
         _interval = interval;
         _loop = new BackgroundLoop(ShutdownToken);
     }
+
+    /// <inheritdoc />
+    public TimeSpan? PollInterval => _interval;
+
+    /// <inheritdoc />
+    public TimeSpan? QuietPollInterval => null;
 
     /// <summary>
     /// Fetches the given instruments once and publishes their quotes. An exception that escapes is logged and counts

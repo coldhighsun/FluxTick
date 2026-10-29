@@ -998,6 +998,48 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a streaming source whose stream is quiet is delayed, not stale, between two quiet-stream polls, and
+    /// stale only once the quiet-poll interval plus half the usual time has passed without a quote.
+    /// </summary>
+    [Fact]
+    public async Task Health_BetweenTwoQuietStreamPolls_IsDelayedThenStale()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Forex], pollInterval: "00:00:05", quietPollInterval: "00:05:00");
+        var sgdCny = new Asset("yahoo", "SGDCNY=X", "SGD/CNY", AssetClass.Forex);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 10, 0, 0, TimeSpan.Zero));
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(sgdCny));
+        yahoo.Created.Single().Emit(new Quote(sgdCny.Id, 1m, null, time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        service.GetSnapshots().Single().Health.Should().Be(AssetHealth.Delayed);
+
+        time.Advance(TimeSpan.FromMinutes(1));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+    }
+
+    /// <summary>
+    /// Verifies the quiet-stream poll interval only widens the time a source may be silent, not the age at which a quote
+    /// that keeps arriving counts as delayed.
+    /// </summary>
+    [Fact]
+    public async Task Health_OldQuoteFromASourceWithQuietPoll_IsDelayedNotLive()
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Forex], pollInterval: "00:00:05", quietPollInterval: "00:05:00");
+        var sgdCny = new Asset("yahoo", "SGDCNY=X", "SGD/CNY", AssetClass.Forex);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 10, 0, 0, TimeSpan.Zero));
+        await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(sgdCny));
+
+        yahoo.Created.Single().Emit(new Quote(sgdCny.Id, 1m, null, time.GetUtcNow() - TimeSpan.FromMinutes(2)));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Delayed);
+    }
+
+    /// <summary>
     /// Verifies a source that went quiet says nothing about the market, so a feed that died is not taken for a shut market.
     /// </summary>
     [Fact]

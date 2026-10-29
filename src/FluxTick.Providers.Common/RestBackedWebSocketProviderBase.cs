@@ -11,7 +11,7 @@ namespace FluxTick.Providers.Common;
 /// reconnecting, and rounds that keep failing make it failed. Derived classes describe the wire protocol of the stream, as
 /// for <see cref="WebSocketProviderBase"/>, and implement one method that fetches and publishes quotes over REST.
 /// </summary>
-public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
+public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, IQuoteCadenceProvider
 {
     /// <summary>
     /// The number of rounds in a row without a price after which the source is reported as failed, as for a polled source.
@@ -96,6 +96,12 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// </summary>
     private readonly object _newestTradeLock = new();
 
+    /// <summary>
+    /// When a quote of each subscribed instrument was last published, or when it was subscribed if none was yet, so that an
+    /// instrument that goes quiet on a stream that is busy with others is noticed.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<AssetId, long> _lastQuoteAt = new();
+
 
     /// <summary>
     /// How many published quotes moved the price of an instrument forward with a trade that is recent, from any source.
@@ -157,6 +163,17 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// behind a connection that is up but no longer delivers, without polling for a market that is simply shut.
     /// </summary>
     protected virtual TimeSpan QuietStreamInterval => _quietStreamInterval;
+
+    /// <inheritdoc />
+    public TimeSpan? PollInterval => _fallbackInterval;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A quiet instrument is topped up once the stream, or the instrument itself, has been quiet for
+    /// <see cref="QuietStreamInterval"/>, and the fallback loop only looks every poll interval, so that is the longest an
+    /// instrument can go between two quotes while the source works.
+    /// </remarks>
+    public TimeSpan? QuietPollInterval => QuietStreamInterval + _fallbackInterval;
 
     /// <summary>
     /// Tells whether the market of an instrument is known not to be trading, so that polling REST for it is pointless: it
@@ -253,6 +270,12 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     /// <inheritdoc />
     protected override void OnQuotePublished(Quote quote)
     {
+        // Only an entry that exists is updated, so a quote that races with the removal of its instrument cannot bring it back.
+        if (_lastQuoteAt.TryGetValue(quote.AssetId, out var lastQuoteAt))
+        {
+            _lastQuoteAt.TryUpdate(quote.AssetId, TimeProvider.GetTimestamp(), lastQuoteAt);
+        }
+
         if (quote.TimeIsEstimated)
         {
             return;
@@ -310,6 +333,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     {
         await base.OnSubscriptionsChangedAsync(current, added, removed, cancellationToken).ConfigureAwait(false);
 
+        foreach (var asset in added)
+        {
+            _lastQuoteAt.TryAdd(asset.Id, TimeProvider.GetTimestamp());
+        }
+
         if (removed.Count > 0)
         {
             lock (_newestTradeLock)
@@ -318,6 +346,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
                 {
                     _newestTrade.Remove(asset.Id);
                 }
+            }
+
+            foreach (var asset in removed)
+            {
+                _lastQuoteAt.TryRemove(asset.Id, out _);
             }
 
             // The problem of an instrument that went is no longer shown.
@@ -395,6 +428,7 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
     private async Task RunFallbackAsync(CancellationToken cancellationToken)
     {
         var wait = _fallbackInterval;
+        var topUpWait = QuietStreamInterval;
         long? lastPoll = null;
         var seenMessages = MessageCount;
         _quietRounds = 0;
@@ -428,11 +462,25 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
                 var assets = subscribed.Where(a => !IsOutsideTrading(a)).ToArray();
                 SetOutsideTrading(subscribed.Count > 0 && assets.Length == 0);
 
+                var sinceLastPoll = lastPoll is { } quiet ? TimeProvider.GetElapsedTime(quiet) : TimeSpan.MaxValue;
+                var streamQuiet = streamUp && IdleFor >= QuietStreamInterval && sinceLastPoll >= QuietStreamInterval;
                 var due = streamUp
-                    ? IdleFor >= QuietStreamInterval && (lastPoll is not { } quiet || TimeProvider.GetElapsedTime(quiet) >= QuietStreamInterval)
+                    ? streamQuiet
                     : lastPoll is not { } polled || TimeProvider.GetElapsedTime(polled) >= wait;
                 if (!due)
                 {
+                    // A stream that is busy with other instruments says nothing about one that has gone quiet: top those up.
+                    if (streamUp && sinceLastPoll >= topUpWait && assets.Any(IsQuietInstrument))
+                    {
+                        lastPoll = TimeProvider.GetTimestamp();
+                        var pushedBack = await TopUpAsync(assets.Where(IsQuietInstrument).ToArray(), cancellationToken).ConfigureAwait(false);
+
+                        // A service that pushes back is asked less often, as for the fallback, and not again at the old pace.
+                        topUpWait = pushedBack
+                            ? Backoff.Double(topUpWait, TimeSpan.FromTicks(Math.Max(MaxFallbackInterval.Ticks, QuietStreamInterval.Ticks)))
+                            : QuietStreamInterval;
+                    }
+
                     continue;
                 }
 
@@ -466,6 +514,51 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // The subscriptions ended or the provider is shutting down.
+        }
+    }
+
+    /// <summary>
+    /// Tells whether an instrument has had no quote for longer than <see cref="QuietStreamInterval"/>.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when its last quote, or its subscription if it has none, is older than that.
+    /// </returns>
+    private bool IsQuietInstrument(Asset asset) =>
+        _lastQuoteAt.TryGetValue(asset.Id, out var at) && TimeProvider.GetElapsedTime(at) >= QuietStreamInterval;
+
+    /// <summary>
+    /// Fetches instruments that went quiet while the stream is busy with others. The round says nothing about whether the
+    /// stream delivers, so it takes no part in judging the connection; only its problems are taken into the status.
+    /// </summary>
+    /// <param name="assets">
+    /// The quiet instruments.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that ends the fetch.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the service pushed back or the round failed, so that the next one should wait longer; a
+    /// failure is logged, not thrown.
+    /// </returns>
+    private async Task<bool> TopUpAsync(IReadOnlyCollection<Asset> assets, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var outcome = await FetchQuotesAsync(assets, cancellationToken).ConfigureAwait(false);
+            if (MergeProblems(assets, outcome))
+            {
+                RefreshStatus();
+            }
+
+            return outcome.BackOff;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogWarning(ex, "{Provider} top-up poll failed", Descriptor.DisplayName);
+            return true;
         }
     }
 
