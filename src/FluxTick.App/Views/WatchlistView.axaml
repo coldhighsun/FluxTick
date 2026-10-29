@@ -113,7 +113,8 @@
                     <!-- Only user-defined groups have this menu; OnSectionsContextRequested suppresses it for the others. -->
                     <ContextMenu>
                       <MenuItem Header="{loc:T Watch_Rename}" Click="OnRenameMenuClicked" />
-                      <MenuItem Header="{Binding DeleteMenuHeader}" IsEnabled="{Binding CanDelete}"
+                      <MenuItem Header="{loc:T Section_DeleteGroup}" IsEnabled="{Binding CanDelete}"
+                                ToolTip.Tip="{Binding DeleteBlockedTip}" ToolTip.ShowOnDisabled="True"
                                 Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).DeleteGroupCommand}"
                                 CommandParameter="{Binding}" />
                     </ContextMenu>

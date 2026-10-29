@@ -351,7 +351,7 @@ public class QuickSwitchTests
         var section = h.Main.Sections.Single(s => s.GroupId == emptyId);
         section.CanDelete.Should().BeTrue();
         section.DeleteBlockedReason.Should().BeEmpty();
-        section.DeleteMenuHeader.Should().Be("Delete group");
+        section.DeleteBlockedTip.Should().BeNull();
 
         await h.Main.DeleteGroupAsync(section);
 
@@ -371,7 +371,7 @@ public class QuickSwitchTests
 
         section.CanDelete.Should().BeFalse();
         section.DeleteBlockedReason.Should().NotBeEmpty();
-        section.DeleteMenuHeader.Should().StartWith("Delete group (");
+        section.DeleteBlockedTip.Should().Be(section.DeleteBlockedReason);
 
         await h.Main.DeleteGroupAsync(section);
 

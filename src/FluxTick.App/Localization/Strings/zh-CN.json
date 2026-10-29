@@ -185,7 +185,6 @@
   "Row_PnlTip": "市值：{0} {1} · 盈亏 {2}",
   "Row_Cost": "成本",
   "Section_DeleteGroup": "删除分组",
-  "Section_DeleteGroupBlocked": "删除分组（{0}）",
   "Section_KeepOneGroup": "至少保留一个分组",
   "Section_MoveInstrumentsFirst": "请先移走其中的资产",
   "Settings_AlertsHelp": "所有价格报警。在资产的右键菜单中添加。",

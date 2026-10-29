@@ -134,7 +134,6 @@
   "Row_PnlTip": "Value: {0} {1} · P&L {2}",
   "Row_Cost": "Cost",
   "Section_DeleteGroup": "Delete group",
-  "Section_DeleteGroupBlocked": "Delete group ({0})",
   "Section_KeepOneGroup": "keep at least one group",
   "Section_MoveInstrumentsFirst": "move its instruments first",
   "Settings_AlertsHelp": "All price alerts. Add one from the right-click menu of an instrument.",
