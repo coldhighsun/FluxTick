@@ -329,6 +329,7 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
                     entry.CopyHoldingFrom(s.Watchlist[index]);
                     s.Watchlist[index] = entry;
                     moved = AlertMigration.Move(s.Alerts, replacing!.Id, asset.Id);
+                    TrayAssetSelection.Replace(s.General.TrayAssets, TrayAssetSelection.Key(replacing), TrayAssetSelection.Key(asset));
                 }
             });
 

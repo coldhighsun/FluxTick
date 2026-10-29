@@ -132,6 +132,42 @@ public static class TrayAssetSelection
     public static bool Remove(List<string> trayAssets, string key) => trayAssets.Remove(key);
 
     /// <summary>
+    /// Lets an instrument that changed its data source keep its place on the tray list: the key it had is replaced by the
+    /// new one at the same position. When the new key is on the list already, the old one is only dropped.
+    /// </summary>
+    /// <param name="trayAssets">
+    /// The keys of the tray list. It is modified in place.
+    /// </param>
+    /// <param name="oldKey">
+    /// The key the instrument had.
+    /// </param>
+    /// <param name="newKey">
+    /// The key the instrument has now.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the instrument was on the list.
+    /// </returns>
+    public static bool Replace(List<string> trayAssets, string oldKey, string newKey)
+    {
+        var index = trayAssets.IndexOf(oldKey);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        if (trayAssets.Contains(newKey))
+        {
+            trayAssets.RemoveAt(index);
+        }
+        else
+        {
+            trayAssets[index] = newKey;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Takes an instrument off the tray list, or puts it at the end when it is not on it.
     /// </summary>
     /// <param name="trayAssets">
