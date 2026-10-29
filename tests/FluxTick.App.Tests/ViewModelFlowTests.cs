@@ -837,6 +837,30 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies the search starts 800 milliseconds after the last keystroke, not before.
+    /// </summary>
+    [Fact]
+    public async Task Query_Typed_SearchesOnlyAfterTheDebounceDelay()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.StocksFactory.Fake.SearchResults = [Aapl];
+        h.Main.ShowAddCommand.Execute(null);
+        h.AddAsset.SelectedAssetClass = AssetClass.Equity;
+        h.AddAsset.SelectedProvider = h.AddAsset.AvailableProviders.Single(p => p.Id == Harness.Stocks);
+        h.AddAsset.Query = "app";
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(799));
+        await Task.Delay(TimeSpan.FromMilliseconds(100));
+
+        h.AddAsset.Results.Should().BeEmpty("the delay has not passed yet");
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(1));
+
+        await Harness.EventuallyAsync(() => h.AddAsset.Results.Count == 1);
+    }
+
+    /// <summary>
     /// Verifies adding an instrument that is already tracked is refused with a message.
     /// </summary>
     [Fact]
