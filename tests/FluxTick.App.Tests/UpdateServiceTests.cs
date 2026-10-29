@@ -57,7 +57,8 @@ public sealed class UpdateServiceTests : IDisposable
 
     /// <summary>
     /// Deletes the directory of the test. A service that was disposed may still be winding down its background loop, which
-    /// can hold the state file for a moment on Windows, so a file that is in use is tried again until it is let go.
+    /// can hold the state file or its temporary file for a moment on Windows (reported as an I/O error or as access denied), so
+    /// the delete is tried again until the file is let go.
     /// </summary>
     private void DeleteDirectory()
     {
@@ -68,7 +69,7 @@ public sealed class UpdateServiceTests : IDisposable
             {
                 Directory.Delete(_directory, recursive: true);
             }
-            catch (IOException) when (DateTimeOffset.UtcNow < deadline)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && DateTimeOffset.UtcNow < deadline)
             {
                 Thread.Sleep(TimeSpan.FromMilliseconds(20));
             }
