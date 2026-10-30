@@ -19,6 +19,12 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
     private const int SearchLimit = 20;
 
     /// <summary>
+    /// How far back the daily closes reach. The previous close of a price is the close before the day it was traded, which
+    /// for a ticker that trades rarely, or before a long holiday, lies well back.
+    /// </summary>
+    private static readonly TimeSpan DailyCloseWindow = TimeSpan.FromDays(45);
+
+    /// <summary>
     /// The channels asked for: trades, and the one-second bars a free key gets instead of them.
     /// </summary>
     private static readonly string[] Channels = ["T", "A"];
@@ -89,7 +95,7 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
         _apiBase = apiBase;
         _apiKey = apiKey;
         _http = http;
-        _references = new EulerpoolReferenceCache(FetchPreviousCloseAsync, timeProvider, logger);
+        _references = new EulerpoolReferenceCache(FetchDailyClosesAsync, timeProvider, logger);
     }
 
     /// <inheritdoc />
@@ -171,7 +177,7 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
     {
         if (EulerpoolParser.TryParseTick(text, out var tick))
         {
-            PublishToSubscribers(tick.Symbol, tick.Price, _references.Get(tick.Symbol), tick.Time);
+            PublishToSubscribers(tick.Symbol, tick.Price, _references.Get(tick.Symbol, tick.Price, tick.Time), tick.Time);
         }
     }
 
@@ -212,11 +218,11 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
         await _references.EnsureAsync(codes, cancellationToken).ConfigureAwait(false);
         var uri = EndpointOptions.Combine(_apiBase, $"/api/1/market/quotes/latest?stocks={Uri.EscapeDataString(string.Join(',', codes))}");
         var quotes = EulerpoolParser.ParseQuotes(await GetStringAsync(uri, cancellationToken).ConfigureAwait(false));
-        return [.. quotes.Select(q => q with { PreviousClose = _references.Get(q.Key) })];
+        return [.. quotes.Select(q => q with { PreviousClose = _references.Get(q.Key, q.Price, q.Time) })];
     }
 
     /// <summary>
-    /// Fetches the previous close of a ticker from its daily candles of the last two weeks.
+    /// Fetches the daily closes of a ticker of the last <see cref="DailyCloseWindow"/>, from which the previous close is taken.
     /// </summary>
     /// <param name="symbol">
     /// The ticker.
@@ -225,16 +231,16 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
     /// A token that cancels the request.
     /// </param>
     /// <returns>
-    /// The previous close, or <see langword="null"/> when the ticker has no earlier candle.
+    /// The closes, oldest first; empty when the ticker has no candle.
     /// </returns>
-    private async Task<decimal?> FetchPreviousCloseAsync(string symbol, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PricePoint>?> FetchDailyClosesAsync(string symbol, CancellationToken cancellationToken)
     {
         var now = TimeProvider.GetUtcNow();
         var uri = EndpointOptions.Combine(
             _apiBase,
-            $"/api/1/charting/ohlcv/{Uri.EscapeDataString(symbol)}?resolution=D&from={now.AddDays(-14).ToUnixTimeSeconds()}&to={now.ToUnixTimeSeconds()}");
+            $"/api/1/charting/ohlcv/{Uri.EscapeDataString(symbol)}?resolution=D&from={(now - DailyCloseWindow).ToUnixTimeSeconds()}&to={now.ToUnixTimeSeconds()}");
         var json = await GetStringAsync(uri, cancellationToken).ConfigureAwait(false);
-        return EulerpoolParser.ParsePreviousClose(json, now, EulerpoolExchanges.Of(symbol)?.Zone);
+        return EulerpoolParser.ParseHistory(json);
     }
 
     /// <summary>

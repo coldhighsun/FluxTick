@@ -1,6 +1,9 @@
+using System.Globalization;
 using FluxTick.Abstractions;
+using FluxTick.Providers.Common;
 using FluxTick.Providers.Eulerpool;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace FluxTick.Providers.Tests;
 
@@ -114,27 +117,40 @@ public class EulerpoolTests
     }
 
     /// <summary>
-    /// Verifies the previous close is the close of the latest candle from before today at the exchange.
+    /// Verifies a price traded before the open, such as one of the pre-market, is measured against the close of the day before.
     /// </summary>
     [Fact]
-    public void ParsePreviousClose_BeforeTheOpen_IsTheLastCandle()
+    public void PreviousCloseBefore_TradedBeforeTheOpen_IsTheLastCandle()
     {
-        var newYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
         var wednesdayMorning = new DateTimeOffset(2026, 10, 28, 13, 0, 0, TimeSpan.Zero);
 
-        EulerpoolParser.ParsePreviousClose(Candles, wednesdayMorning, newYork).Should().Be(347.1m);
+        PreviousClose(Candles, 347.5m, wednesdayMorning, ExchangeHours.Us).Should().Be(347.1m);
     }
 
     /// <summary>
-    /// Verifies the candle of today, which is partial while the market trades, is not taken for the previous close.
+    /// Verifies the candle of the trading day, which is partial while the market trades, is not taken for the previous close.
     /// </summary>
     [Fact]
-    public void ParsePreviousClose_WhenTodayHasACandle_SkipsIt()
+    public void PreviousCloseBefore_WhenTheTradingDayHasACandle_SkipsIt()
     {
-        var newYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
         var tuesdayAfternoon = new DateTimeOffset(2026, 10, 27, 18, 0, 0, TimeSpan.Zero);
 
-        EulerpoolParser.ParsePreviousClose(Candles, tuesdayAfternoon, newYork).Should().Be(342.75m);
+        PreviousClose(Candles, 346m, tuesdayAfternoon, ExchangeHours.Us).Should().Be(342.75m);
+    }
+
+    /// <summary>
+    /// Verifies a price that is still the last close, whatever the clock says, is measured against the close before it
+    /// and not against itself.
+    /// </summary>
+    [Theory]
+    [InlineData(2026, 10, 27, 20, 30, "347.1", "342.75")]
+    [InlineData(2026, 10, 23, 20, 30, "347.75", "348.22")]
+    [InlineData(2026, 10, 28, 13, 0, "347.1", "347.1")]
+    public void PreviousCloseBefore_TradedAtTheLastClose_IsTheCloseBeforeIt(int year, int month, int day, int hour, int minute, string price, string expected)
+    {
+        var traded = new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero);
+
+        PreviousClose(Candles, decimal.Parse(price, CultureInfo.InvariantCulture), traded, ExchangeHours.Us).Should().Be(decimal.Parse(expected, CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -144,8 +160,168 @@ public class EulerpoolTests
     [InlineData("""{"error":"not found"}""")]
     [InlineData("""{"t":[],"c":[]}""")]
     [InlineData("""{"t":[1793107800],"c":[0]}""")]
-    public void ParsePreviousClose_NoUsableCandle_ReturnsNull(string json) =>
-        EulerpoolParser.ParsePreviousClose(json, new DateTimeOffset(2026, 10, 28, 13, 0, 0, TimeSpan.Zero), null).Should().BeNull();
+    public void PreviousCloseBefore_NoUsableCandle_ReturnsNull(string json) =>
+        PreviousClose(json, 347m, new DateTimeOffset(2026, 10, 28, 13, 0, 0, TimeSpan.Zero), null).Should().BeNull();
+
+    /// <summary>
+    /// Verifies the closes are ordered by day whatever the order of the answer, so that the previous close does not depend
+    /// on it.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_CandlesNewestFirst_StillPicksTheLatestEarlierClose()
+    {
+        const string newestFirst = """{"t":[1793107800,1793021400,1792762200],"c":[347.1,342.75,347.75]}""";
+
+        PreviousClose(newestFirst, 350m, new DateTimeOffset(2026, 10, 28, 13, 0, 0, TimeSpan.Zero), ExchangeHours.Us).Should().Be(347.1m);
+    }
+
+    /// <summary>
+    /// Verifies a candle stamped at exactly midnight UTC keeps its UTC date as the trading day at an exchange west of UTC,
+    /// instead of moving to the evening before.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_MidnightUtcCandle_KeepsItsUtcDay()
+    {
+        const string json = """{"t":[1792713600],"c":[100]}"""; // Fri 23 Oct 00:00 UTC.
+
+        PreviousClose(json, 101m, new DateTimeOffset(2026, 10, 23, 14, 0, 0, TimeSpan.Zero), ExchangeHours.Us)
+            .Should().BeNull("the midnight candle is Friday's own, not Thursday's");
+        PreviousClose(json, 101m, new DateTimeOffset(2026, 10, 24, 14, 0, 0, TimeSpan.Zero), ExchangeHours.Us).Should().Be(100m);
+    }
+
+    /// <summary>
+    /// Verifies a price traded after the regular session and different from its close is measured against that close.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_AfterHoursPrice_IsMeasuredAgainstTheCloseOfThatDay()
+    {
+        var afterHours = new DateTimeOffset(2026, 10, 27, 20, 30, 0, TimeSpan.Zero);
+
+        PreviousClose(Candles, 348.5m, afterHours, ExchangeHours.Us).Should().Be(347.1m);
+    }
+
+    /// <summary>
+    /// Verifies an after-hours price has no previous close while the candle of its day is not final.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_AfterHoursPriceOnAnUnsettledDay_ReturnsNull()
+    {
+        var afterHours = new DateTimeOffset(2026, 10, 27, 20, 30, 0, TimeSpan.Zero);
+        var closes = EulerpoolParser.ToDailyCloses(EulerpoolParser.ParseHistory(Candles), ExchangeHours.Us.Zone);
+
+        EulerpoolParser.PreviousCloseBefore(closes, 348.5m, afterHours, ExchangeHours.Us, new DateOnly(2026, 10, 27)).Should().BeNull();
+        EulerpoolParser.PreviousCloseBefore(closes, 348.5m, afterHours, ExchangeHours.Us, new DateOnly(2026, 10, 28)).Should().Be(347.1m);
+    }
+
+    /// <summary>
+    /// Verifies a trade at exactly midnight UTC is an instant like any other, dated at the exchange: Friday evening in New York.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_TradedAtMidnightUtc_IsDatedAtTheExchange()
+    {
+        const string json = """{"t":[1792713600,1792800000],"c":[100,110]}"""; // Fri 23 and Sat 24 Oct 00:00 UTC.
+
+        PreviousClose(json, 100m, new DateTimeOffset(2026, 10, 24, 0, 0, 0, TimeSpan.Zero), ExchangeHours.Us)
+            .Should().BeNull("it was traded on Friday, at the close of Friday's own candle");
+    }
+
+    /// <summary>
+    /// Verifies a price traded before the oldest close fetched has no previous close.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_TradedBeforeTheOldestClose_ReturnsNull() =>
+        PreviousClose(Candles, 340m, new DateTimeOffset(2026, 9, 1, 15, 0, 0, TimeSpan.Zero), ExchangeHours.Us).Should().BeNull();
+
+    /// <summary>
+    /// Verifies an exchange that is not known dates candles and trades by UTC.
+    /// </summary>
+    [Fact]
+    public void PreviousCloseBefore_WithoutAnExchange_DatesByUtc() =>
+        PreviousClose(Candles, 347.1m, new DateTimeOffset(2026, 10, 27, 20, 0, 0, TimeSpan.Zero), null).Should().Be(342.75m);
+
+    /// <summary>
+    /// Verifies a price from the stream is measured against the close before the day it was traded, not before the current
+    /// day.
+    /// </summary>
+    [Fact]
+    public async Task Stream_BarTradedOnAnEarlierDay_CarriesTheCloseBeforeThatDay()
+    {
+        await using var server = LoopbackServer.Start();
+        var handler = new StubHttpHandler(request =>
+            StubHttpHandler.Json(request.RequestUri!.AbsolutePath.Contains("/charting/", StringComparison.Ordinal) ? Candles : "{}"));
+        await using var provider = CreateProvider(server.Uri, handler);
+        var apple = new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity);
+        using var reading = new CancellationTokenSource(TestWait.Patience);
+        var reference = new TaskCompletionSource<decimal?>();
+        var reader = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await foreach (var quote in provider.ReadQuotesAsync(reading.Token))
+                    {
+                        if (quote.Reference is not null)
+                        {
+                            reference.TrySetResult(quote.Reference);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // The test is over.
+                }
+            },
+            reading.Token);
+
+        await provider.SetSubscriptionsAsync([apple]);
+        await server.WaitForMessageAsync("""{"action":"subscribe","params":{"tickers":["AAPL"],"channels":["T","A"]}}""");
+        var end = 1793131200000L; // Tuesday 27 October 2026, 20:00 UTC: after the close.
+        await TestWait.EventuallyAsync(() =>
+        {
+            _ = server.SendAsync("{\"ev\":\"A\",\"ticker\":\"AAPL\",\"end\":" + (end += 1000) + ",\"close\":347.1}");
+            return reference.Task.IsCompleted;
+        });
+
+        (await reference.Task).Should().Be(342.75m);
+        await reading.CancelAsync();
+        await reader.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    /// <summary>
+    /// Verifies a price from the latest quotes endpoint is measured against the close before the day it was traded.
+    /// </summary>
+    [Fact]
+    public async Task Provider_PriceTradedOnAnEarlierDay_CarriesTheCloseBeforeThatDay()
+    {
+        const string latest = """{"AAPL":{"ticker":"AAPL","timestamp":1793131200,"price":347.1}}""";
+        var handler = new StubHttpHandler(request =>
+            StubHttpHandler.Json(request.RequestUri!.AbsolutePath.Contains("/charting/", StringComparison.Ordinal) ? Candles : latest));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler);
+
+        await provider.SetSubscriptionsAsync([new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity)]);
+        var quotes = await TestWait.ReadQuotesAsync(provider, 1);
+
+        quotes.Single().Reference.Should().Be(342.75m);
+    }
+
+    /// <summary>
+    /// Verifies the daily closes are asked for far enough back to reach the close before a price traded a while ago.
+    /// </summary>
+    [Fact]
+    public async Task Provider_NewInstrument_AsksForFortyFiveDaysOfDailyCloses()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var handler = new StubHttpHandler(request =>
+            StubHttpHandler.Json(request.RequestUri!.AbsolutePath.Contains("/charting/", StringComparison.Ordinal) ? Candles : LatestResponse));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+        var now = time.GetUtcNow();
+
+        await provider.SetSubscriptionsAsync([new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity)]);
+        await TestWait.ReadQuotesAsync(provider, 1);
+
+        handler.Requests.First(r => r.RequestUri!.Query.Contains("resolution=D", StringComparison.Ordinal)).RequestUri!.Query
+            .Should().Be($"?resolution=D&from={now.AddDays(-45).ToUnixTimeSeconds()}&to={now.ToUnixTimeSeconds()}");
+    }
 
     /// <summary>
     /// Verifies an error answer without results gives an empty list.
@@ -321,7 +497,7 @@ public class EulerpoolTests
     public async Task Provider_History_AsksForTheLastHourOnly()
     {
         var handler = new StubHttpHandler(_ => StubHttpHandler.Json(Candles));
-        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
         await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
         var apple = new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity);
         var now = time.GetUtcNow().ToUnixTimeSeconds();
@@ -350,6 +526,27 @@ public class EulerpoolTests
         handler.Requests.Single().Headers.Authorization!.ToString().Should().Be("Bearer test-key");
         (await provider.SearchAsync("sap", AssetClass.Index)).Should().BeEmpty();
     }
+
+    /// <summary>
+    /// Picks the previous close out of the candles of an answer for a price traded at a time.
+    /// </summary>
+    /// <param name="json">
+    /// The answer of the candles endpoint.
+    /// </param>
+    /// <param name="price">
+    /// The price.
+    /// </param>
+    /// <param name="traded">
+    /// When the price was traded.
+    /// </param>
+    /// <param name="exchange">
+    /// The exchange, or <see langword="null"/> for UTC.
+    /// </param>
+    /// <returns>
+    /// The previous close, or <see langword="null"/> when there is none.
+    /// </returns>
+    private static decimal? PreviousClose(string json, decimal price, DateTimeOffset traded, ExchangeHours? exchange) =>
+        EulerpoolParser.PreviousCloseBefore(EulerpoolParser.ToDailyCloses(EulerpoolParser.ParseHistory(json), exchange?.Zone), price, traded, exchange);
 
     /// <summary>
     /// Creates a provider that streams from a loopback server and fetches nothing over REST.

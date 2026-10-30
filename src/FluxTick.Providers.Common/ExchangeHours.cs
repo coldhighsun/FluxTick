@@ -20,6 +20,11 @@ public sealed class ExchangeHours
     private readonly TradingSession[] _sessions;
 
     /// <summary>
+    /// The end of the last regular session of a weekday, or <see langword="null"/> when there is no regular session.
+    /// </summary>
+    private readonly TimeSpan? _regularSessionEnd;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ExchangeHours"/> class.
     /// </summary>
     /// <param name="zoneIds">
@@ -31,6 +36,7 @@ public sealed class ExchangeHours
     public ExchangeHours(string[] zoneIds, TradingSession[] sessions)
     {
         _sessions = sessions;
+        _regularSessionEnd = sessions.Where(s => s.State == MarketState.Open).Select(s => (TimeSpan?)s.End).Max();
         Zone = zoneIds.Select(id => TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone) ? zone : null).FirstOrDefault(z => z is not null);
     }
 
@@ -172,6 +178,34 @@ public sealed class ExchangeHours
 
         var ended = _sessions.Where(s => s.State == MarketState.Open && s.End <= clock).Select(s => s.End).DefaultIfEmpty().Max();
         return ended == TimeSpan.Zero ? time : time - (clock - ended);
+    }
+
+    /// <summary>
+    /// Tells whether the last regular session of the day has ended at a time, so that the daily candle of that day is
+    /// complete. A weekend, a time before the end of the last regular session, or an unknown time zone gives
+    /// <see langword="false"/>. Holidays and early closes are not known here: a half day counts as ended only from the usual
+    /// close.
+    /// </summary>
+    /// <param name="time">
+    /// The time to check.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the time lies at or after the end of the last regular session of its weekday.
+    /// </returns>
+    public bool HasRegularSessionEnded(DateTimeOffset time)
+    {
+        if (Zone is not { } zone)
+        {
+            return false;
+        }
+
+        var local = TimeZoneInfo.ConvertTime(time, zone);
+        if (local.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            return false;
+        }
+
+        return _regularSessionEnd is { } end && local.TimeOfDay >= end;
     }
 
     /// <summary>
