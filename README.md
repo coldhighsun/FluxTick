@@ -89,7 +89,8 @@ Grab the latest build from the [Releases](https://github.com/coldhighsun/FluxTic
 - **Windows:** `FluxTick-<version>-win-x64-setup.exe` installs for the current user (no administrator rights needed).
   Uninstalling keeps your settings in `%APPDATA%\FluxTick`.
 - **Windows (portable):** `FluxTick-<version>-win-x64-portable.zip` contains a single `FluxTick.exe`; unzip it anywhere and run it, no installation needed.
-- **Linux / macOS:** `FluxTick-<version>-linux-x64.zip` / `FluxTick-<version>-osx-arm64.zip`.
+- **Linux:** `FluxTick-<version>-linux-x64.zip` contains a single `FluxTick` executable.
+- **macOS (Apple Silicon):** `FluxTick-<version>-osx-arm64.dmg` contains `FluxTick.app`; see [macOS installation](#macos-installation) below.
 
 > **Do not mix the portable build and the installed version on the same machine.** Both share the same settings in
 > `%APPDATA%\FluxTick`, and each registers its own *Launch at startup* entry pointing at its own `FluxTick.exe`, so the
@@ -98,6 +99,35 @@ Grab the latest build from the [Releases](https://github.com/coldhighsun/FluxTic
 > uninstall the installed version (or delete the portable folder) before switching.
 
 The installer and the portable build are not code-signed, so Windows SmartScreen may warn on first run.
+
+#### macOS installation
+
+The macOS build is signed ad hoc only: it has no Apple Developer ID signature and is not notarized. macOS Gatekeeper
+therefore blocks it on first launch ("cannot be opened because the developer cannot be verified" or "is damaged"). It
+does not run by double-click right away; approve it once:
+
+1. Open the `.dmg` and drag `FluxTick.app` to `Applications`.
+2. Open FluxTick from `Applications`. macOS refuses and shows a warning.
+3. Open *System Settings → Privacy & Security*, scroll to the message about FluxTick and click *Open Anyway*, then
+   confirm. (On macOS 14 and older, right-click the app and choose *Open* instead; macOS 15 removed that shortcut.)
+
+Alternatively, remove the quarantine flag in a terminal before the first launch:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/FluxTick.app
+```
+
+Things to know on macOS:
+
+- Only Apple Silicon (M1 and later) is built, there is no Intel build. macOS 12 or later is required.
+- The boss-key hotkey and *Launch at startup* are Windows-only and not available. Clicking the menu bar icon opens the
+  instrument list (experimental on macOS); its *Show / hide*, *Settings* and *Exit* entries sit at the bottom of the list, as
+  the icon has no menu of its own.
+- There is no Keychain integration yet: API keys are stored as plain text (file mode 600) in `~/.config/FluxTick`, which
+  also holds the settings and logs.
+- The app is a single self-extracting file, so the very first launch can take a few seconds longer.
+- Updates are not installed automatically: FluxTick downloads and verifies the new `.dmg` and tells you; replace the app
+  in `Applications` yourself.
 
 On Windows, FluxTick looks for a newer release when it starts and about once a day while it runs (stable releases only, pre-releases are ignored). It then offers to download, verify and install the new setup program, and starts again when done. This can be turned off under Settings → Updates.
 

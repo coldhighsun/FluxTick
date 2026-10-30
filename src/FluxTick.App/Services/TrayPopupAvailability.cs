@@ -6,8 +6,8 @@ namespace FluxTick.App.Services;
 public static class TrayPopupAvailability
 {
     /// <summary>
-    /// Gets a value indicating whether clicking the tray icon can list the instruments: only Windows tells where the pointer
-    /// was when the icon was clicked, which is where the list opens.
+    /// Gets a value indicating whether clicking the tray icon can list the instruments: only Windows and macOS tell where the
+    /// pointer was when the icon was clicked, which is where the list opens.
     /// </summary>
-    public static bool IsSupported => OperatingSystem.IsWindows();
+    public static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
 }

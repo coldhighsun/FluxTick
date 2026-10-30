@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
@@ -25,6 +26,7 @@ public sealed partial class TrayPopupWindow : Window
         SizeChanged += (_, _) => Reposition();
         _outsideWatch = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Background, OnOutsideWatchTick) { IsEnabled = false };
         Deactivated += (_, _) => Dismiss();
+        MenuBar.IsVisible = !TrayMenuAvailability.HasNativeMenu;
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
@@ -38,6 +40,21 @@ public sealed partial class TrayPopupWindow : Window
     /// Occurs when the popup closed itself, because it lost the focus or Escape was pressed.
     /// </summary>
     public event EventHandler? Dismissed;
+
+    /// <summary>
+    /// Occurs when the user chose to show or hide the main window from the entries at the bottom of the popup.
+    /// </summary>
+    public event EventHandler? ShowWindowRequested;
+
+    /// <summary>
+    /// Occurs when the user chose the settings from the entries at the bottom of the popup.
+    /// </summary>
+    public event EventHandler? SettingsRequested;
+
+    /// <summary>
+    /// Occurs when the user chose to exit from the entries at the bottom of the popup.
+    /// </summary>
+    public event EventHandler? ExitRequested;
 
     /// <summary>
     /// The tray icon bounds in screen pixels the popup sits next to, or <see langword="null"/> before the first show.
@@ -55,6 +72,51 @@ public sealed partial class TrayPopupWindow : Window
     /// the focus.
     /// </summary>
     private readonly DispatcherTimer _outsideWatch;
+
+    /// <summary>
+    /// Hides the popup and asks for the main window to be shown or hidden.
+    /// </summary>
+    /// <param name="sender">
+    /// The button.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnShowWindowClicked(object? sender, RoutedEventArgs e)
+    {
+        Dismiss();
+        ShowWindowRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Hides the popup and asks for the settings to be shown.
+    /// </summary>
+    /// <param name="sender">
+    /// The button.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnSettingsClicked(object? sender, RoutedEventArgs e)
+    {
+        Dismiss();
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Hides the popup and asks for the app to end.
+    /// </summary>
+    /// <param name="sender">
+    /// The button.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnExitClicked(object? sender, RoutedEventArgs e)
+    {
+        Dismiss();
+        ExitRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Hides the popup on its own initiative and says so.
@@ -91,8 +153,8 @@ public sealed partial class TrayPopupWindow : Window
         var margin = (int)Math.Round(CardMargin * RenderScaling);
         var size = PixelSize.FromSize(Bounds.Size, RenderScaling);
         var card = new PixelRect(Position.X + margin, Position.Y + margin, Math.Max(0, size.Width - (2 * margin)), Math.Max(0, size.Height - (2 * margin)));
-        if (OperatingSystem.IsWindows() && WindowsTrayCursor.TryGetPosition(out var pointer)
-            && TrayPopupPlacement.ShouldDismiss(WindowsTrayCursor.IsButtonDown, pointer, card))
+        if (TrayCursor.TryGetPosition(Screens, out var pointer)
+            && TrayPopupPlacement.ShouldDismiss(TrayCursor.IsButtonDown, pointer, card))
         {
             Dismiss();
         }

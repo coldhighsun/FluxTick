@@ -82,13 +82,39 @@
 
 - **Windows：** `FluxTick-<版本>-win-x64-setup.exe` 为当前用户安装（无需管理员权限）。卸载时会保留 `%APPDATA%\FluxTick` 中的设置。
 - **Windows（便携版）：** `FluxTick-<版本>-win-x64-portable.zip` 内只有一个 `FluxTick.exe`，解压到任意位置即可运行，无需安装。
-- **Linux / macOS：** `FluxTick-<版本>-linux-x64.zip` / `FluxTick-<版本>-osx-arm64.zip`。
+- **Linux：** `FluxTick-<版本>-linux-x64.zip` 内只有一个 `FluxTick` 可执行文件。
+- **macOS（Apple Silicon）：** `FluxTick-<版本>-osx-arm64.dmg` 内含 `FluxTick.app`，参见下方 [macOS 安装](#macos-安装)。
 
 > **请勿在同一台电脑上同时使用便携版和安装版。** 两者共用 `%APPDATA%\FluxTick` 中的设置，并且各自注册指向自己
 > `FluxTick.exe` 的*开机自启动*项，会互相冲突（登录时可能启动了错误的那一份，或启动项被覆盖）。内置更新功能
 > 下载的是安装程序，便携版自动更新后也会变成安装版。请二选一；切换前先卸载安装版（或删除便携版文件夹）。
 
 安装程序和便携版均未做代码签名，首次运行时 Windows SmartScreen 可能会提示。
+
+#### macOS 安装
+
+macOS 版本仅做了 ad-hoc 签名：没有 Apple Developer ID 签名，也未经公证。因此 macOS 的 Gatekeeper 会在首次启动时拦截
+（提示“无法打开，因为无法验证开发者”或“已损坏”），不能直接双击运行，需要手动放行一次：
+
+1. 打开 `.dmg`，把 `FluxTick.app` 拖到“应用程序”。
+2. 从“应用程序”中打开 FluxTick，macOS 会拒绝并弹出提示。
+3. 打开*系统设置 → 隐私与安全性*，滚动到关于 FluxTick 的提示，点击*仍要打开*并确认。（macOS 14 及更早版本也可以
+   右键点击应用选择*打开*；macOS 15 起已移除该方式。）
+
+也可以在首次启动前，在终端中移除隔离属性：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/FluxTick.app
+```
+
+macOS 上的注意事项：
+
+- 仅构建 Apple Silicon（M1 及更新），没有 Intel 版本；需要 macOS 12 或更高版本。
+- 老板键和*开机自启动*仅限 Windows，macOS 上不可用。点击菜单栏图标会弹出资产列表（macOS 上为试验性功能），图标本身没有菜单，
+  *显示/隐藏*、*设置*和*退出*放在列表底部。
+- 暂未接入钥匙串：API Key 以明文（文件权限 600）保存在 `~/.config/FluxTick`，设置和日志也在该目录。
+- 程序是单文件自解压，首次启动可能多花几秒。
+- 更新不会自动安装：FluxTick 只下载并校验新的 `.dmg` 并提示你，需自行替换“应用程序”中的 app。
 
 Windows 上，FluxTick 在启动时以及运行期间约每天一次检查新版本（仅检查正式版，忽略预发布版），并提示下载、校验并安装新的安装程序，完成后自动重新启动。可在 设置 → 更新 中关闭。
 

@@ -495,6 +495,12 @@ public sealed partial class App : Application
         if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
         {
             tray.ToolTipText = TrayTooltip();
+            if (!TrayMenuAvailability.HasNativeMenu)
+            {
+                // Without a menu the entries are in the tray popup, because a menu would swallow the click on the icon.
+                return;
+            }
+
             if (_trayToggle is null || _traySettings is null || _trayExit is null)
             {
                 _trayToggle = new NativeMenuItem();
@@ -539,6 +545,9 @@ public sealed partial class App : Application
         {
             _trayPopup = new TrayPopupWindow { DataContext = new TrayPopupViewModel(_services!.GetRequiredService<MainViewModel>().Rows, _services!.GetRequiredService<MainViewModel>()) };
             _trayPopup.Dismissed += (_, _) => _trayClicks?.NotifyDismissed();
+            _trayPopup.ShowWindowRequested += OnToggleWindow;
+            _trayPopup.SettingsRequested += OnTraySettingsClicked;
+            _trayPopup.ExitRequested += OnExit;
             ApplyTrayAssets();
         }
 
@@ -553,7 +562,7 @@ public sealed partial class App : Application
     /// </returns>
     private bool ShowTrayList()
     {
-        if (!OperatingSystem.IsWindows() || !WindowsTrayCursor.TryGetPosition(out var cursor))
+        if (!TrayCursor.TryGetPosition(_window?.Screens, out var cursor))
         {
             return false;
         }
@@ -1044,7 +1053,7 @@ public sealed partial class App : Application
             return;
         }
 
-        _trayClicks ??= new TrayClickInterpreter(TimeProvider.System, OperatingSystem.IsWindows() ? WindowsTrayCursor.DoubleClickTime : TimeSpan.FromMilliseconds(500), TrayReopenGuard);
+        _trayClicks ??= new TrayClickInterpreter(TimeProvider.System, TrayCursor.DoubleClickTime, TrayReopenGuard);
         switch (_trayClicks.Click(_trayPopup?.IsVisible == true))
         {
             case TrayClickInterpreter.TrayClickAction.ShowList:
