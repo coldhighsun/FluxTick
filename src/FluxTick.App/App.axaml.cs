@@ -53,6 +53,11 @@ public sealed partial class App : Application
     private bool _paletteRedUp;
 
     /// <summary>
+    /// The font setting the interface text was last set from, so an unchanged font is not looked up again.
+    /// </summary>
+    private string? _fontSetting;
+
+    /// <summary>
     /// The tray menu entry that shows or hides the window.
     /// </summary>
     private NativeMenuItem? _trayToggle;
@@ -208,6 +213,7 @@ public sealed partial class App : Application
             // subscription below: the first ApplyPalette() then builds the brushes for the final variant once.
             ApplyLanguage();
             ApplyTheme();
+            ApplyFont();
 
             var viewModel = _services.GetRequiredService<MainViewModel>();
             _window = new MainWindow { DataContext = viewModel, Logger = _services.GetRequiredService<ILogger<MainWindow>>() };
@@ -246,6 +252,7 @@ public sealed partial class App : Application
             {
                 ApplyLanguage();
                 ApplyTheme();
+                ApplyFont();
                 ApplyPalette();
                 ApplyTrayAssets();
                 ApplyBossKey();
@@ -918,6 +925,29 @@ public sealed partial class App : Application
         {
             RequestedThemeVariant = variant;
         }
+    }
+
+    /// <summary>
+    /// Sets the font of the interface text to the configured preset; the windows follow it through the
+    /// <c>UiFont</c> resource.
+    /// </summary>
+    private void ApplyFont()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        // A font that was removed from the computer since it was chosen gives way to the font of the system.
+        var chosen = _settings.Current.Appearance.Font;
+        if (string.Equals(_fontSetting, chosen, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var family = FontResolver.Resolve(chosen.Length > 0 && FontCatalog.IsInstalled(chosen) ? chosen : string.Empty);
+        Resources["UiFont"] = FontFamily.Parse(family);
+        _fontSetting = chosen;
     }
 
     /// <summary>

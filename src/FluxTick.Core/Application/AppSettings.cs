@@ -288,7 +288,7 @@ public sealed class AppearanceSettings
     /// <summary>
     /// Gets or sets the window opacity between 0.3 and 1.
     /// </summary>
-    public double Opacity { get; set; } = 0.92;
+    public double Opacity { get; set; } = 0.9;
 
     /// <summary>
     /// Gets or sets a value indicating whether the window stays above other windows.
@@ -332,6 +332,11 @@ public sealed class AppearanceSettings
     /// Gets or sets the color scheme: light, dark, or following the system.
     /// </summary>
     public ThemeMode ThemeMode { get; set; } = ThemeMode.Auto;
+
+    /// <summary>
+    /// Gets or sets the name of the font family of the interface text, or an empty text for the font of the system.
+    /// </summary>
+    public string Font { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the interface language: Simplified Chinese, English, or following the system.

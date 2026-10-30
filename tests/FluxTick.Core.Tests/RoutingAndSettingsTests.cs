@@ -135,6 +135,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Providers["a"] = new ProviderSettings { Enabled = false, Options = { ["PollInterval"] = "00:00:09" } };
         settings.Appearance.ColorConvention = ColorConvention.RedUp;
         settings.Appearance.ThemeMode = ThemeMode.Dark;
+        settings.Appearance.Font = "Arial";
         settings.Appearance.Language = LanguageMode.ZhCN;
         settings.Appearance.RollPriceOnUpdate = true;
         settings.Appearance.ShowMarketStatus = false;
@@ -154,6 +155,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Providers["a"].Options["PollInterval"].Should().Be("00:00:09");
         loaded.Appearance.ColorConvention.Should().Be(ColorConvention.RedUp);
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Dark);
+        loaded.Appearance.Font.Should().Be("Arial");
         loaded.Appearance.Language.Should().Be(LanguageMode.ZhCN);
         loaded.Appearance.RollPriceOnUpdate.Should().BeTrue();
         loaded.Appearance.ShowMarketStatus.Should().BeFalse();
@@ -255,6 +257,22 @@ public sealed class RoutingAndSettingsTests : IDisposable
 
         loaded!.Appearance.Opacity.Should().Be(0.8);
         loaded.Appearance.ThemeMode.Should().Be(ThemeMode.Auto);
+    }
+
+    /// <summary>
+    /// Verifies a settings file written before the font option existed reads as the font of the system.
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_WithoutFontKey_DefaultsToTheSystemFont()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, """{ "appearance": { "opacity": 0.8 } }""");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Appearance.Font.Should().BeEmpty();
     }
 
     /// <summary>

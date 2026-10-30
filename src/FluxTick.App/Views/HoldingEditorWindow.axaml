@@ -40,7 +40,7 @@
       <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" Classes="warn" FontSize="11" TextWrapping="Wrap" />
 
       <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-        <Button Content="{loc:T Holding_Clear}" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" />
+        <Button Classes="outline" Content="{loc:T Holding_Clear}" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" />
         <Button Classes="primary" Content="{loc:T Holding_Save}" Command="{Binding SaveCommand}" />
       </StackPanel>
     </StackPanel>

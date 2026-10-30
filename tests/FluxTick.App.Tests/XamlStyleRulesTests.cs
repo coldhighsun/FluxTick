@@ -65,6 +65,74 @@ public class XamlStyleRulesTests
     }
 
     /// <summary>
+    /// Verifies the outline text buttons leave their shape to the style, since a value on the element would beat it and
+    /// the button would stay square.
+    /// </summary>
+    /// <param name="view">
+    /// The view file.
+    /// </param>
+    [Theory]
+    [InlineData("SettingsView.axaml")]
+    [InlineData("HoldingEditorWindow.axaml")]
+    [InlineData("UpdatePromptWindow.axaml")]
+    public void OutlineButtons_HaveNoShapeOfTheirOwn(string view)
+    {
+        var buttons = WithClass(Load(view), "Button", "outline");
+
+        buttons.Should().NotBeEmpty();
+        buttons.Should().OnlyContain(b => b.Attribute("CornerRadius") == null
+            && b.Attribute("BorderThickness") == null
+            && b.Attribute("Background") == null);
+    }
+
+    /// <summary>
+    /// Verifies the drop-down lists leave their shape and colors to the style, since a value on the element would beat it.
+    /// </summary>
+    /// <param name="view">
+    /// The view file.
+    /// </param>
+    [Theory]
+    [InlineData("SettingsView.axaml")]
+    [InlineData("AddAssetView.axaml")]
+    [InlineData("AlertEditorWindow.axaml")]
+    [InlineData("AlertRuleListView.axaml")]
+    [InlineData("HoldingEditorWindow.axaml")]
+    public void ComboBoxes_HaveNoShapeOfTheirOwn(string view)
+    {
+        var boxes = Load(view).Descendants().Where(e => e.Name.LocalName == "ComboBox").ToList();
+
+        boxes.Should().NotBeEmpty();
+        boxes.Should().OnlyContain(b => b.Attribute("CornerRadius") == null
+            && b.Attribute("Background") == null
+            && b.Attribute("BorderBrush") == null
+            && b.Attribute("BorderThickness") == null);
+    }
+
+    /// <summary>
+    /// Verifies the text boxes leave their shape and colors to the style, since a value on the element would beat it.
+    /// </summary>
+    /// <param name="view">
+    /// The view file.
+    /// </param>
+    [Theory]
+    [InlineData("SettingsView.axaml")]
+    [InlineData("AddAssetView.axaml")]
+    [InlineData("AlertEditorWindow.axaml")]
+    [InlineData("AlertRuleListView.axaml")]
+    [InlineData("HoldingEditorWindow.axaml")]
+    [InlineData("WatchlistView.axaml")]
+    public void TextBoxes_HaveNoShapeOfTheirOwn(string view)
+    {
+        var boxes = Load(view).Descendants().Where(e => e.Name.LocalName == "TextBox").ToList();
+
+        boxes.Should().NotBeEmpty();
+        boxes.Should().OnlyContain(b => b.Attribute("CornerRadius") == null
+            && b.Attribute("Background") == null
+            && b.Attribute("BorderBrush") == null
+            && b.Attribute("BorderThickness") == null);
+    }
+
+    /// <summary>
     /// Verifies the two numbers of the roll of the price, in a row and in a card, carry a real translate transform, and
     /// that they share a clipped box. The roll animates the translation; a transform written as a string, such as
     /// "translate(0,0)", is another kind of transform, which the animation cannot change: it never ends and nothing

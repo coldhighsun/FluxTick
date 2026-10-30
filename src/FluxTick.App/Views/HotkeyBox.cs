@@ -82,14 +82,9 @@ public sealed class HotkeyBox : Border
     public HotkeyBox()
     {
         Focusable = true;
-        Padding = new Thickness(10, 6);
-        BorderThickness = new Thickness(1);
-        CornerRadius = new CornerRadius(4);
-        MinHeight = 32;
         Child = _text;
         GotFocus += (_, _) => FocusChanged(hasFocus: true);
         LostFocus += (_, _) => FocusChanged(hasFocus: false);
-        ApplyLook();
         ShowText();
     }
 
@@ -250,7 +245,6 @@ public sealed class HotkeyBox : Border
         if (hasFocus)
         {
             IsCapturing = true;
-            ApplyLook();
             ShowText();
         }
         else
@@ -275,7 +269,6 @@ public sealed class HotkeyBox : Border
         else if (_hasFocus)
         {
             IsCapturing = true;
-            ApplyLook();
             ShowText();
         }
     }
@@ -288,7 +281,6 @@ public sealed class HotkeyBox : Border
         _preview = null;
         _completed = false;
         IsCapturing = false;
-        ApplyLook();
         ShowText();
     }
 
@@ -301,14 +293,5 @@ public sealed class HotkeyBox : Border
         var isHint = _preview is null && Value.Length == 0;
         _text.Text = _preview ?? (isHint ? hint : Value);
         _text.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable(isHint ? "TextControlPlaceholderForeground" : "TextControlForeground"));
-    }
-
-    /// <summary>
-    /// Takes the look of a text box from the theme, with the border of a box that has the focus.
-    /// </summary>
-    private void ApplyLook()
-    {
-        this.Bind(BackgroundProperty, this.GetResourceObservable(_hasFocus ? "TextControlBackgroundFocused" : "TextControlBackground"));
-        this.Bind(BorderBrushProperty, this.GetResourceObservable(_hasFocus ? "TextControlBorderBrushFocused" : "TextControlBorderBrush"));
     }
 }
