@@ -38,11 +38,17 @@ jobs:
         run: dotnet publish src/FluxTick.App -c Release -r ${{ matrix.rid }} -p:OfficialBuild=true -o publish/${{ matrix.rid }}
 
       - name: Package
-        if: matrix.rid != 'win-x64'
+        if: matrix.rid == 'linux-x64'
         shell: bash
         run: |
           cd publish/${{ matrix.rid }}
           zip -j ../../FluxTick-${{ github.ref_name }}-${{ matrix.rid }}.zip FluxTick
+
+      # The disk image holds an ad-hoc signed FluxTick.app. The in-app updater downloads FluxTick-{tag}-{rid}.dmg on macOS.
+      - name: Build macOS app bundle and disk image
+        if: matrix.rid == 'osx-arm64'
+        shell: bash
+        run: bash installer/macos/build-app.sh publish/osx-arm64 "${{ github.ref_name }}" "FluxTick-${{ github.ref_name }}-osx-arm64.dmg"
 
       # The portable zip has a distinct "-portable" name so that it never matches the updater's archive or setup patterns.
       - name: Package portable build
@@ -83,13 +89,14 @@ jobs:
           merge-multiple: true
 
       - name: Generate checksums
-        run: sha256sum FluxTick-*.zip FluxTick-*-setup.exe > SHA256SUMS.txt
+        run: sha256sum FluxTick-*.zip FluxTick-*.dmg FluxTick-*-setup.exe > SHA256SUMS.txt
 
       # A tag with a SemVer pre-release suffix (e.g. v1.2.0-beta.1, v1.2.0-rc.1) is published as a pre-release.
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             FluxTick-*.zip
+            FluxTick-*.dmg
             FluxTick-*-setup.exe
             SHA256SUMS.txt
           generate_release_notes: true

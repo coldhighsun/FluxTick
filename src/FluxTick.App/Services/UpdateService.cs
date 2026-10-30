@@ -87,6 +87,12 @@ public sealed class UpdateService : IDisposable
     internal const string ArchivePattern = "FluxTick-{tag}-{rid}.zip";
 
     /// <summary>
+    /// The name of a release disk image, which is the package on macOS; <c>{rid}</c> is the runtime of the running
+    /// program, such as <c>osx-arm64</c>.
+    /// </summary>
+    internal const string DiskImagePattern = "FluxTick-{tag}-{rid}.dmg";
+
+    /// <summary>
     /// The name of a release setup program; <c>{rid}</c> is the runtime of the running program, such as <c>win-x64</c>.
     /// </summary>
     internal const string SetupPattern = "FluxTick-{tag}-{rid}-setup.exe";
@@ -212,6 +218,10 @@ public sealed class UpdateService : IDisposable
     /// How often the loop of automatic checks considers looking for a newer release, or <see langword="null"/> for the
     /// default.
     /// </param>
+    /// <param name="archivePattern">
+    /// The name of the release package where it is not a setup program, or <see langword="null"/> for
+    /// <see cref="ArchivePattern"/>.
+    /// </param>
     public UpdateService(
         string stateFile,
         ILogger<UpdateService> logger,
@@ -225,7 +235,8 @@ public sealed class UpdateService : IDisposable
         TimeSpan? prepareTimeout = null,
         TimeSpan? installerGracePeriod = null,
         TimeSpan? firstCheckDelay = null,
-        TimeSpan? checkRound = null)
+        TimeSpan? checkRound = null,
+        string? archivePattern = null)
     {
         _logger = logger;
         _checkRound = checkRound ?? CheckRound;
@@ -246,7 +257,7 @@ public sealed class UpdateService : IDisposable
 
             // Only stable releases are offered, whatever version is running.
             IncludePrerelease = false,
-            AssetSelector = new PatternAssetSelector(useSetup ? SetupPattern : ArchivePattern),
+            AssetSelector = new PatternAssetSelector(useSetup ? SetupPattern : archivePattern ?? ArchivePattern),
             InstallerLauncher = launcher,
             RequireChecksum = true,
 

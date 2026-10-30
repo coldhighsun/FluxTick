@@ -198,7 +198,8 @@ public static class AppHost
                 UpdateService.ReadOfficialBuild(typeof(AppHost).Assembly),
                 AppPaths.UpdatesDirectory,
                 useSetup: OperatingSystem.IsWindows(),
-                isAutoCheckEnabled: () => settings.Current.Updates.AutoCheck);
+                isAutoCheckEnabled: () => settings.Current.Updates.AutoCheck,
+                archivePattern: OperatingSystem.IsMacOS() ? UpdateService.DiskImagePattern : null);
         });
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<AddAssetViewModel>();

@@ -100,6 +100,42 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     /// <summary>
+    /// Where the package is the macOS disk image, the release's disk image is found.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the test is done.
+    /// </returns>
+    [Fact]
+    public async Task CheckAsync_DiskImagePattern_FindsDiskImage()
+    {
+        _github.Latest = FakeGitHub.Release("v9.9.9", withPackage: true, diskImage: true);
+
+        var service = Create("1.0.0", archivePattern: UpdateService.DiskImagePattern);
+        await service.CheckAsync(manual: false);
+
+        service.Status.Should().Be(UpdateStatus.Available);
+        service.HasPackage.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Where the package is the macOS disk image, a release that only carries the archive has no package.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the test is done.
+    /// </returns>
+    [Fact]
+    public async Task CheckAsync_DiskImagePatternAndOnlyArchive_HasNoPackage()
+    {
+        _github.Latest = FakeGitHub.Release("v9.9.9", withPackage: true);
+
+        var service = Create("1.0.0", archivePattern: UpdateService.DiskImagePattern);
+        await service.CheckAsync(manual: false);
+
+        service.HasPackage.Should().BeFalse();
+        service.CanDownload.Should().BeFalse();
+    }
+
+    /// <summary>
     /// A release with the running version is not an update.
     /// </summary>
     /// <returns>
@@ -1156,6 +1192,12 @@ public sealed class UpdateServiceTests : IDisposable
     /// <param name="firstCheckDelay">
     /// How long after the start the first automatic check is made; null for the default.
     /// </param>
+    /// <param name="checkRound">
+    /// How often the automatic checks are considered; null for the default.
+    /// </param>
+    /// <param name="archivePattern">
+    /// The name of the package where it is not a setup program; null for the archive.
+    /// </param>
     /// <returns>
     /// The service.
     /// </returns>
@@ -1165,7 +1207,8 @@ public sealed class UpdateServiceTests : IDisposable
         bool useSetup = false,
         Func<bool>? isAutoCheckEnabled = null,
         TimeSpan? firstCheckDelay = null,
-        TimeSpan? checkRound = null) =>
+        TimeSpan? checkRound = null,
+        string? archivePattern = null) =>
         new(
             Path.Combine(_directory, "update-state.json"),
             NullLogger<UpdateService>.Instance,
@@ -1179,7 +1222,8 @@ public sealed class UpdateServiceTests : IDisposable
             installerGracePeriod: TimeSpan.Zero,
             isAutoCheckEnabled: isAutoCheckEnabled,
             firstCheckDelay: firstCheckDelay,
-            checkRound: checkRound);
+            checkRound: checkRound,
+            archivePattern: archivePattern);
 
     /// <summary>
     /// A stand-in for starting the setup program that records what would have been started.
@@ -1249,14 +1293,19 @@ public sealed class UpdateServiceTests : IDisposable
         /// <param name="notes">
         /// The release notes.
         /// </param>
+        /// <param name="diskImage">
+        /// Whether the package is the macOS disk image instead of the archive.
+        /// </param>
         /// <returns>
         /// The JSON.
         /// </returns>
-        public static string Release(string tag, bool withPackage, bool setup = false, string notes = "")
+        public static string Release(string tag, bool withPackage, bool setup = false, string notes = "", bool diskImage = false)
         {
             var name = setup
                 ? $"FluxTick-{tag}-{RuntimeInfo.Current.Rid}-setup.exe"
-                : $"FluxTick-{tag}-{RuntimeInfo.Current.Rid}.zip";
+                : diskImage
+                    ? $"FluxTick-{tag}-{RuntimeInfo.Current.Rid}.dmg"
+                    : $"FluxTick-{tag}-{RuntimeInfo.Current.Rid}.zip";
             var assets = withPackage
                 ? $$"""
                     [
@@ -1288,11 +1337,11 @@ public sealed class UpdateServiceTests : IDisposable
                 var hash = Convert.ToHexStringLower(SHA256.HashData(Package));
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent($"{hash}  FluxTick-v9.9.9-{rid}.zip\n{hash}  FluxTick-v9.9.9-{rid}-setup.exe\n{hash}  FluxTick-v0.1.1-alpha.1-{rid}.zip\n"),
+                    Content = new StringContent($"{hash}  FluxTick-v9.9.9-{rid}.zip\n{hash}  FluxTick-v9.9.9-{rid}-setup.exe\n{hash}  FluxTick-v9.9.9-{rid}.dmg\n{hash}  FluxTick-v0.1.1-alpha.1-{rid}.zip\n"),
                 });
             }
 
-            if (path.EndsWith(".zip", StringComparison.Ordinal) || path.EndsWith(".exe", StringComparison.Ordinal))
+            if (path.EndsWith(".zip", StringComparison.Ordinal) || path.EndsWith(".exe", StringComparison.Ordinal) || path.EndsWith(".dmg", StringComparison.Ordinal))
             {
                 var bytes = CorruptPackage ? [.. Package, (byte)0] : Package;
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
