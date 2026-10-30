@@ -33,7 +33,7 @@ public sealed class Loc : INotifyPropertyChanged
     /// <summary>
     /// The culture of the operating system, captured before the application overrides the UI culture.
     /// </summary>
-    private static readonly CultureInfo SystemCulture = CultureInfo.CurrentUICulture;
+    private static readonly CultureInfo SystemCulture = Services.MacSystemLanguage.TryGetPreferred() ?? CultureInfo.CurrentUICulture;
 
     /// <summary>
     /// The table of the active language.

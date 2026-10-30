@@ -164,7 +164,8 @@
         </Button>
         <!-- The list layout has a fixed width, so there the grip only resizes vertically. -->
         <Border Classes="grip" Classes.listLayout="{Binding !IsCardLayout}" Grid.Column="1" Width="16" Height="16" Background="Transparent"
-                PointerPressed="OnResizeGripPressed">
+                PointerPressed="OnResizeGripPressed" PointerMoved="OnResizeGripMoved"
+                PointerReleased="OnResizeGripReleased" PointerCaptureLost="OnResizeGripCaptureLost">
           <!-- The cursor comes from styles: a value set on the element itself would always win over them. -->
           <Border.Styles>
             <Style Selector="Border.grip">

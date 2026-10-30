@@ -104,6 +104,24 @@ internal static class WindowWidthRules
     }
 
     /// <summary>
+    /// Gets the left edge a window needs to keep its center in place when its width changes.
+    /// </summary>
+    /// <param name="left">
+    /// The current left edge in screen pixels.
+    /// </param>
+    /// <param name="oldWidth">
+    /// The current width in screen pixels.
+    /// </param>
+    /// <param name="newWidth">
+    /// The new width in screen pixels.
+    /// </param>
+    /// <returns>
+    /// The new left edge in screen pixels.
+    /// </returns>
+    public static int LeftForCenter(int left, double oldWidth, double newWidth) =>
+        (int)Math.Round(left + ((oldWidth - newWidth) / 2));
+
+    /// <summary>
     /// Gets the left edge a window needs to keep its right edge in place when its width changes.
     /// </summary>
     /// <param name="left">
@@ -120,6 +138,32 @@ internal static class WindowWidthRules
     /// </returns>
     public static int LeftForRightEdge(int left, double oldWidth, double newWidth) =>
         (int)Math.Round(left + oldWidth - newWidth);
+
+    /// <summary>
+    /// Gets the left edge a window needs when its width changes around the anchor that belongs to the edge it is docked
+    /// to: the left edge stays at a left edge, the right edge at a right edge, and the center elsewhere.
+    /// </summary>
+    /// <param name="left">
+    /// The current left edge in screen pixels.
+    /// </param>
+    /// <param name="oldWidth">
+    /// The current width in screen pixels.
+    /// </param>
+    /// <param name="newWidth">
+    /// The new width in screen pixels.
+    /// </param>
+    /// <param name="edge">
+    /// The edge the window is docked to.
+    /// </param>
+    /// <returns>
+    /// The new left edge in screen pixels.
+    /// </returns>
+    public static int LeftForDock(int left, double oldWidth, double newWidth, DockEdge edge) => edge switch
+    {
+        DockEdge.Left => left,
+        DockEdge.Right => LeftForRightEdge(left, oldWidth, newWidth),
+        _ => LeftForCenter(left, oldWidth, newWidth),
+    };
 
     /// <summary>
     /// Moves a window sideways so that it lies inside the work area. A window wider than the work area is aligned

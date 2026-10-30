@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -103,6 +104,12 @@ public sealed partial class App : Application
     /// Tells a click on the tray icon from the first half of a double-click.
     /// </summary>
     private TrayClickInterpreter? _trayClicks;
+
+    /// <summary>
+    /// The icon in the macOS menu bar, which takes the place of Avalonia's tray icon there, or <see langword="null"/> where
+    /// there is none.
+    /// </summary>
+    private MacStatusItem? _macStatusItem;
 
     /// <summary>
     /// The listener for the boss key, or <see langword="null"/> where the platform has none.
@@ -211,6 +218,7 @@ public sealed partial class App : Application
 
             // The theme must be requested before the window exists, and before the ActualThemeVariantChanged
             // subscription below: the first ApplyPalette() then builds the brushes for the final variant once.
+            CreateMacStatusItem();
             ApplyLanguage();
             ApplyTheme();
             ApplyFont();
@@ -266,6 +274,8 @@ public sealed partial class App : Application
                 {
                     _bossHotkey?.Dispose();
                 }
+
+                _macStatusItem?.Dispose();
 
                 // A move or resize in the last moments is still waiting for its quiet period; save it now.
                 try
@@ -416,6 +426,58 @@ public sealed partial class App : Application
         {
             icon.ToolTipText = TrayTooltip();
         }
+
+        _macStatusItem?.SetToolTip(TrayTooltip());
+    }
+
+    /// <summary>
+    /// Puts the icon in the macOS menu bar, which tells when it is clicked, and hides Avalonia's tray icon, which does
+    /// not. Where the item cannot be made, Avalonia's icon stays with its menu.
+    /// </summary>
+    private void CreateMacStatusItem()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Status items share the visibility AppKit remembers for them, so Avalonia's icon is hidden before the own one is
+        // made, and the own one is then shown explicitly: it would otherwise inherit the hidden state.
+        SetAvaloniaTrayVisible(false);
+        try
+        {
+            using var stream = AssetLoader.Open(new Uri("avares://FluxTick/Assets/fluxtick.png"));
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            _macStatusItem = MacStatusItem.TryCreate(memory.ToArray(), TrayTooltip(), () => Dispatcher.UIThread.Post(() => OnTrayClicked(this, EventArgs.Empty)));
+        }
+        catch (Exception ex)
+        {
+            _services?.GetService<ILogger<App>>()?.LogWarning(ex, "Could not put the icon in the menu bar");
+        }
+
+        _services?.GetService<ILogger<App>>()?.LogInformation("Menu bar icon: {State}", _macStatusItem is null ? "Avalonia tray icon" : "own status item");
+        if (_macStatusItem is null)
+        {
+            SetAvaloniaTrayVisible(true);
+            return;
+        }
+
+        _macStatusItem.SetVisible(true);
+    }
+
+    /// <summary>
+    /// Shows or hides Avalonia's tray icon.
+    /// </summary>
+    /// <param name="visible">
+    /// Whether the icon shows.
+    /// </param>
+    private void SetAvaloniaTrayVisible(bool visible)
+    {
+        foreach (var icon in TrayIcon.GetIcons(this) ?? [])
+        {
+            icon.IsVisible = visible;
+        }
     }
 
     /// <summary>
@@ -495,6 +557,7 @@ public sealed partial class App : Application
         if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
         {
             tray.ToolTipText = TrayTooltip();
+            _macStatusItem?.SetToolTip(TrayTooltip());
             if (!TrayMenuAvailability.HasNativeMenu)
             {
                 // Without a menu the entries are in the tray popup, because a menu would swallow the click on the icon.
@@ -564,11 +627,14 @@ public sealed partial class App : Application
     {
         if (!TrayCursor.TryGetPosition(_window?.Screens, out var cursor))
         {
+            _services?.GetService<ILogger<App>>()?.LogInformation("Tray list not shown: the pointer position is unknown");
             return false;
         }
 
-        EnsureTrayPopup().ShowAt(new PixelRect(cursor, new PixelSize(1, 1)));
-        return true;
+        MacStatusItem.ActivateApp();
+        var shown = EnsureTrayPopup().ShowAt(new PixelRect(cursor, new PixelSize(1, 1)), _window?.Screens);
+        _services?.GetService<ILogger<App>>()?.LogDebug("Tray list at {Cursor}: {Shown}", cursor, shown ? "shown" : "no screen to place it on");
+        return shown;
     }
 
     /// <summary>
@@ -610,7 +676,7 @@ public sealed partial class App : Application
         if (prompt.Screens.Primary is { } screen)
         {
             prompt.Measure(new Size(prompt.Width, double.PositiveInfinity));
-            var size = PixelSize.FromSize(prompt.DesiredSize, screen.Scaling);
+            var size = PixelSize.FromSize(prompt.DesiredSize, ScreenUnits.PerPixel(screen.Scaling));
             prompt.Position = ToastStackMath.Place(screen.WorkingArea, [size])[0];
         }
     }
@@ -871,8 +937,11 @@ public sealed partial class App : Application
     {
         foreach (var icon in TrayIcon.GetIcons(this) ?? [])
         {
-            icon.IsVisible = visible;
+            // On macOS the status item is the icon and Avalonia's stays hidden.
+            icon.IsVisible = visible && _macStatusItem is null;
         }
+
+        _macStatusItem?.SetVisible(visible);
     }
 
     /// <summary>
@@ -1053,6 +1122,7 @@ public sealed partial class App : Application
             return;
         }
 
+        _services?.GetService<ILogger<App>>()?.LogDebug("Tray icon clicked");
         _trayClicks ??= new TrayClickInterpreter(TimeProvider.System, TrayCursor.DoubleClickTime, TrayReopenGuard);
         switch (_trayClicks.Click(_trayPopup?.IsVisible == true))
         {

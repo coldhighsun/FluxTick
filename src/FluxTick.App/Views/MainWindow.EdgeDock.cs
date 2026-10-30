@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 
 namespace FluxTick.App.Views;
@@ -185,13 +186,22 @@ public sealed partial class MainWindow
     /// </summary>
     private void ApplyAutoHide()
     {
-        _dock.SetEnabled((DataContext as MainViewModel)?.Settings is { AutoHideAtEdge: true, AlwaysOnTop: true });
+        _dock.SetEnabled(
+            (DataContext as MainViewModel)?.Settings is { AutoHideSupported: true, AutoHideAtEdge: true, AlwaysOnTop: true });
         if (_dock.Enabled)
         {
             ScheduleDockSettle();
             return;
         }
 
+        ReleaseDock();
+    }
+
+    /// <summary>
+    /// Ends the docking: a hidden window comes out and the window is a plain window again until it rests at an edge anew.
+    /// </summary>
+    private void ReleaseDock()
+    {
         CancelDockSettle();
         CancelDockLeave();
         if (_dock.Hidden && EnsureDockArea())
@@ -580,7 +590,13 @@ public sealed partial class MainWindow
     /// <returns>
     /// The position and the size of the window.
     /// </returns>
-    private PixelRect CurrentPixelBounds() => new(Position, PixelSize.FromSize(ClientSize, RenderScaling));
+    private PixelRect CurrentPixelBounds() => new(Position, PixelSize.FromSize(ClientSize, ScreenUnitScale));
+
+    /// <summary>
+    /// Gets how many units of the window position and of the screens one device independent pixel makes. macOS reports
+    /// both in points, which is the unit of the window size, so there it is one; elsewhere it is the render scaling.
+    /// </summary>
+    private double ScreenUnitScale => ScreenUnits.PerPixel(RenderScaling);
 
     /// <summary>
     /// Converts a length in device independent pixels to screen pixels.
@@ -591,5 +607,5 @@ public sealed partial class MainWindow
     /// <returns>
     /// The length in screen pixels, at least one.
     /// </returns>
-    private int ScaledPixels(double length) => Math.Max(1, (int)Math.Round(length * RenderScaling));
+    private int ScaledPixels(double length) => Math.Max(1, (int)Math.Round(length * ScreenUnitScale));
 }

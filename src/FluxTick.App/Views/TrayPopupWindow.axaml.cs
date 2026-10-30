@@ -25,7 +25,17 @@ public sealed partial class TrayPopupWindow : Window
         // real size. The size changes during layout, before anything is drawn, so the popup is never seen misplaced.
         SizeChanged += (_, _) => Reposition();
         _outsideWatch = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Background, OnOutsideWatchTick) { IsEnabled = false };
-        Deactivated += (_, _) => Dismiss();
+        Activated += (_, _) => _hasBeenActive = true;
+
+        // A popup that never had the focus cannot lose it: on macOS the app is not active yet when the menu bar icon is
+        // clicked, and the outside watch closes the popup then.
+        Deactivated += (_, _) =>
+        {
+            if (!OperatingSystem.IsMacOS() || _hasBeenActive)
+            {
+                Dismiss();
+            }
+        };
         MenuBar.IsVisible = !TrayMenuAvailability.HasNativeMenu;
         KeyDown += (_, e) =>
         {
@@ -60,6 +70,16 @@ public sealed partial class TrayPopupWindow : Window
     /// The tray icon bounds in screen pixels the popup sits next to, or <see langword="null"/> before the first show.
     /// </summary>
     private PixelRect? _icon;
+
+    /// <summary>
+    /// The screens of the app, which a popup that was never shown cannot tell itself on every system.
+    /// </summary>
+    private Screens? _screens;
+
+    /// <summary>
+    /// Whether the popup has had the focus since it was shown.
+    /// </summary>
+    private bool _hasBeenActive;
 
     /// <summary>
     /// The margin around the card of the popup in device independent pixels, which holds the shadow. It is the margin of the
@@ -150,10 +170,10 @@ public sealed partial class TrayPopupWindow : Window
         }
 
         // Only the card counts as the popup; the margin around it holds the transparent shadow.
-        var margin = (int)Math.Round(CardMargin * RenderScaling);
-        var size = PixelSize.FromSize(Bounds.Size, RenderScaling);
+        var margin = (int)Math.Round(CardMargin * ScreenUnits.PerPixel(RenderScaling));
+        var size = PixelSize.FromSize(Bounds.Size, ScreenUnits.PerPixel(RenderScaling));
         var card = new PixelRect(Position.X + margin, Position.Y + margin, Math.Max(0, size.Width - (2 * margin)), Math.Max(0, size.Height - (2 * margin)));
-        if (TrayCursor.TryGetPosition(Screens, out var pointer)
+        if (TrayCursor.TryGetPosition(_screens ?? Screens, out var pointer)
             && TrayPopupPlacement.ShouldDismiss(TrayCursor.IsButtonDown, pointer, card))
         {
             Dismiss();
@@ -166,16 +186,24 @@ public sealed partial class TrayPopupWindow : Window
     /// <param name="icon">
     /// The tray icon bounds in screen pixels.
     /// </param>
-    public void ShowAt(PixelRect icon)
+    /// <param name="screens">
+    /// The screens to place the popup on.
+    /// </param>
+    /// <returns>
+    /// <see langword="false"/> when there is no screen to place the popup on, so it was not shown.
+    /// </returns>
+    public bool ShowAt(PixelRect icon, Screens? screens)
     {
         (DataContext as TrayPopupViewModel)?.Refresh();
         _icon = icon;
+        _screens = screens ?? Screens;
+        _hasBeenActive = false;
 
         // The list is laid out only once the window is shown, so this first placement is an estimate that the layout
         // pass corrects as soon as the real size is known. Without a screen there is nowhere to place it.
         if (!Reposition())
         {
-            return;
+            return false;
         }
 
         if (!IsVisible)
@@ -187,6 +215,7 @@ public sealed partial class TrayPopupWindow : Window
         // the mouse is watched instead.
         Activate();
         _outsideWatch.Start();
+        return true;
     }
 
     /// <summary>
@@ -202,7 +231,8 @@ public sealed partial class TrayPopupWindow : Window
             return false;
         }
 
-        var screen = Screens.ScreenFromPoint(icon.Center) ?? Screens.Primary;
+        var screens = _screens ?? Screens;
+        var screen = screens.ScreenFromPoint(icon.Center) ?? screens.Primary;
         if (screen is null)
         {
             return false;
@@ -219,7 +249,7 @@ public sealed partial class TrayPopupWindow : Window
             size = DesiredSize;
         }
 
-        var placed = TrayPopupPlacement.Place(icon, PixelSize.FromSize(size, screen.Scaling), screen.WorkingArea);
+        var placed = TrayPopupPlacement.Place(icon, PixelSize.FromSize(size, ScreenUnits.PerPixel(screen.Scaling)), screen.WorkingArea);
         if (placed != Position)
         {
             Position = placed;

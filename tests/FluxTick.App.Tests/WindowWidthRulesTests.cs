@@ -61,7 +61,26 @@ public class WindowWidthRulesTests
     }
 
     /// <summary>
-    /// Verifies a narrower window moves its left edge right and a wider one moves it left, so the right edge stays.
+    /// Verifies the anchor follows the docked edge: left keeps the left edge, right the right edge, the others the center.
+    /// </summary>
+    /// <param name="edge">
+    /// The name of the docked edge; the type is internal to the app.
+    /// </param>
+    /// <param name="expected">
+    /// The expected left edge.
+    /// </param>
+    [Theory]
+    [InlineData("Left", 1000)]
+    [InlineData("Right", 1170)]
+    [InlineData("Top", 1085)]
+    [InlineData("None", 1085)]
+    public void LeftForDock_Edge_KeepsItsAnchor(string edge, int expected)
+    {
+        WindowWidthRules.LeftForDock(1000, 510, 340, Enum.Parse<DockEdge>(edge)).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies a narrower window moves its left edge right and a wider one moves it left, so the center stays.
     /// </summary>
     /// <param name="left">
     /// The current left edge.
@@ -76,16 +95,16 @@ public class WindowWidthRulesTests
     /// The expected left edge.
     /// </param>
     [Theory]
-    [InlineData(1000, 340, 280, 1060)]
-    [InlineData(1060, 280, 340, 1000)]
-    [InlineData(1000, 510, 340, 1170)]
+    [InlineData(1000, 340, 280, 1030)]
+    [InlineData(1030, 280, 340, 1000)]
+    [InlineData(1000, 510, 340, 1085)]
     [InlineData(500, 340, 340, 500)]
-    public void LeftForRightEdge_WidthChanges_KeepsRightEdge(int left, double oldWidth, double newWidth, int expected)
+    public void LeftForCenter_WidthChanges_KeepsCenter(int left, double oldWidth, double newWidth, int expected)
     {
-        var result = WindowWidthRules.LeftForRightEdge(left, oldWidth, newWidth);
+        var result = WindowWidthRules.LeftForCenter(left, oldWidth, newWidth);
 
         result.Should().Be(expected);
-        (result + newWidth).Should().Be(left + oldWidth);
+        (result + (newWidth / 2)).Should().Be(left + (oldWidth / 2));
     }
 
     /// <summary>

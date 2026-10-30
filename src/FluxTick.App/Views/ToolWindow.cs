@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform;
+using FluxTick.App.Services;
 
 namespace FluxTick.App.Views;
 
@@ -89,7 +90,7 @@ public class ToolWindow : Window
     /// </param>
     private void LimitToScreen(Screen screen)
     {
-        var limit = screen.WorkingArea.Height / screen.Scaling * MaxHeightShare;
+        var limit = screen.WorkingArea.Height / ScreenUnits.PerPixel(screen.Scaling) * MaxHeightShare;
         MinHeight = Math.Min(MinHeight, limit);
         MaxHeight = limit;
     }
@@ -141,5 +142,5 @@ public class ToolWindow : Window
     /// The size of the window in device independent pixels.
     /// </param>
     private void PlaceInMiddle(Screen screen, Size size) =>
-        Position = ToolWindowPlacement.CenterOnScreen(size, screen.Scaling, screen.WorkingArea);
+        Position = ToolWindowPlacement.CenterOnScreen(size, ScreenUnits.PerPixel(screen.Scaling), screen.WorkingArea);
 }
