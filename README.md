@@ -139,7 +139,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Start in the tray | Off by default; Settings → General (or the `--minimized` option) keeps the window hidden at startup until you double-click the tray icon (a single click where the system cannot list the instruments, i.e. anywhere but Windows) |
 | Single instance | Only one copy runs per user; starting FluxTick again brings the running window forward, even when it is hidden in the tray |
 | Close button | Hides the window to the tray by default; turn off *Close button hides to tray* in Settings → General to exit instead |
-| Tray menu | Right-click the tray icon for *Show / hide*, *Settings*, *About* and *Exit* |
+| Tray menu | Right-click the tray icon for *Show / hide*, *Settings* and *Exit* |
 | Tray list | Windows only; click the tray icon to see up to five instruments with price and change, without opening the window. Right-click an instrument and choose *Add to tray list* (or *Remove from tray list*); reorder under Settings → Tray. Stopped prices are dimmed and show why. Esc or a click elsewhere closes it; double-click the icon to open the window |
 | Restore a data source | *Restore defaults* in its expanded card resets its options (secret values such as keys are kept) |
 | Data source status | The footer shows one dot per data source in use (green connected, orange off or failing, grey idle or reconnecting), problems first, with a **+N** chip when not all fit. Click the footer for every source's state and error message |

@@ -579,18 +579,41 @@ public sealed partial class MainViewModel : LocalizedViewModel
     }
 
     /// <summary>
-    /// Requests the settings window, which is shown by the view.
+    /// Requests the settings window, which is shown by the view. While the settings are already open the page only
+    /// switches to the tab; any other tool window is left alone, so that what is being edited in it is not lost.
     /// </summary>
-    [RelayCommand]
-    public void ShowSettings()
+    /// <param name="tab">
+    /// The tab to open the page on.
+    /// </param>
+    public void ShowSettings(SettingsTab tab)
     {
+        if (IsSettingsOpen)
+        {
+            Settings.SelectTab(tab);
+            return;
+        }
+
         if (IsToolWindowOpen)
         {
             return;
         }
 
         Settings.Reload();
+        Settings.SelectTab(tab);
         SettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Requests the settings window on its first tab, which is shown by the view. It is ignored while any tool window is
+    /// open.
+    /// </summary>
+    [RelayCommand]
+    public void ShowSettings()
+    {
+        if (!IsToolWindowOpen)
+        {
+            ShowSettings(SettingsTab.General);
+        }
     }
 
     /// <summary>

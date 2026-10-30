@@ -12,7 +12,7 @@ internal static class BossKeyRoles
     /// <summary>
     /// Gets the windows that are hidden and shown again.
     /// </summary>
-    public static IReadOnlyList<Type> Remembered { get; } = [typeof(MainWindow), typeof(AboutWindow), typeof(UpdatePromptWindow)];
+    public static IReadOnlyList<Type> Remembered { get; } = [typeof(MainWindow), typeof(UpdatePromptWindow)];
 
     /// <summary>
     /// Gets the windows that are only there for a moment and are not brought back.

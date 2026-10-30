@@ -68,19 +68,9 @@ public sealed partial class App : Application
     private NativeMenuItem? _traySettings;
 
     /// <summary>
-    /// The tray menu entry that opens the about window.
-    /// </summary>
-    private NativeMenuItem? _trayAbout;
-
-    /// <summary>
     /// The tray menu entry that announces a newer release. It is part of the menu only while there is one.
     /// </summary>
     private NativeMenuItem? _trayUpdate;
-
-    /// <summary>
-    /// The about window, or <see langword="null"/> while it is not open.
-    /// </summary>
-    private AboutWindow? _aboutWindow;
 
     /// <summary>
     /// The update check.
@@ -459,7 +449,7 @@ public sealed partial class App : Application
                     viewModel.ShowSettings();
                     break;
                 case "about":
-                    ShowAboutWindow();
+                    viewModel.ShowSettings(SettingsTab.About);
                     break;
             }
         });
@@ -498,30 +488,26 @@ public sealed partial class App : Application
         if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
         {
             tray.ToolTipText = TrayTooltip();
-            if (_trayToggle is null || _traySettings is null || _trayAbout is null || _trayExit is null)
+            if (_trayToggle is null || _traySettings is null || _trayExit is null)
             {
                 _trayToggle = new NativeMenuItem();
                 _traySettings = new NativeMenuItem();
-                _trayAbout = new NativeMenuItem();
                 _trayExit = new NativeMenuItem();
                 _trayToggle.Click += OnToggleWindow;
                 _traySettings.Click += OnTraySettingsClicked;
-                _trayAbout.Click += OnTrayAboutClicked;
                 _trayExit.Click += OnExit;
-                tray.Menu = [_trayToggle, _traySettings, _trayAbout, new NativeMenuItemSeparator(), _trayExit];
+                tray.Menu = [_trayToggle, _traySettings, new NativeMenuItemSeparator(), _trayExit];
             }
 
             _trayToggle.Header = Loc.Get("Tray_ShowHide");
             _traySettings.Header = Loc.Get("Tray_Settings");
-            _trayAbout.Header = Loc.Get("Tray_About");
             _trayExit.Header = Loc.Get("Tray_Exit");
             ApplyUpdateTray();
         }
     }
 
     /// <summary>
-    /// Ends the tray popup and the about window with the main window: they are windows too, and the app only ends when the
-    /// last window is closed.
+    /// Ends the tray popup with the main window: it is a window too, and the app only ends when the last window is closed.
     /// </summary>
     /// <param name="sender">
     /// The main window.
@@ -532,7 +518,6 @@ public sealed partial class App : Application
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _trayPopup?.Close();
-        _aboutWindow?.Close();
     }
 
     /// <summary>
@@ -650,7 +635,7 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Opens the settings page, where the new release can be downloaded.
+    /// Opens the about tab of the settings page, where the new release can be downloaded.
     /// </summary>
     /// <param name="sender">
     /// The menu item.
@@ -658,7 +643,7 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true);
+    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(SettingsTab.About), replaceToolWindow: true);
 
     /// <summary>
     /// Opens the settings window.
@@ -670,46 +655,6 @@ public sealed partial class App : Application
     /// The event data.
     /// </param>
     private void OnTraySettingsClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true);
-
-    /// <summary>
-    /// Opens the about window on its own: it does not bring up the main window and does not block it.
-    /// </summary>
-    /// <param name="sender">
-    /// The menu item.
-    /// </param>
-    /// <param name="e">
-    /// The event data.
-    /// </param>
-    private void OnTrayAboutClicked(object? sender, EventArgs e) => ShowAboutWindow();
-
-    /// <summary>
-    /// Opens the about window on its own, or brings it forward when it is open.
-    /// </summary>
-    private void ShowAboutWindow()
-    {
-        if (_aboutWindow is not null)
-        {
-            _aboutWindow.Activate();
-            return;
-        }
-
-        if (_services is null || IsExiting)
-        {
-            return;
-        }
-
-        var viewModel = _services.GetRequiredService<MainViewModel>();
-        var window = new AboutWindow
-        {
-            DataContext = new AboutViewModel(viewModel.Settings.Updates),
-
-            // A window that is always on top would cover one that is not, whichever of them was used last.
-            Topmost = _window?.Topmost == true,
-        };
-        window.Closed += (_, _) => _aboutWindow = null;
-        _aboutWindow = window;
-        window.ShowStandalone();
-    }
 
     /// <summary>
     /// Gives the main window a taskbar button only where there is a tray icon to bring it back with. The window keeps
@@ -950,6 +895,12 @@ public sealed partial class App : Application
         }
 
         open(viewModel);
+
+        // A tool window that is open keeps the request from being served; showing it tells the user why.
+        if (viewModel.IsToolWindowOpen)
+        {
+            _window.ActivateToolWindow();
+        }
     }
 
     /// <summary>

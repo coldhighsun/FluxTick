@@ -913,6 +913,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     private readonly Func<string, bool> _openFolder;
 
     /// <summary>
+    /// Opens the project home page in the browser and tells whether that worked.
+    /// </summary>
+    private readonly Func<string, bool> _openHomepage;
+
+    /// <summary>
     /// The log, or <see langword="null"/> for none.
     /// </summary>
     private readonly ILogger<SettingsViewModel>? _logger;
@@ -953,6 +958,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="openFolder">
     /// Opens a folder in the file manager and tells whether that worked; by default the real file manager is used.
     /// </param>
+    /// <param name="openHomepage">
+    /// Opens the project home page and tells whether that worked; by default the real browser is used.
+    /// </param>
     /// <param name="logger">
     /// Receives the reason when a folder could not be opened, or <see langword="null"/> for none.
     /// </param>
@@ -966,6 +974,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         IAutoStartService? autoStart = null,
         Func<bool>? trayProbe = null,
         Func<string, bool>? openFolder = null,
+        Func<string, bool>? openHomepage = null,
         ILogger<SettingsViewModel>? logger = null)
         : base(ui)
     {
@@ -973,6 +982,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         _autoStart = autoStart;
         _logger = logger;
         _openFolder = openFolder ?? (directory => FileManager.TryOpen(directory, logger: logger));
+        _openHomepage = openHomepage ?? (url => ExternalLinks.TryOpenGitHub(url));
         Updates = updates;
         _opacitySave = new Debouncer(TimeSpan.FromMilliseconds(400), timeProvider);
         Market = market;
@@ -1065,6 +1075,35 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public UpdateViewModel? Updates { get; }
 
     /// <summary>
+    /// Gets the product information shown on the about tab.
+    /// </summary>
+    public AboutInfo About { get; } = new();
+
+    /// <summary>
+    /// Gets or sets the index of the selected tab, which is the value of a <see cref="SettingsTab"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial int SelectedTabIndex { get; set; }
+
+    /// <summary>
+    /// Selects a tab of the page.
+    /// </summary>
+    /// <param name="tab">
+    /// The tab to show.
+    /// </param>
+    public void SelectTab(SettingsTab tab)
+    {
+        HomepageOpenFailed = false;
+        SelectedTabIndex = (int)tab;
+    }
+
+    /// <summary>
+    /// Opens the project home page in the browser.
+    /// </summary>
+    [RelayCommand]
+    private void OpenProjectHomepage() => HomepageOpenFailed = !_openHomepage(About.HomepageUrl);
+
+    /// <summary>
     /// Gets the editor of the user-defined groups.
     /// </summary>
     public GroupsSettingsViewModel Groups { get; }
@@ -1130,6 +1169,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// </summary>
     [ObservableProperty]
     public partial bool FolderOpenFailed { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the last attempt to open the project home page failed.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HomepageOpenFailed { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the app starts when the user signs in.
@@ -1358,6 +1403,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public void Reload()
     {
         FolderOpenFailed = false;
+        HomepageOpenFailed = false;
         _loading = true;
         try
         {

@@ -436,6 +436,177 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies the settings page opens on the general tab unless another tab is asked for.
+    /// </summary>
+    [Fact]
+    public async Task ShowSettings_WithoutTab_SelectsGeneralTab()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.Main.Settings.SelectTab(SettingsTab.About);
+
+        h.Main.ShowSettingsCommand.Execute(null);
+
+        h.Main.Settings.SelectedTabIndex.Should().Be((int)SettingsTab.General);
+    }
+
+    /// <summary>
+    /// Verifies the settings page opens on the about tab when it is asked for, as the tray's about item does.
+    /// </summary>
+    [Fact]
+    public async Task ShowSettings_WithAboutTab_SelectsAboutTabAndRaisesRequest()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        var requests = 0;
+        h.Main.SettingsRequested += (_, _) => requests++;
+
+        h.Main.ShowSettings(SettingsTab.About);
+
+        h.Main.Settings.SelectedTabIndex.Should().Be((int)SettingsTab.About);
+        requests.Should().Be(1);
+    }
+
+    /// <summary>
+    /// Verifies that asking for a tab while the settings are open only switches the tab and requests no new window.
+    /// </summary>
+    [Fact]
+    public async Task ShowSettings_WhileSettingsAreOpen_OnlySwitchesTab()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.Main.BeginToolWindow(ToolWindowKind.Settings);
+        var requests = 0;
+        h.Main.SettingsRequested += (_, _) => requests++;
+
+        h.Main.ShowSettings(SettingsTab.About);
+
+        h.Main.Settings.SelectedTabIndex.Should().Be((int)SettingsTab.About);
+        requests.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Verifies that asking for a tab while another tool window is open leaves both the window and the tab alone, so
+    /// what is being edited is not lost.
+    /// </summary>
+    [Fact]
+    public async Task ShowSettings_WhileOtherToolWindowIsOpen_ChangesNothing()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.Main.BeginToolWindow(ToolWindowKind.AddAsset);
+        var requests = 0;
+        h.Main.SettingsRequested += (_, _) => requests++;
+
+        h.Main.ShowSettings(SettingsTab.About);
+
+        h.Main.Settings.SelectedTabIndex.Should().Be((int)SettingsTab.General);
+        h.Main.ActiveTool.Should().Be(ToolWindowKind.AddAsset);
+        requests.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Verifies the home page command opens the address of the project.
+    /// </summary>
+    [Fact]
+    public async Task OpenProjectHomepageCommand_Executed_OpensTheProjectAddress()
+    {
+        var opened = new List<string>();
+        await using var h = new Harness(openHomepage: url =>
+        {
+            opened.Add(url);
+            return true;
+        });
+
+        h.SettingsPage.OpenProjectHomepageCommand.Execute(null);
+
+        opened.Should().Equal(h.SettingsPage.About.HomepageUrl);
+    }
+
+    /// <summary>
+    /// Verifies the plain settings command leaves the open settings page on its tab, as it is ignored while any tool
+    /// window is open.
+    /// </summary>
+    [Fact]
+    public async Task ShowSettingsCommand_WhileSettingsAreOpen_KeepsTheTab()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.Main.BeginToolWindow(ToolWindowKind.Settings);
+        h.Main.Settings.SelectTab(SettingsTab.Sources);
+
+        h.Main.ShowSettingsCommand.Execute(null);
+
+        h.Main.Settings.SelectedTabIndex.Should().Be((int)SettingsTab.Sources);
+    }
+
+    /// <summary>
+    /// Verifies a failed launch of the home page is shown, and that the message goes away once a launch works.
+    /// </summary>
+    [Fact]
+    public async Task OpenProjectHomepageCommand_WhenOpenerFails_ShowsFailureUntilItWorks()
+    {
+        var works = false;
+        await using var h = new Harness(openHomepage: _ => works);
+
+        h.SettingsPage.OpenProjectHomepageCommand.Execute(null);
+        h.SettingsPage.HomepageOpenFailed.Should().BeTrue();
+
+        works = true;
+        h.SettingsPage.OpenProjectHomepageCommand.Execute(null);
+        h.SettingsPage.HomepageOpenFailed.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a failed launch message is dropped when a tab is selected, so it is not shown again later.
+    /// </summary>
+    [Fact]
+    public async Task SelectTab_AfterFailedHomepageLaunch_ClearsFailure()
+    {
+        await using var h = new Harness(openHomepage: _ => false);
+        h.SettingsPage.OpenProjectHomepageCommand.Execute(null);
+
+        h.SettingsPage.SelectTab(SettingsTab.About);
+
+        h.SettingsPage.HomepageOpenFailed.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the values of <see cref="SettingsTab"/> are the positions of the tabs in the settings page, which is
+    /// what selecting a tab by index relies on.
+    /// </summary>
+    [Fact]
+    public void SettingsTab_Values_MatchTheTabOrderOfThePage()
+    {
+        var document = SourceFiles.LoadXaml("Views", "SettingsView.axaml");
+        var headers = document.Descendants()
+            .Where(e => e.Name.LocalName == "TabItem")
+            .Select(e => (string)e.Attribute("Header")!)
+            .ToList();
+
+        foreach (var tab in Enum.GetValues<SettingsTab>())
+        {
+            headers[(int)tab].Should().Be($"{{loc:T Settings_Tab{tab}}}");
+        }
+
+        headers.Should().HaveCount(Enum.GetValues<SettingsTab>().Length);
+    }
+
+    /// <summary>
+    /// Verifies the about section gives the product facts without a running window.
+    /// </summary>
+    [Fact]
+    public void AboutInfo_Properties_ArePopulated()
+    {
+        var about = new AboutInfo();
+
+        about.Product.Should().NotBeNullOrWhiteSpace();
+        about.Author.Should().NotBeNullOrWhiteSpace();
+        about.License.Should().Be("MIT");
+        about.HomepageUrl.Should().StartWith("https://github.com/");
+    }
+
+    /// <summary>
     /// Verifies no window is requested and no page state is reset while a tool window is already open.
     /// </summary>
     [Fact]
