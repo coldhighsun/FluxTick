@@ -1132,6 +1132,11 @@ public sealed class MarketDataService : IAsyncDisposable
             // A session that is well under way with no trade yet today is a holiday that the source did not catch.
             MarketState.Open when hours == MarketState.Closed => MarketState.Closed,
 
+            // An extended session it reports is over when the hours say the regular session is under way, or that the day is
+            // done; a report that outlives its session must not keep the price live.
+            MarketState.PreMarket or MarketState.AfterHours when hours == MarketState.Open => MarketState.Open,
+            MarketState.AfterHours when hours == MarketState.Closed => MarketState.Closed,
+
             // A price that keeps advancing beats a report of a shut market, which may be about the day before when the
             // source has not turned the page yet.
             MarketState.Closed when state.AdvancedAt is { } advanced && now - advanced <= DelayedAfterOf(slot) => hours,
@@ -1218,15 +1223,30 @@ public sealed class MarketDataService : IAsyncDisposable
         // the last price of a closed market with the time it was traded, which the receive time alone would not show).
         // Delayed when quotes keep arriving with a trade time that is old but within what a lagging feed explains.
         var now = _timeProvider.GetUtcNow();
-        var quoteTime = state.Latest?.Timestamp ?? state.LastReceivedAt.Value;
-        var delayedAfter = DelayedAfterOf(slot);
-        var quoteAge = now - quoteTime;
-        if (IsSilent(state, slot, now) || quoteAge > DelayedUpTo)
+        if (IsSilent(state, slot, now))
         {
             return (AssetHealth.Stale, null);
         }
 
-        return quoteAge > delayedAfter
+        // A source that says the market is in an extended session decides first: few trades make an old trade time, not a
+        // late feed, so the price is live for as long as the source keeps answering. Only the source's own report counts,
+        // as the hours alone cannot tell a quiet session from a stalled feed, and only while the hours do not contradict
+        // it (a report left over past the end of the session is dropped by MarketStateOf).
+        if (state.Latest?.Market is { } reported
+            and (MarketState.PreMarket or MarketState.AfterHours)
+            && MarketStateOf(state, now) == reported)
+        {
+            return (AssetHealth.Live, null);
+        }
+
+        var quoteTime = state.Latest?.Timestamp ?? state.LastReceivedAt.Value;
+        var quoteAge = now - quoteTime;
+        if (quoteAge > DelayedUpTo)
+        {
+            return (AssetHealth.Stale, null);
+        }
+
+        return quoteAge > DelayedAfterOf(slot)
             ? (AssetHealth.Delayed, null)
             : (AssetHealth.Live, null);
     }
