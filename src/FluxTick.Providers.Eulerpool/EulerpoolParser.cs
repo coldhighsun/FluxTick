@@ -99,32 +99,122 @@ internal static class EulerpoolParser
     }
 
     /// <summary>
-    /// Parses the answer of the daily candles endpoint (<c>{"t":[..],"o":[..],"h":[..],"l":[..],"c":[..],"v":[..]}</c>)
-    /// into the previous close: the close of the latest candle from a day before today at the exchange. The candle of
-    /// today, which is partial while the market trades, is not it.
+    /// Dates daily closes by the day at the exchange, once, so that picking a previous close needs no time zone conversion
+    /// per candle. The result is ordered by day whatever the order of the answer. Most candles are stamped with the open of
+    /// the session, which falls on the trading day at the exchange; one stamped at exactly midnight UTC names a calendar day
+    /// rather than an instant, so its UTC date is the day (converting it would move it to the evening before for an
+    /// exchange west of UTC).
     /// </summary>
-    /// <param name="json">
-    /// The response body.
-    /// </param>
-    /// <param name="now">
-    /// The current time.
+    /// <param name="closes">
+    /// The closes of the daily candles, each at the time of its candle.
     /// </param>
     /// <param name="zone">
     /// The time zone of the exchange, or <see langword="null"/> to use UTC.
     /// </param>
     /// <returns>
-    /// The previous close, or <see langword="null"/> when there is no earlier candle with a price.
+    /// The closes, oldest day first.
     /// </returns>
-    public static decimal? ParsePreviousClose(string json, DateTimeOffset now, TimeZoneInfo? zone)
+    public static DailyClose[] ToDailyCloses(IEnumerable<PricePoint> closes, TimeZoneInfo? zone)
     {
-        using var document = JsonDocument.Parse(json);
         zone ??= TimeZoneInfo.Utc;
-        var today = TimeZoneInfo.ConvertTime(now, zone).Date;
-        foreach (var point in ReadCandles(document.RootElement).Reverse())
+        return [.. closes
+            .OrderBy(c => c.Timestamp)
+            .Select(c => new DailyClose(DayAtExchange(c.Timestamp, zone), c.Price))];
+    }
+
+    /// <summary>
+    /// Gets the day at the exchange of a candle time. A time at exactly midnight UTC names a calendar day rather than an instant,
+    /// so its UTC date is the day; converting it would move it to the evening before for an exchange west of UTC.
+    /// </summary>
+    /// <param name="time">
+    /// The time.
+    /// </param>
+    /// <param name="zone">
+    /// The time zone of the exchange.
+    /// </param>
+    /// <returns>
+    /// The day at the exchange.
+    /// </returns>
+    private static DateOnly DayAtExchange(DateTimeOffset time, TimeZoneInfo zone) =>
+        time.UtcDateTime.TimeOfDay == TimeSpan.Zero
+            ? DateOnly.FromDateTime(time.UtcDateTime)
+            : DayOfInstant(time, zone);
+
+    /// <summary>
+    /// Gets the day at the exchange of an instant, such as the time a price was traded.
+    /// </summary>
+    /// <param name="time">
+    /// The instant.
+    /// </param>
+    /// <param name="zone">
+    /// The time zone of the exchange.
+    /// </param>
+    /// <returns>
+    /// The date there.
+    /// </returns>
+    private static DateOnly DayOfInstant(DateTimeOffset time, TimeZoneInfo zone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, zone).DateTime);
+
+    /// <summary>
+    /// Picks the previous close out of daily closes: the close of the latest candle from a day before the day the price was
+    /// traded, at the exchange. The candle of that day is partial while the market trades, so it is not it. Dating by the
+    /// trade rather than by the clock keeps a price that is still the last close (over a weekend or a holiday, or before
+    /// the open) measured against the close before it, instead of against itself. A price traded after the regular session
+    /// of its day, and different from the close of that day, is an after-hours price and is measured against that close.
+    /// </summary>
+    /// <param name="closes">
+    /// The daily closes, oldest day first, as <see cref="ToDailyCloses"/> gives them.
+    /// </param>
+    /// <param name="price">
+    /// The price to measure.
+    /// </param>
+    /// <param name="tradeTime">
+    /// When the price was traded.
+    /// </param>
+    /// <param name="exchange">
+    /// The exchange of the ticker, or <see langword="null"/> when it is not known, which dates by UTC.
+    /// </param>
+    /// <param name="unsettledDay">
+    /// The day whose candle may still be partial because the closes were fetched before the session ended, or
+    /// <see langword="null"/> when every candle is final. An after-hours price of that day has no previous close yet.
+    /// </param>
+    /// <returns>
+    /// The previous close, or <see langword="null"/> when there is no earlier candle or the candle needed is not final.
+    /// </returns>
+    public static decimal? PreviousCloseBefore(IReadOnlyList<DailyClose> closes, decimal price, DateTimeOffset tradeTime, ExchangeHours? exchange, DateOnly? unsettledDay = null)
+    {
+        // The time of a trade is an instant, so unlike a candle stamped at midnight UTC it is always converted.
+        var tradeDay = DayOfInstant(tradeTime, exchange?.Zone ?? TimeZoneInfo.Utc);
+        bool? afterHours = null;
+        for (var i = closes.Count - 1; i >= 0; i--)
         {
-            if (TimeZoneInfo.ConvertTime(point.Timestamp, zone).Date < today)
+            var close = closes[i];
+            if (close.Day < tradeDay)
             {
-                return point.Price;
+                return close.Price;
+            }
+
+            // The close of the trading day itself is the reference only for a price traded after the regular session that
+            // differs from it; a price equal to it is that close, and is measured against the day before. The check is made
+            // only when such a candle is met, as it is the costly part. It relies on the candle being complete, which the
+            // cache ensures by fetching again once the session has ended.
+            if (close.Day == tradeDay)
+            {
+                afterHours ??= exchange?.HasRegularSessionEnded(tradeTime) ?? false;
+                if (afterHours == true)
+                {
+                    // A candle still open for updates holds an intraday price, so it is no reference: wait for the fetch
+                    // the cache makes once the day has settled.
+                    if (close.Day == unsettledDay)
+                    {
+                        return null;
+                    }
+
+                    if (close.Price != price)
+                    {
+                        return close.Price;
+                    }
+                }
             }
         }
 
@@ -306,3 +396,14 @@ internal static class EulerpoolParser
 /// When it was traded, or <see langword="null"/> when the message names no time.
 /// </param>
 internal readonly record struct EulerpoolTick(string Symbol, decimal Price, DateTimeOffset? Time);
+
+/// <summary>
+/// The close of a daily candle, dated by the day at the exchange.
+/// </summary>
+/// <param name="Day">
+/// The trading day at the exchange.
+/// </param>
+/// <param name="Price">
+/// The close of that day.
+/// </param>
+internal readonly record struct DailyClose(DateOnly Day, decimal Price);

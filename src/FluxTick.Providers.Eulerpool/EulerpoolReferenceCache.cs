@@ -1,12 +1,13 @@
 using System.Collections.Concurrent;
+using FluxTick.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace FluxTick.Providers.Eulerpool;
 
 /// <summary>
-/// Keeps the previous close of each ticker, which the stream and the latest quotes endpoint do not carry but the app needs
-/// to show the change and its color. It comes from the daily candles and holds for the whole trading day of the exchange
-/// of the ticker; a new day fetches it again.
+/// Keeps the recent daily closes of each ticker, from which the previous close is taken: the stream and the latest quotes
+/// endpoint do not carry it but the app needs it to show the change and its color. The closes hold for the whole trading
+/// day of the exchange of the ticker; a new day fetches them again.
 /// </summary>
 internal sealed class EulerpoolReferenceCache : IDisposable
 {
@@ -27,9 +28,15 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     private static readonly TimeSpan RetryAfterEmpty = TimeSpan.FromHours(6);
 
     /// <summary>
-    /// Fetches the previous close of a ticker, or <see langword="null"/> when there is none.
+    /// How long after the end of the regular session the candle of the day is taken as final, as a source needs a moment to
+    /// close it.
     /// </summary>
-    private readonly Func<string, CancellationToken, Task<decimal?>> _fetch;
+    private static readonly TimeSpan SettleDelay = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Fetches the daily closes of a ticker, oldest first, or <see langword="null"/> when there are none.
+    /// </summary>
+    private readonly Func<string, CancellationToken, Task<IReadOnlyList<PricePoint>?>> _fetch;
 
     /// <summary>
     /// The clock.
@@ -42,7 +49,7 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     private readonly ILogger _logger;
 
     /// <summary>
-    /// The previous close of each ticker known so far.
+    /// The daily closes of each ticker known so far.
     /// </summary>
     private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
 
@@ -65,7 +72,7 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     /// Initializes a new instance of the <see cref="EulerpoolReferenceCache"/> class.
     /// </summary>
     /// <param name="fetch">
-    /// Fetches the previous close of a ticker, or <see langword="null"/> when there is none.
+    /// Fetches the daily closes of a ticker, oldest first, or <see langword="null"/> when there are none.
     /// </param>
     /// <param name="time">
     /// The clock.
@@ -73,7 +80,7 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     /// <param name="logger">
     /// The logger.
     /// </param>
-    public EulerpoolReferenceCache(Func<string, CancellationToken, Task<decimal?>> fetch, TimeProvider time, ILogger logger)
+    public EulerpoolReferenceCache(Func<string, CancellationToken, Task<IReadOnlyList<PricePoint>?>> fetch, TimeProvider time, ILogger logger)
     {
         _fetch = fetch;
         _time = time;
@@ -81,16 +88,23 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     }
 
     /// <summary>
-    /// Gets the previous close known for a ticker, without waiting. A ticker that is not known yet, or whose value is from
+    /// Gets the previous close known for a ticker, without waiting. A ticker that is not known yet, or whose closes are from
     /// an earlier day, is fetched in the background, so the next call has the new value.
     /// </summary>
     /// <param name="symbol">
     /// The ticker.
     /// </param>
+    /// <param name="price">
+    /// The price to measure.
+    /// </param>
+    /// <param name="tradeTime">
+    /// When the price was traded, or <see langword="null"/> for the current time. The previous close is the close before
+    /// that trading day.
+    /// </param>
     /// <returns>
     /// The previous close, or <see langword="null"/> when it is not known.
     /// </returns>
-    public decimal? Get(string symbol)
+    public decimal? Get(string symbol, decimal price, DateTimeOffset? tradeTime = null)
     {
         _entries.TryGetValue(symbol, out var entry);
         if (!_disposed && NeedsRefresh(symbol, entry))
@@ -98,7 +112,9 @@ internal sealed class EulerpoolReferenceCache : IDisposable
             _ = Refresh(symbol);
         }
 
-        return entry?.Value;
+        return entry?.Closes is { } closes
+            ? EulerpoolParser.PreviousCloseBefore(closes, price, tradeTime ?? _time.GetUtcNow(), EulerpoolExchanges.Of(symbol), entry.Settled ? null : entry.Day)
+            : null;
     }
 
     /// <summary>
@@ -139,8 +155,9 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     }
 
     /// <summary>
-    /// Tells whether a ticker has to be fetched: it is not known, its value is from an earlier day of its exchange, or a
-    /// failed fetch is old enough to try again.
+    /// Tells whether a ticker has to be fetched: it is not known, its value is from an earlier day of its exchange, its
+    /// candle of today was fetched while the session was still on and the session has ended since, or a failed fetch is old
+    /// enough to try again.
     /// </summary>
     /// <param name="symbol">
     /// The ticker.
@@ -155,8 +172,19 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     {
         null => true,
         { RetryAt: { } retryAt } => _time.GetUtcNow() >= retryAt,
-        _ => entry.Day != DayOf(symbol),
+        _ => entry.Day != DayOf(symbol) || (!entry.Settled && SessionEnded(symbol)),
     };
+
+    /// <summary>
+    /// Tells whether the regular session of the exchange of a ticker has ended for today, so that its candle is complete.
+    /// </summary>
+    /// <param name="symbol">
+    /// The ticker.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the candle of today is complete.
+    /// </returns>
+    private bool SessionEnded(string symbol) => EulerpoolExchanges.Of(symbol)?.HasRegularSessionEnded(_time.GetUtcNow() - SettleDelay) ?? false;
 
     /// <summary>
     /// Gets the trading day of the exchange of a ticker, which is the date there.
@@ -212,10 +240,10 @@ internal sealed class EulerpoolReferenceCache : IDisposable
                 return;
             }
 
-            var value = await _fetch(symbol, _shutdown.Token).ConfigureAwait(false);
-            _entries[symbol] = value is null
-                ? new Entry(previous?.Value, previous?.Day ?? default, _time.GetUtcNow() + RetryAfterEmpty)
-                : new Entry(value, DayOf(symbol), null);
+            var closes = await _fetch(symbol, _shutdown.Token).ConfigureAwait(false);
+            _entries[symbol] = closes is not { Count: > 0 }
+                ? new Entry(previous?.Closes, previous?.Day ?? default, _time.GetUtcNow() + RetryAfterEmpty, previous?.Settled ?? false)
+                : new Entry(EulerpoolParser.ToDailyCloses(closes, EulerpoolExchanges.Of(symbol)?.Zone), DayOf(symbol), null, SessionEnded(symbol));
         }
         catch (Exception) when (_disposed)
         {
@@ -223,8 +251,8 @@ internal sealed class EulerpoolReferenceCache : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Eulerpool previous close of {Symbol} could not be fetched", symbol);
-            _entries[symbol] = new Entry(previous?.Value, previous?.Day ?? default, _time.GetUtcNow() + RetryAfter);
+            _logger.LogWarning(ex, "Eulerpool daily closes of {Symbol} could not be fetched", symbol);
+            _entries[symbol] = new Entry(previous?.Closes, previous?.Day ?? default, _time.GetUtcNow() + RetryAfter, previous?.Settled ?? false);
         }
         finally
         {
@@ -233,10 +261,10 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     }
 
     /// <summary>
-    /// The previous close of a ticker.
+    /// The daily closes of a ticker.
     /// </summary>
-    /// <param name="Value">
-    /// The previous close, or <see langword="null"/> when there is none.
+    /// <param name="Closes">
+    /// The daily closes dated by the day at the exchange, oldest day first, or <see langword="null"/> when there are none.
     /// </param>
     /// <param name="Day">
     /// The trading day at the exchange it was fetched for.
@@ -244,5 +272,9 @@ internal sealed class EulerpoolReferenceCache : IDisposable
     /// <param name="RetryAt">
     /// When to ask again after a failure, or <see langword="null"/> when the value is good for the day.
     /// </param>
-    private sealed record Entry(decimal? Value, DateOnly Day, DateTimeOffset? RetryAt);
+    /// <param name="Settled">
+    /// Whether the candle of today was complete when fetched, that is the regular session had ended; if not, the closes are
+    /// fetched again once it has.
+    /// </param>
+    private sealed record Entry(IReadOnlyList<DailyClose>? Closes, DateOnly Day, DateTimeOffset? RetryAt, bool Settled);
 }

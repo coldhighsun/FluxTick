@@ -53,6 +53,25 @@ public class ExchangeHoursTests
         ExchangeHours.ChinaA.ClampToSessionEnd(At(utc)).Should().Be(At(expected));
 
     /// <summary>
+    /// Verifies a regular session has ended from its close on, on a weekday only.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-10-28 19:59", false)] // 15:59 New York
+    [InlineData("2026-10-28 20:00", true)] // 16:00 New York
+    [InlineData("2026-10-28 22:00", true)] // 18:00 New York, after hours
+    [InlineData("2026-10-28 13:00", false)] // 09:00 New York, pre-market
+    [InlineData("2026-10-31 20:30", false)] // Saturday
+    public void HasRegularSessionEnded_Us_IsTrueFromTheCloseOnWeekdays(string utc, bool expected) =>
+        ExchangeHours.Us.HasRegularSessionEnded(At(utc)).Should().Be(expected);
+
+    /// <summary>
+    /// Verifies the midday break of Hong Kong is not the end of the regular session.
+    /// </summary>
+    [Fact]
+    public void HasRegularSessionEnded_HongKongMiddayBreak_IsFalse() =>
+        ExchangeHours.HongKong.HasRegularSessionEnded(At("2026-10-28 04:30")).Should().BeFalse(); // 12:30
+
+    /// <summary>
     /// Verifies the sessions of Hong Kong, including the closing auction.
     /// </summary>
     [Theory]
