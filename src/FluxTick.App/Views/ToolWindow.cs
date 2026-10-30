@@ -81,25 +81,6 @@ public class ToolWindow : Window
     }
 
     /// <summary>
-    /// Shows the window on its own in the middle of the primary screen, without an owner and without blocking anything,
-    /// for when there is no main window to open it over.
-    /// </summary>
-    public void ShowStandalone()
-    {
-        if (Screens.Primary is { } screen)
-        {
-            LimitToScreen(screen);
-            Position = ToolWindowPlacement.CenterOnScreen(new Size(Width, PlacementHeight()), screen.Scaling, screen.WorkingArea);
-
-            // A window that sizes itself to its content only knows its height once it is shown.
-            Opened += (_, _) => Position = ToolWindowPlacement.CenterOnScreen(FrameSize ?? Bounds.Size, screen.Scaling, screen.WorkingArea);
-        }
-
-        Show();
-        Activate();
-    }
-
-    /// <summary>
     /// Limits the height of the window to the screen. The limit wins over the preferred minimum so a small display never
     /// pushes the window off-screen.
     /// </summary>

@@ -15,7 +15,7 @@
   </UserControl.Styles>
 
   <Grid RowDefinitions="*,Auto" Margin="0,10,0,0">
-    <TabControl Grid.Row="0" Classes="settings">
+    <TabControl Grid.Row="0" Classes="settings" SelectedIndex="{Binding SelectedTabIndex}">
 
       <TabItem Header="{loc:T Settings_TabGeneral}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -83,20 +83,6 @@
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsVisible="{Binding AutoHideAvailable}" />
                 </Grid>
-              </StackPanel>
-            </Border>
-            <Border Classes="card">
-              <StackPanel Spacing="8">
-                <StackPanel>
-                  <TextBlock Text="{loc:T Settings_DataAndLogs}" />
-                  <TextBlock Text="{loc:T Settings_DataAndLogsHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}" />
-                  <Button Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}" />
-                </StackPanel>
-                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
-                           IsVisible="{Binding FolderOpenFailed}" />
               </StackPanel>
             </Border>
           </StackPanel>
@@ -346,10 +332,35 @@
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="{loc:T Settings_TabUpdates}">
+      <TabItem Header="{loc:T Settings_TabAbout}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel">
+          <StackPanel Margin="14,10,14,4">
+            <StackPanel Spacing="4" Margin="0,0,0,10">
+              <Image Source="/Assets/fluxtick.png" Width="48" Height="48" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding About.Product}" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            </StackPanel>
             <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{loc:T About_Author}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding About.Author}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{loc:T About_License}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding About.License}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                  <TextBlock Text="{loc:T About_Homepage}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                  <Button Grid.Column="1" Classes="link" Content="{Binding About.HomepageUrl}" Command="{Binding OpenProjectHomepageCommand}"
+                          FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="{loc:T Settings_OpenHomepageFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding HomepageOpenFailed}" />
+              </StackPanel>
+            </Border>
+            <!-- The update section has its own view model, which is none when the page has no updates. -->
+            <Border Classes="card" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel"
+                    IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}">
               <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="*,Auto">
                   <TextBlock Text="{loc:T Update_CurrentVersion}" VerticalAlignment="Center" />
@@ -362,13 +373,16 @@
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoCheck}" />
                 </Grid>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding ShowCheck}" />
-                  <Button Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
-                  <Button Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
-                  <Button Content="{loc:T Update_OpenFolder}" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsDownloaded}" />
-                </StackPanel>
-                <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                <!-- The status sits beside the buttons and wraps to the next line when there is no room for it. -->
+                <WrapPanel ItemSpacing="10" LineSpacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding ShowCheck}" />
+                    <Button Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
+                    <Button Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                    <Button Content="{loc:T Update_OpenFolder}" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsDownloaded}" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </WrapPanel>
                 <Grid ColumnDefinitions="*,Auto">
                   <TextBlock Text="{loc:T Update_ReleaseNotes}" FontWeight="SemiBold" VerticalAlignment="Center"
                              IsVisible="{Binding HasReleaseNotes}" />
@@ -381,13 +395,27 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </StackPanel>
             </Border>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <StackPanel>
+                  <TextBlock Text="{loc:T Settings_DataAndLogs}" />
+                  <TextBlock Text="{loc:T Settings_DataAndLogsHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}" />
+                  <Button Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}" />
+                </StackPanel>
+                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding FolderOpenFailed}" />
+              </StackPanel>
+            </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
 
     </TabControl>
 
-    <StackPanel Grid.Row="1" Margin="14,4,14,0">
+    <StackPanel Grid.Row="1" Margin="14,4,14,12">
       <TextBlock Text="{loc:T Tagline}" Classes="muted" FontSize="11" HorizontalAlignment="Center" Margin="0,0,0,2" />
       <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="10"
                  TextWrapping="Wrap" TextAlignment="Center" />

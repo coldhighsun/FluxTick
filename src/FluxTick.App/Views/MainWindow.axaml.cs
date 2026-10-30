@@ -267,6 +267,11 @@ public sealed partial class MainWindow : Window
     public void CloseToolWindow() => _toolWindow?.Close();
 
     /// <summary>
+    /// Brings the tool window that is open, if any, to the front.
+    /// </summary>
+    public void ActivateToolWindow() => _toolWindow?.Activate();
+
+    /// <summary>
     /// Hides the window to the tray instead of closing it, unless the application is exiting or the user chose that
     /// closing the window exits.
     /// </summary>
