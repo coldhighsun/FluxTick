@@ -12,6 +12,8 @@
           <Color x:Key="SurfaceColor">#151A22</Color>
           <Color x:Key="SurfaceHoverColor">#1C232D</Color>
           <Color x:Key="BorderColor">#252D39</Color>
+          <Color x:Key="ControlBorderColor">#445062</Color>
+          <Color x:Key="PopupBgColor">#0E1116</Color>
           <Color x:Key="TextColor">#E6EDF3</Color>
           <Color x:Key="MutedColor">#7D8590</Color>
           <Color x:Key="AccentColor">#2EE59D</Color>
@@ -24,6 +26,8 @@
           <Color x:Key="SurfaceColor">#FFFFFF</Color>
           <Color x:Key="SurfaceHoverColor">#EEF1F4</Color>
           <Color x:Key="BorderColor">#D0D7DE</Color>
+          <Color x:Key="ControlBorderColor">#C2CAD3</Color>
+          <Color x:Key="PopupBgColor">#FFFFFF</Color>
           <Color x:Key="TextColor">#1F2328</Color>
           <Color x:Key="MutedColor">#656D76</Color>
           <Color x:Key="AccentColor">#12A66D</Color>
@@ -37,13 +41,24 @@
       <SolidColorBrush x:Key="SurfaceBrush" Color="{DynamicResource SurfaceColor}" />
       <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{DynamicResource SurfaceHoverColor}" />
       <SolidColorBrush x:Key="BorderBrush" Color="{DynamicResource BorderColor}" />
+      <SolidColorBrush x:Key="ControlBorderBrush" Color="{DynamicResource ControlBorderColor}" />
+      <SolidColorBrush x:Key="PopupBgBrush" Color="{DynamicResource PopupBgColor}" />
+      <!-- The built-in drop-down colors, replaced here as well as in the style below so that the pop-up cannot fall back to
+           the theme's gray whichever of the two reaches it. -->
+      <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="{DynamicResource PopupBgColor}" />
+      <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="{DynamicResource ControlBorderColor}" />
       <SolidColorBrush x:Key="TextBrush" Color="{DynamicResource TextColor}" />
       <SolidColorBrush x:Key="MutedBrush" Color="{DynamicResource MutedColor}" />
       <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}" />
       <SolidColorBrush x:Key="WarnBrush" Color="{DynamicResource WarnColor}" />
-      <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace</FontFamily>
+      <!-- The font of the interface text; App.ApplyFont() replaces it with the one of the settings. -->
+      <FontFamily x:Key="UiFont">$Default</FontFamily>
     </ResourceDictionary>
   </Styles.Resources>
+
+  <Style Selector=":is(TopLevel)">
+    <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+  </Style>
 
   <Style Selector="TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -52,7 +67,10 @@
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
   </Style>
   <Style Selector="TextBlock.mono">
-    <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+    <!-- Figures of the same width, so that a changing price does not shift: the font of the text, with its tabular figures
+         when it has them (Maple Mono has equal widths anyway). -->
+    <Setter Property="FontFeatures" Value="tnum" />
   </Style>
   <Style Selector="TextBlock.section">
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
@@ -202,8 +220,157 @@
     <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
     <Setter Property="Foreground" Value="#0B0D10" />
     <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="14,5" />
+    <Setter Property="Cursor" Value="Hand" />
   </Style>
+  <!-- Text buttons without a fill: a thin border and the same rounding as the primary button. Opt-in, because some
+       buttons (the search result rows, the new group placeholder) wrap their own look. -->
+  <Style Selector="Button.outline">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="14,5" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.outline:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+  </Style>
+  <Style Selector="Button.outline:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    <Setter Property="Opacity" Value="0.7" />
+  </Style>
+
+  <!-- Text boxes: the same border and rounding as the buttons and drop-down lists. The border sits on a template part. The
+       built-in focused look thickens the border to 2px and changes the fill, which shifts the text, so both are set again. -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="MinHeight" Value="30" />
+  </Style>
+  <!-- The hotkey box looks like a text box: a thin border, the accent color while it has the focus, a light fill under the
+       pointer. -->
+  <Style Selector="views|HotkeyBox">
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+  </Style>
+  <Style Selector="views|HotkeyBox:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+  <Style Selector="views|HotkeyBox:focus">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+  </Style>
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="TextBox:disabled">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+  <Style Selector="TextBox:disabled /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+  </Style>
+
+  <!-- The pop-up list of the font box: the same border, fill and rounding as the pop-up of a drop-down list. -->
+  <Style Selector="Border.popuplist">
+    <Setter Property="Background" Value="{DynamicResource PopupBgBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="4" />
+  </Style>
+  <Style Selector="ListBox.fontlist">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="ListBox.fontlist ListBoxItem">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="ListBox.fontlist ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <!-- Drop-down lists: the same border and rounding as the outline buttons. The border and fill sit on template parts, so
+       the states are spelled out on them; the pop-up has its own border and the items their own rounding. -->
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="12,5,0,5" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ Border#Background, ComboBox:pressed /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ PathIcon#DropDownGlyph, ComboBox:dropdownopen /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <Style Selector="ComboBox:dropdownopen /template/ Border#Background">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <!-- The keyboard focus ring: the built-in one fills the box with its own color, which would hide the hover fill. -->
+  <Style Selector="ComboBox:focus-visible /template/ Border#HighlightBackground">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <Style Selector="ComboBox:disabled">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+  <Style Selector="ComboBox /template/ Border#PopupBorder">
+    <Setter Property="Background" Value="{DynamicResource PopupBgBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="4" />
+  </Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <!-- The built-in selected look fills the item with the accent color; every selected state is spelled out so that the
+       selection is shown by the text color only. -->
+  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter, ComboBoxItem:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter, ComboBoxItem:selected:pointerover /template/ ContentPresenter, ComboBoxItem:selected:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter, ComboBoxItem:selected:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+
   <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
     <Setter Property="Opacity" Value="0.85" />
@@ -417,7 +584,7 @@
     <Setter Property="Margin" Value="14,0" />
   </Style>
   <Style Selector="TabControl.settings > TabItem">
-    <Setter Property="Padding" Value="12,6,12,8" />
+    <Setter Property="Padding" Value="8,6,8,8" />
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="FontSize" Value="12" />
     <Setter Property="FontWeight" Value="SemiBold" />

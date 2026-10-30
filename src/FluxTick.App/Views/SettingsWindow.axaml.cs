@@ -10,7 +10,7 @@ public sealed partial class SettingsWindow : ToolWindow
     /// Appearance and Data sources, scroll. On a small screen the tool window limits the height to its share of the
     /// screen, and the page scrolls.
     /// </summary>
-    private const double InitialHeight = 600;
+    private const double InitialHeight = 680;
 
     /// <summary>
     /// The fixed width, wider than the other tool windows so that the lists of the settings have room.

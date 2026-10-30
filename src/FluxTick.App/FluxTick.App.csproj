@@ -43,7 +43,6 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
-    <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="GitHubReleaseUpdater" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

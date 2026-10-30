@@ -389,6 +389,11 @@ internal sealed class AppearanceFile
     public ThemeMode? ThemeMode { get; set; }
 
     /// <summary>
+    /// Gets or sets the name of the font family of the interface text.
+    /// </summary>
+    public string? Font { get; set; }
+
+    /// <summary>
     /// Gets or sets the interface language.
     /// </summary>
     public LanguageMode? Language { get; set; }
@@ -446,6 +451,7 @@ internal sealed class AppearanceFile
             AutoHideAtEdge = AutoHideAtEdge ?? defaults.AutoHideAtEdge,
             ColorConvention = ColorConvention ?? defaults.ColorConvention,
             ThemeMode = ThemeMode ?? defaults.ThemeMode,
+            Font = Font?.Trim() ?? defaults.Font,
             Language = Language ?? defaults.Language,
             Layout = Layout ?? defaults.Layout,
             CardSize = CardSize ?? defaults.CardSize,

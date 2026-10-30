@@ -22,58 +22,58 @@
           <StackPanel Margin="14,10,14,4">
             <Border Classes="card">
               <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Language}" />
-                    <TextBlock Text="{loc:T Settings_LanguageHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_LanguageHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" Width="140" />
                 </Grid>
                 <!-- Only Windows can register the app to start at sign-in. -->
-                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsAutoStartSupported}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding IsAutoStartSupported}">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_LaunchAtLogin}" />
                     <TextBlock Text="{loc:T Settings_LaunchAtLoginHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding LaunchAtLogin}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_StartMinimized}" />
                     <TextBlock Text="{loc:T Settings_StartMinimizedHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding StartMinimized}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_CloseToTray}" />
                     <TextBlock Text="{loc:T Settings_CloseToTrayHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsBossKeySupported}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding IsBossKeySupported}">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_BossKey}" />
                     <TextBlock Text="{loc:T Settings_BossKeyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
-                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" EmptyText="{loc:T Settings_BossKeyNone}" RecordingText="{loc:T Settings_BossKeyPress}" IsCapturing="{Binding IsRecordingBossKey}" Width="130" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
+                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" EmptyText="{loc:T Settings_BossKeyNone}" RecordingText="{loc:T Settings_BossKeyPress}" IsCapturing="{Binding IsRecordingBossKey}" Width="140" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_BaseCurrency}" />
                     <TextBlock Text="{loc:T Settings_BaseCurrencyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
-                  <ComboBox Grid.Column="1" ItemsSource="{Binding BaseCurrencies}" SelectedItem="{Binding BaseCurrency}" Width="100" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding BaseCurrencies}" SelectedItem="{Binding BaseCurrency}" Width="140" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <TextBlock Text="{loc:T Settings_KeepOnTop}" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <TextBlock Text="{loc:T Settings_LockPosition}" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_AutoHide}" />
                     <TextBlock Text="{loc:T Settings_AutoHideHint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
@@ -96,61 +96,79 @@
               <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                   <TextBlock Text="{loc:T Settings_Opacity}" VerticalAlignment="Center" />
-                  <Slider Grid.Column="1" Minimum="0.3" Maximum="1" Value="{Binding Opacity}" Margin="12,0" />
+                  <Slider Grid.Column="1" Minimum="0.3" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True" Value="{Binding Opacity}" Margin="12,0" />
                   <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat={}{0:P0}}" Classes="muted mono" VerticalAlignment="Center" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Compact}" />
-                    <TextBlock Text="{loc:T Settings_CompactHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_CompactHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding Compact}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Layout}" />
-                    <TextBlock Text="{loc:T Settings_LayoutHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_LayoutHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Layouts}" SelectedItem="{Binding SelectedLayout}" Width="140" />
                 </Grid>
                 <!-- Grouping only exists in the card layout, so the setting is unavailable (and dimmed) in the list layout. -->
-                <Grid ColumnDefinitions="*,Auto" Classes="dependent" IsEnabled="{Binding IsCardLayoutSelected}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" Classes="dependent" IsEnabled="{Binding IsCardLayoutSelected}">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_CardGrouping}" />
-                    <TextBlock Text="{loc:T Settings_CardGroupingHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_CardGroupingHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Groupings}" SelectedItem="{Binding SelectedGrouping}" Width="140" />
                 </Grid>
                 <!-- The size only exists in the card layout, like the grouping. -->
-                <Grid ColumnDefinitions="*,Auto" Classes="dependent" IsEnabled="{Binding IsCardLayoutSelected}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" Classes="dependent" IsEnabled="{Binding IsCardLayoutSelected}">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_CardSize}" />
-                    <TextBlock Text="{loc:T Settings_CardSizeHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_CardSizeHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding CardSizes}" SelectedItem="{Binding SelectedCardSize}" Width="140" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <TextBlock Text="{loc:T Settings_Roll}" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding RollPriceOnUpdate}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_MarketStatus}" />
                     <TextBlock Text="{loc:T Settings_MarketStatusHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding ShowMarketStatus}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Theme}" />
-                    <TextBlock Text="{loc:T Settings_ThemeHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_ThemeHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" Width="140" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_Font}" />
+                    <TextBlock Text="{loc:T Settings_FontHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <!-- A text box with a list of the installed fonts below it. The list is filtered by what is typed; a click on a
+                       font uses it, and an empty box is the font of the system. -->
+                  <Panel Grid.Column="1" Width="140" VerticalAlignment="Center">
+                    <TextBox Name="FontBox" Text="{Binding FontText}" PlaceholderText="{loc:T Settings_FontSystem}" AutomationProperties.Name="{loc:T Settings_Font}"
+                             GotFocus="OnFontBoxGotFocus" LostFocus="OnFontBoxLostFocus" PointerReleased="OnFontBoxPointerReleased" KeyDown="OnFontBoxKeyDown" />
+                    <Popup IsOpen="{Binding IsFontListOpen}" PlacementTarget="{Binding #FontBox}" Placement="Bottom" Width="140" IsLightDismissEnabled="True"
+                           OverlayDismissEventPassThrough="True" Closed="OnFontListClosed">
+                      <Border Classes="popuplist" Margin="0,4,0,0">
+                        <ListBox Name="FontList" Classes="fontlist" ItemsSource="{Binding FontSuggestions}" Focusable="False" MaxHeight="240" />
+                      </Border>
+                    </Popup>
+                  </Panel>
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_UpDownColors}" />
-                    <TextBlock Text="{loc:T Settings_UpDownColorsHint}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{loc:T Settings_UpDownColorsHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding ColorConventions}" SelectedItem="{Binding SelectedColorConvention}" Width="140" />
                 </Grid>
@@ -180,7 +198,7 @@
                       <TextBox Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MaxLength="40" VerticalAlignment="Center" Margin="0,0,6,0" Cursor="IBeam" />
                       <Button Grid.Column="2" Classes="icon" Command="{Binding DeleteCommand}" AutomationProperties.Name="{loc:T Section_DeleteGroup}" Cursor="Arrow"
                               ToolTip.Tip="{loc:T Settings_DeleteGroupTip}">
-                        <Path Data="M3 3l8 8M11 3l-8 8" />
+                        <Path Data="M2 3.5h10M5.5 3.5V2h3v1.5M3.5 3.5l.6 8h5.8l.6-8M5.8 6v3.5M8.2 6v3.5" />
                       </Button>
                     </Grid>
                   </Border>
@@ -220,7 +238,7 @@
                       <TextBlock Grid.Column="2" Text="{Binding Symbol}" Classes="muted mono" FontSize="11" VerticalAlignment="Center" Margin="8,0,6,0" />
                       <Button Grid.Column="3" Classes="icon" Command="{Binding RemoveCommand}" Cursor="Arrow"
                               AutomationProperties.Name="{loc:T Watch_RemoveFromTray}" ToolTip.Tip="{loc:T Watch_RemoveFromTray}">
-                        <Path Data="M3 3l8 8M11 3l-8 8" />
+                        <Path Data="M2 3.5h10M5.5 3.5V2h3v1.5M3.5 3.5l.6 8h5.8l.6-8M5.8 6v3.5M8.2 6v3.5" />
                       </Button>
                     </Grid>
                   </Border>
@@ -264,7 +282,7 @@
                   <Border Classes="card">
                     <StackPanel Spacing="6">
                       <!-- Header: click to expand or collapse; the enable switch stays outside the button. -->
-                      <Grid ColumnDefinitions="*,Auto">
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                         <ToggleButton Classes="disclosure" Cursor="Hand" IsChecked="{Binding IsExpanded, Mode=TwoWay}"
                                       AutomationProperties.Name="{Binding Name}">
                           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -316,9 +334,9 @@
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" IsVisible="{Binding HasOptions}">
                           <Button Classes="primary" Content="{loc:T Settings_Save}" Command="{Binding SaveCommand}" IsVisible="{Binding IsDirty}"
                                   FontSize="11" Padding="12,4" />
-                          <Button Content="{loc:T Settings_Revert}" Command="{Binding RevertCommand}" IsVisible="{Binding IsDirty}"
+                          <Button Classes="outline" Content="{loc:T Settings_Revert}" Command="{Binding RevertCommand}" IsVisible="{Binding IsDirty}"
                                   FontSize="11" Padding="10,4" />
-                          <Button Content="{loc:T Settings_RestoreDefaults}" Command="{Binding RestoreDefaultsCommand}"
+                          <Button Classes="outline" Content="{loc:T Settings_RestoreDefaults}" Command="{Binding RestoreDefaultsCommand}"
                                   FontSize="11" Padding="10,4" ToolTip.Tip="{loc:T Settings_RestoreDefaultsTip}" />
                           <TextBlock Text="{loc:T Settings_Unsaved}" Classes="muted" FontSize="11" VerticalAlignment="Center" IsVisible="{Binding IsDirty}" />
                         </StackPanel>
@@ -335,24 +353,30 @@
       <TabItem Header="{loc:T Settings_TabAbout}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
-            <StackPanel Spacing="4" Margin="0,0,0,10">
-              <Image Source="/Assets/fluxtick.png" Width="48" Height="48" HorizontalAlignment="Center" />
-              <TextBlock Text="{Binding About.Product}" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            <!-- The icon with the name of the app and its version beside it, the two together in the middle; the tag line is in
+                 the footer of the window. -->
+            <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center" Margin="0,4,0,16">
+              <Image Source="/Assets/fluxtick.png" Width="72" Height="72" VerticalAlignment="Center" />
+              <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding About.Product}" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Updates.CurrentVersionText}" Classes="muted mono" FontSize="12"
+                           IsVisible="{Binding Updates, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              </StackPanel>
             </StackPanel>
             <Border Classes="card">
               <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <TextBlock Text="{loc:T About_Author}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding About.Author}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding About.Author}" Classes="muted" VerticalAlignment="Center" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <TextBlock Text="{loc:T About_License}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding About.License}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding About.License}" Classes="muted" VerticalAlignment="Center" />
                 </Grid>
-                <Grid ColumnDefinitions="Auto,*">
-                  <TextBlock Text="{loc:T About_Homepage}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                  <TextBlock Text="{loc:T About_Homepage}" VerticalAlignment="Center" />
                   <Button Grid.Column="1" Classes="link" Content="{Binding About.HomepageUrl}" Command="{Binding OpenProjectHomepageCommand}"
-                          FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                          HorizontalAlignment="Right" VerticalAlignment="Center" />
                 </Grid>
                 <TextBlock Text="{loc:T Settings_OpenHomepageFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
                            IsVisible="{Binding HomepageOpenFailed}" />
@@ -362,28 +386,25 @@
             <Border Classes="card" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel"
                     IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}">
               <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="*,Auto">
-                  <TextBlock Text="{loc:T Update_CurrentVersion}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding CurrentVersionText}" Classes="muted mono" VerticalAlignment="Center" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Update_AutoCheck}" />
                     <TextBlock Text="{loc:T Update_AutoCheckHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoCheck}" />
                 </Grid>
-                <!-- The status sits beside the buttons and wraps to the next line when there is no room for it. -->
-                <WrapPanel ItemSpacing="10" LineSpacing="6">
+                <!-- The buttons first, and the status under them on a line of its own, which takes no room while it is empty. -->
+                <StackPanel Spacing="6">
                   <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding ShowCheck}" />
-                    <Button Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
-                    <Button Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
-                    <Button Content="{loc:T Update_OpenFolder}" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsDownloaded}" />
+                    <Button Classes="outline" Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding ShowCheck}" />
+                    <Button Classes="outline" Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
+                    <Button Classes="outline" Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                    <Button Classes="outline" Content="{loc:T Update_OpenFolder}" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsDownloaded}" />
                   </StackPanel>
-                  <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
-                </WrapPanel>
-                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                             IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <TextBlock Text="{loc:T Update_ReleaseNotes}" FontWeight="SemiBold" VerticalAlignment="Center"
                              IsVisible="{Binding HasReleaseNotes}" />
                   <Button Grid.Column="1" Classes="link" Content="{loc:T Update_OpenReleasePage}" FontSize="11"
@@ -395,20 +416,15 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </StackPanel>
             </Border>
-            <Border Classes="card">
-              <StackPanel Spacing="8">
-                <StackPanel>
-                  <TextBlock Text="{loc:T Settings_DataAndLogs}" />
-                  <TextBlock Text="{loc:T Settings_DataAndLogsHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}" />
-                  <Button Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}" />
-                </StackPanel>
-                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
-                           IsVisible="{Binding FolderOpenFailed}" />
+            <!-- Where the data is kept: two buttons at the bottom of the page. -->
+            <StackPanel Spacing="6" Margin="0,6,0,8">
+              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                <Button Classes="outline" Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}" />
+                <Button Classes="outline" Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}" />
               </StackPanel>
-            </Border>
+              <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap" HorizontalAlignment="Center"
+                         IsVisible="{Binding FolderOpenFailed}" />
+            </StackPanel>
           </StackPanel>
         </ScrollViewer>
       </TabItem>

@@ -882,6 +882,22 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     private readonly SettingsManager _settings;
 
     /// <summary>
+    /// The names of the installed font families, read when first needed.
+    /// </summary>
+    private readonly Lazy<IReadOnlyList<string>> _fontFamilies;
+
+    /// <summary>
+    /// The family the font box goes back to when it is left: the font that is saved, or being saved, or an empty text for
+    /// the font of the system.
+    /// </summary>
+    private string _committedFont = string.Empty;
+
+    /// <summary>
+    /// Whether the text of the font box is being set by the code, which is not typing in the box.
+    /// </summary>
+    private bool _settingFontText;
+
+    /// <summary>
     /// Saves the opacity once the slider stops moving.
     /// </summary>
     private readonly Debouncer _opacitySave;
@@ -964,6 +980,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="logger">
     /// Receives the reason when a folder could not be opened, or <see langword="null"/> for none.
     /// </param>
+    /// <param name="fontFamilies">
+    /// Lists the names of the installed font families; by default the system is asked.
+    /// </param>
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
@@ -975,10 +994,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         Func<bool>? trayProbe = null,
         Func<string, bool>? openFolder = null,
         Func<string, bool>? openHomepage = null,
-        ILogger<SettingsViewModel>? logger = null)
+        ILogger<SettingsViewModel>? logger = null,
+        Func<IReadOnlyList<string>>? fontFamilies = null)
         : base(ui)
     {
         _settings = settings;
+        _fontFamilies = new Lazy<IReadOnlyList<string>>(fontFamilies ?? FontCatalog.GetFamilies);
         _autoStart = autoStart;
         _logger = logger;
         _openFolder = openFolder ?? (directory => FileManager.TryOpen(directory, logger: logger));
@@ -1063,6 +1084,26 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the selectable color schemes.
     /// </summary>
     public IReadOnlyList<ThemeMode> ThemeModes { get; } = Enum.GetValues<ThemeMode>();
+
+    /// <summary>
+    /// Gets the names of the font families installed on this computer. Read when first asked, as that takes a moment.
+    /// </summary>
+    public IReadOnlyList<string> FontFamilies => _fontFamilies.Value;
+
+    /// <summary>
+    /// Gets the fonts the list below the font box shows: all of them while the box is empty or shows the font in use, and
+    /// else the ones whose name contains what was typed.
+    /// </summary>
+    public IReadOnlyList<string> FontSuggestions
+    {
+        get
+        {
+            var text = FontText.Trim();
+            return text.Length == 0 || string.Equals(text, _committedFont, StringComparison.OrdinalIgnoreCase)
+                ? FontFamilies
+                : [.. FontFamilies.Where(f => f.Contains(text, StringComparison.OrdinalIgnoreCase))];
+        }
+    }
 
     /// <summary>
     /// Gets the languages to choose from.
@@ -1257,7 +1298,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets or sets the background opacity between 0.3 and 1.
     /// </summary>
     [ObservableProperty]
-    public partial double Opacity { get; set; } = 0.92;
+    public partial double Opacity { get; set; } = 0.9;
 
     /// <summary>
     /// Gets or sets a value indicating whether the window stays on top.
@@ -1313,6 +1354,19 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// </summary>
     [ObservableProperty]
     public partial ThemeMode SelectedThemeMode { get; set; }
+
+    /// <summary>
+    /// Gets or sets the text of the font box: the name of the font family, or nothing for the font of the system. It is
+    /// only a name being typed until a font is clicked in the list or Enter is pressed, which saves it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string FontText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the list of fonts below the font box is open.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsFontListOpen { get; set; }
 
     /// <summary>
     /// Gets or sets the interface language.
@@ -1426,6 +1480,15 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             AutoHideAtEdge = current.Appearance.AutoHideAtEdge;
             SelectedColorConvention = current.Appearance.ColorConvention;
             SelectedThemeMode = current.Appearance.ThemeMode;
+
+            // The saved name is shown as it is; whether it is still installed is only checked when the box is used, as
+            // that lists the system's fonts.
+            _committedFont = current.Appearance.Font;
+            if (!IsFontListOpen)
+            {
+                FontText = _committedFont;
+            }
+
             SelectedLanguage = current.Appearance.Language;
             SelectedLayout = current.Appearance.Layout;
             SelectedGrouping = current.Appearance.Grouping;
@@ -1624,6 +1687,156 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new value.
     /// </param>
     partial void OnSelectedThemeModeChanged(ThemeMode value) => SaveSetting(s => s.Appearance.ThemeMode = value);
+
+    /// <summary>
+    /// Opens the list of fonts while the text is being typed. Typing does not save a font: that takes a click on a font in
+    /// the list or Enter.
+    /// </summary>
+    /// <param name="value">
+    /// The new text of the font box.
+    /// </param>
+    partial void OnFontTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(FontSuggestions));
+        if (_loading || _settingFontText)
+        {
+            return;
+        }
+
+        IsFontListOpen = true;
+    }
+
+    /// <summary>
+    /// Gets the family a saved font name stands for. A name that no installed family matches is the font of the system,
+    /// which is what the app uses then, so the box shows it as empty. The families are only listed when a name is saved.
+    /// </summary>
+    /// <param name="saved">
+    /// The saved font name, or an empty text.
+    /// </param>
+    /// <returns>
+    /// The installed family with that name, or an empty text.
+    /// </returns>
+    private string InstalledFont(string saved) =>
+        saved.Length == 0 ? string.Empty : FindFamily(saved) ?? string.Empty;
+
+    /// <summary>
+    /// Finds the installed family a name stands for, whatever the case.
+    /// </summary>
+    /// <param name="name">
+    /// The name to look for.
+    /// </param>
+    /// <returns>
+    /// The family, spelled as the system has it, or <see langword="null"/> when none has that name.
+    /// </returns>
+    private string? FindFamily(string name) =>
+        FontFamilies.FirstOrDefault(f => string.Equals(f, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Opens the list of fonts below the font box.
+    /// </summary>
+    public void OpenFontList()
+    {
+        if (IsFontListOpen)
+        {
+            return;
+        }
+
+        // A saved font that was removed from the computer is the font of the system, which the box shows as empty.
+        var installed = InstalledFont(_committedFont);
+        if (!string.Equals(installed, _committedFont, StringComparison.Ordinal))
+        {
+            _committedFont = installed;
+            SetFontText(installed);
+        }
+
+        IsFontListOpen = true;
+    }
+
+    /// <summary>
+    /// Uses the font the text of the box stands for, for when Enter is pressed: the installed family with that name, or the
+    /// only family the typed text leaves in the list, or the font of the system when the box is empty. Any other text
+    /// changes nothing.
+    /// </summary>
+    public void CommitFont()
+    {
+        var text = FontText.Trim();
+        if (text.Length == 0)
+        {
+            ChooseFont(string.Empty);
+            return;
+        }
+
+        var family = FindFamily(text);
+        if (family is null && FontSuggestions is [var only])
+        {
+            family = only;
+        }
+
+        if (family is not null)
+        {
+            ChooseFont(family);
+        }
+    }
+
+    /// <summary>
+    /// Uses a font from the list: shows it in the box, saves it and closes the list.
+    /// </summary>
+    /// <param name="family">
+    /// The family name.
+    /// </param>
+    public void ChooseFont(string family)
+    {
+        SetFontText(family);
+        SaveFont(family);
+        IsFontListOpen = false;
+    }
+
+    /// <summary>
+    /// Saves the font of the interface text, unless it is the one already saved.
+    /// </summary>
+    /// <param name="family">
+    /// The family name, or an empty text for the font of the system.
+    /// </param>
+    private void SaveFont(string family)
+    {
+        _committedFont = family;
+        if (string.Equals(family, _settings.Current.Appearance.Font, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SaveSetting(s => s.Appearance.Font = family);
+    }
+
+    /// <summary>
+    /// Closes the list and shows the font in use in the box again, for when the box is left or Escape is pressed: typing
+    /// saves nothing, so whatever was typed gives way to the font in use. A font is only used through a click in the list
+    /// or Enter.
+    /// </summary>
+    public void LeaveFontBox()
+    {
+        IsFontListOpen = false;
+        SetFontText(_committedFont);
+    }
+
+    /// <summary>
+    /// Sets the text of the font box without that being taken for typing.
+    /// </summary>
+    /// <param name="text">
+    /// The new text.
+    /// </param>
+    private void SetFontText(string text)
+    {
+        _settingFontText = true;
+        try
+        {
+            FontText = text;
+        }
+        finally
+        {
+            _settingFontText = false;
+        }
+    }
 
     /// <summary>
     /// Saves a changed interface language.
