@@ -748,7 +748,7 @@ public class MarketDataServiceTests
     {
         var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 6, 0, 0, TimeSpan.Zero));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 21, 0, 0, TimeSpan.Zero)); // 17:00 in New York
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
         await service.ApplyAsync(SettingsFor(apple));
         var provider = yahoo.Created.Single();
@@ -937,13 +937,13 @@ public class MarketDataServiceTests
     /// Verifies the pre-market and after-hours states a source reports reach the snapshot.
     /// </summary>
     [Theory]
-    [InlineData(MarketState.PreMarket)]
-    [InlineData(MarketState.AfterHours)]
-    public async Task MarketState_WhenTheSourceReportsPreMarketOrAfterHours_UsesIt(MarketState reported)
+    [InlineData(MarketState.PreMarket, 12)] // 08:00 in New York
+    [InlineData(MarketState.AfterHours, 21)] // 17:00 in New York
+    public async Task MarketState_WhenTheSourceReportsPreMarketOrAfterHours_UsesIt(MarketState reported, int hourUtc)
     {
         var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
         var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero)); // 11:00 in New York
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, hourUtc, 0, 0, TimeSpan.Zero));
         await using var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
         await service.ApplyAsync(SettingsFor(apple));
 
@@ -1241,6 +1241,112 @@ public class MarketDataServiceTests
 
         provider.Emit(new Quote(Btc.Id, 2m, null, _time.GetUtcNow()));
         await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+    }
+
+    /// <summary>
+    /// Verifies a price the source reports as pre-market or after-hours is live however old its trade time is, even beyond
+    /// the delay limit.
+    /// </summary>
+    [Theory]
+    [InlineData(MarketState.PreMarket, 12)] // 08:00 in New York
+    [InlineData(MarketState.AfterHours, 21)] // 17:00 in New York
+    public async Task Health_QuoteReportedAsAnExtendedSession_IsLiveWhateverItsAge(MarketState reported, int hourUtc)
+    {
+        var (service, yahoo, apple, time) = await StartYahooAsync(hourUtc);
+        await using var _ = service;
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow().AddMinutes(-45)) { Market = reported });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == reported);
+        service.GetSnapshots().Single().Health.Should().Be(AssetHealth.Live);
+    }
+
+    /// <summary>
+    /// Verifies a pre-market report that outlives its session, left on the last quote while the source keeps answering,
+    /// no longer keeps the price live once the regular session is under way.
+    /// </summary>
+    [Fact]
+    public async Task Health_PreMarketReportLeftOverIntoTheRegularSession_IsDelayed()
+    {
+        var (service, yahoo, apple, time) = await StartYahooAsync(13); // 09:00 in New York
+        await using var _ = service;
+        var provider = yahoo.Created.Single();
+        provider.Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow().AddMinutes(-5)) { Market = MarketState.PreMarket });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+
+        time.Advance(TimeSpan.FromMinutes(40)); // 09:40, the regular session
+        provider.Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow().AddMinutes(-5)) { Market = MarketState.PreMarket });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Open);
+        service.GetSnapshots().Single().Health.Should().Be(AssetHealth.Delayed);
+    }
+
+    /// <summary>
+    /// Verifies an after-hours report left on the last quote past the end of the session is told as closed.
+    /// </summary>
+    [Fact]
+    public async Task MarketState_AfterHoursReportLeftOverPastTheSession_IsClosed()
+    {
+        var (service, yahoo, apple, time) = await StartYahooAsync(23); // 19:00 in New York
+        await using var _ = service;
+        var provider = yahoo.Created.Single();
+        provider.Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()) { Market = MarketState.AfterHours });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.AfterHours);
+
+        time.Advance(TimeSpan.FromMinutes(70)); // 20:10
+        provider.Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()) { Market = MarketState.AfterHours });
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().MarketState == MarketState.Closed);
+    }
+
+    /// <summary>
+    /// Verifies a pre-market that only the hours say, not the source, does not hide a delay.
+    /// </summary>
+    [Fact]
+    public async Task Health_PreMarketOnlyFromTheHours_StaysDelayed()
+    {
+        var (service, yahoo, apple, time) = await StartYahooAsync(12);
+        await using var _ = service;
+
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow().AddMinutes(-5)));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Delayed);
+        service.GetSnapshots().Single().MarketState.Should().Be(MarketState.PreMarket);
+    }
+
+    /// <summary>
+    /// Verifies a source that reports the pre-market and then goes quiet is stale, not live.
+    /// </summary>
+    [Fact]
+    public async Task Health_PreMarketSourceGoesSilent_BecomesStale()
+    {
+        var (service, yahoo, apple, time) = await StartYahooAsync(12);
+        await using var _ = service;
+        yahoo.Created.Single().Emit(new Quote(apple.Id, 1m, null, time.GetUtcNow()) { Market = MarketState.PreMarket });
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+    }
+
+    /// <summary>
+    /// Starts a service with one US equity on a source that knows the US trading hours.
+    /// </summary>
+    /// <param name="hourUtc">
+    /// The hour of the clock on 2026-10-28, in UTC.
+    /// </param>
+    /// <returns>
+    /// The service, the source, the asset and the clock.
+    /// </returns>
+    private static async Task<(MarketDataService Service, FakeProviderFactory Yahoo, Asset Apple, FakeTimeProvider Time)> StartYahooAsync(int hourUtc)
+    {
+        var yahoo = new FakeProviderFactory("yahoo", [AssetClass.Equity]) { Hours = ExchangeHours.Us };
+        var apple = new Asset("yahoo", "AAPL", "Apple", AssetClass.Equity);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, hourUtc, 0, 0, TimeSpan.Zero));
+        var service = new MarketDataService(new ProviderRegistry([yahoo]), NullLoggerFactory.Instance, time);
+        await service.ApplyAsync(SettingsFor(apple));
+        return (service, yahoo, apple, time);
     }
 
     /// <summary>

@@ -73,7 +73,7 @@ public sealed class MySourceProvider(ProviderDescriptor descriptor, TimeSpan int
 
 The last argument of `Quote` is **when the price was traded**, not when your code received or parsed it. The app
 compares it with the clock: a quote older than the stale threshold (one minute by default) makes the instrument show as `Delayed` (quotes keep
-arriving, as a polled source does after the market closed or a delayed feed does; it is `Stale` when nothing arrives at all, or when the quote is older than 30 minutes, see `DelayedUpTo` in `MarketDataService`), and the sparkline places the price at that time, so a
+arriving, as a polled source does after the market closed or a delayed feed does; it is `Stale` when nothing arrives at all, or when the quote is older than 30 minutes, see `DelayedUpTo` in `MarketDataService`; a quote that reports `Quote.Market` as `PreMarket` or `AfterHours` is `Live` whatever its age while the source keeps answering and the trading hours agree, so set `Market` to these states only when the source itself reports them), and the sparkline places the price at that time, so a
 stretch without trades shows as a gray dashed line. Use the time the API reports; fall back to
 `TimeProvider.GetUtcNow()` only when it reports none.
 
