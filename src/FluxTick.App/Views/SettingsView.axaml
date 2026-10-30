@@ -73,7 +73,7 @@
                   <TextBlock Text="{loc:T Settings_LockPosition}" VerticalAlignment="Center" />
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding AutoHideSupported}">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_AutoHide}" />
                     <TextBlock Text="{loc:T Settings_AutoHideHint}" Classes="muted" FontSize="11" TextWrapping="Wrap"

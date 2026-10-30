@@ -119,7 +119,7 @@ public sealed class AlertToastPresenter
         var sizes = _shown.Select(w =>
         {
             w.Measure(new Size(w.Width, double.PositiveInfinity));
-            return PixelSize.FromSize(w.DesiredSize, screen.Scaling);
+            return PixelSize.FromSize(w.DesiredSize, ScreenUnits.PerPixel(screen.Scaling));
         }).ToArray();
         var positions = ToastStackMath.Place(screen.WorkingArea, sizes);
         for (var i = 0; i < _shown.Count; i++)

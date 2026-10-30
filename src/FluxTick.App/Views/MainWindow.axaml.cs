@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using FluxTick.App.Localization;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 using Microsoft.Extensions.Logging;
@@ -70,6 +71,38 @@ public sealed partial class MainWindow : Window
     /// value that is remembered and saved.
     /// </summary>
     private double _cardsWidth = WindowWidthRules.ListWidthWithChart;
+
+    /// <summary>
+    /// The resize by the grip that is under way on macOS, or <see langword="null"/> when there is none.
+    /// </summary>
+    private GripDrag? _gripDrag;
+
+    /// <summary>
+    /// The width the window had before it went full screen on macOS, where the window has no size of its own meanwhile, or
+    /// <see langword="null"/> when none was set aside.
+    /// </summary>
+    private double? _widthBeforeFullScreen;
+
+    /// <summary>
+    /// Where the window is on its way to or from full screen on macOS.
+    /// </summary>
+    private MacFullScreenPhase _macPhase;
+
+    /// <summary>
+    /// Grows the window to the screen before it enters the full screen space, and shrinks it back after it left, so that
+    /// the system's switch does not make it jump.
+    /// </summary>
+    private readonly StepAnimation _fullScreenAnimation = new();
+
+    /// <summary>
+    /// The timer of the wait for the system to enter or leave the full screen space, or <see langword="null"/> when none runs.
+    /// </summary>
+    private DispatcherTimer? _waitTimer;
+
+    /// <summary>
+    /// How the window is to leave full screen once the system is there, when that was asked for while it was on its way in.
+    /// </summary>
+    private FullScreenExit? _pendingLeave;
 
     /// <summary>
     /// The state the window was in when it was minimized, which is the one a restore returns to.
@@ -178,7 +211,7 @@ public sealed partial class MainWindow : Window
         }
 
         // After the normal size and position are set: they are what the window returns to when it leaves full screen.
-        if (saved.FullScreen && layout == WatchlistLayout.Cards)
+        if (saved.FullScreen && layout == WatchlistLayout.Cards && !OperatingSystem.IsMacOS())
         {
             WindowState = WindowState.FullScreen;
         }
@@ -193,7 +226,7 @@ public sealed partial class MainWindow : Window
     private PixelPoint DefaultPosition()
     {
         var area = Screens.Primary?.WorkingArea ?? new PixelRect(0, 0, 1280, 720);
-        var scale = Screens.Primary?.Scaling ?? 1;
+        var scale = ScreenUnits.PerPixel(Screens.Primary?.Scaling ?? 1);
         return new PixelPoint(
             area.Right - (int)(Width * scale) - ScreenMargin,
             area.Y + ScreenMargin);
@@ -346,6 +379,18 @@ public sealed partial class MainWindow : Window
         }
 
         base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty && _macPhase == MacFullScreenPhase.Own)
+        {
+            // A window hidden to the tray must not keep the menu bar and the Dock of other apps away.
+            MacPresentation.SetBarsHidden(IsVisible);
+        }
+
+        if (change.Property == IsVisibleProperty && !IsVisible)
+        {
+            // A drag cannot go on in a window that is gone, and would leave the dock believing the window is dragged.
+            EndGripDrag();
+        }
+
         if (change.Property == IsVisibleProperty && !IsVisible)
         {
             _toolWindow?.Close();
@@ -376,7 +421,7 @@ public sealed partial class MainWindow : Window
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (!e.Handled && e.Key == Key.Escape && WindowState == WindowState.FullScreen)
+        if (!e.Handled && e.Key == Key.Escape && (WindowState == WindowState.FullScreen || FillsScreen))
         {
             e.Handled = true;
             LeaveFullScreen(FullScreenExit.Restore);
@@ -394,7 +439,35 @@ public sealed partial class MainWindow : Window
         _fullScreenExit = exit;
         try
         {
-            WindowState = WindowState.Normal;
+            if (InNativeSpace)
+            {
+                // The system puts the window back by itself, with an animation. The window stays full screen for the
+                // application until that is over, or what it gets back would be undone by the system.
+                if (_macPhase == MacFullScreenPhase.Leaving)
+                {
+                    return;
+                }
+
+                if (_macPhase == MacFullScreenPhase.Entering)
+                {
+                    // The system is still on its way in; it would enter after the window was given back. It leaves as soon
+                    // as it is there.
+                    _pendingLeave = exit;
+                    return;
+                }
+
+                BeginNativeLeave(exit);
+            }
+            else if (FillsScreen)
+            {
+                _macPhase = MacFullScreenPhase.None;
+                MacPresentation.SetBarsHidden(false);
+                OnWindowStateChanged();
+            }
+            else
+            {
+                WindowState = WindowState.Normal;
+            }
         }
         finally
         {
@@ -426,7 +499,7 @@ public sealed partial class MainWindow : Window
         _widthAnimation.Stop();
         CancelDockSettle();
         CancelDockLeave();
-        if (WindowState == WindowState.FullScreen)
+        if (WindowState == WindowState.FullScreen || FillsScreen)
         {
             // The list layout has a fixed width, which would keep the window from filling the screen.
             MinWidth = 0;
@@ -436,6 +509,12 @@ public sealed partial class MainWindow : Window
         }
 
         (DataContext as MainViewModel)?.SetFullScreen(false);
+        if (_widthBeforeFullScreen is { } width)
+        {
+            _widthBeforeFullScreen = null;
+            Width = width;
+        }
+
         var leave = _fullScreenMemory.Leave(WindowState, _fullScreenExit);
         try
         {
@@ -445,7 +524,7 @@ public sealed partial class MainWindow : Window
                 var screen = (_fullScreenMemory.Bounds is { } known ? Screens.ScreenFromPoint(known.Position) : null)
                     ?? Screens.ScreenFromWindow(this)
                     ?? Screens.Primary;
-                var maxHeight = screen is null ? double.PositiveInfinity : screen.WorkingArea.Height / screen.Scaling;
+                var maxHeight = screen is null ? double.PositiveInfinity : screen.WorkingArea.Height / ScreenUnits.PerPixel(screen.Scaling);
                 Height = FullScreenRestore.Height(_fullScreenMemory.Bounds, MinHeight, maxHeight);
             }
 
@@ -492,7 +571,7 @@ public sealed partial class MainWindow : Window
     /// </returns>
     private bool IsHeaderReachable(PixelPoint position)
     {
-        var scale = RenderScaling;
+        var scale = ScreenUnitScale;
         var width = double.IsNaN(Width) ? Bounds.Width : Width;
         var header = new PixelRect(
             position,
@@ -563,7 +642,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Gives the window the width its layout asks for: a fixed one in the list layout, the remembered one in the card
-    /// layout. The right edge stays where it is, so the window does not leave the screen it is docked to.
+    /// layout. A window docked to the left or right edge keeps that edge; otherwise the center stays where it is. The top does not move.
     /// </summary>
     /// <param name="immediate">
     /// Whether the width is set at once instead of being animated.
@@ -571,7 +650,7 @@ public sealed partial class MainWindow : Window
     private void ApplyWidthRule(bool immediate = false)
     {
         // A window that fills the screen has no width of its own; the rule is applied when it is back to normal.
-        if (WindowState != WindowState.Normal)
+        if (WindowState != WindowState.Normal || FillsScreen)
         {
             return;
         }
@@ -638,7 +717,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            var limit = Screens.ScreenFromWindow(this)?.WorkingArea.Height / RenderScaling ?? double.PositiveInfinity;
+            var limit = Screens.ScreenFromWindow(this)?.WorkingArea.Height / ScreenUnitScale ?? double.PositiveInfinity;
             minHeight = WindowHeightRules.ListContentMinHeight(content, chrome, limit);
         }
 
@@ -649,7 +728,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Changes the width in small steps, eased out, while the right edge stays in place, and applies the width limits
+    /// Changes the width in small steps, eased out, while the anchor of the docked edge (the center when not docked) stays in place, and applies the width limits
     /// once the target is reached.
     /// </summary>
     /// <param name="from">
@@ -663,9 +742,9 @@ public sealed partial class MainWindow : Window
     /// </param>
     private void AnimateWidth(double from, double to, WidthRule rule)
     {
-        var scale = RenderScaling;
+        var scale = ScreenUnitScale;
         var startLeft = Position.X;
-        var endLeft = WindowWidthRules.LeftForRightEdge(startLeft, from * scale, to * scale);
+        var endLeft = WindowWidthRules.LeftForDock(startLeft, from * scale, to * scale, _dock.Edge);
         if (Screens.ScreenFromWindow(this)?.WorkingArea is { } area)
         {
             endLeft = WindowWidthRules.ClampLeft(endLeft, to * scale, area.X, area.Right);
@@ -694,6 +773,10 @@ public sealed partial class MainWindow : Window
         _widthAnimationEnd = null;
         MinWidth = rule.Min;
         MaxWidth = rule.Max;
+
+        // A docked window kept its edge while the width changed; it is put flush with the edge again and hides once the
+        // pointer is away.
+        ScheduleDockSettle(realign: true);
     }
 
     /// <summary>
@@ -877,7 +960,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (WindowState == WindowState.FullScreen)
+        if (WindowState == WindowState.FullScreen || FillsScreen)
         {
             // A full screen window has nowhere to be dragged to. Leaving full screen right now would turn a double click
             // into "leave and enter again", so it waits until the pointer moved: that is the drag.
@@ -907,7 +990,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (WindowState != WindowState.FullScreen || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (!(WindowState == WindowState.FullScreen || FillsScreen) || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             ClearFullScreenPress(e.Pointer);
             return;
@@ -923,7 +1006,7 @@ public sealed partial class MainWindow : Window
         }
 
         var pointer = this.PointToScreen(point);
-        var scale = RenderScaling;
+        var scale = ScreenUnitScale;
         ClearFullScreenPress(e.Pointer);
         RunDockDrag(
             () =>
@@ -1014,14 +1097,352 @@ public sealed partial class MainWindow : Window
     private void OnFullScreenClicked(object? sender, RoutedEventArgs e) => ToggleFullScreen();
 
     /// <summary>
+    /// Asks the system to leave its full screen space and gives the window back once the system is done with it.
+    /// </summary>
+    /// <param name="exit">
+    /// How the window leaves full screen.
+    /// </param>
+    private void BeginNativeLeave(FullScreenExit exit)
+    {
+        _macPhase = MacFullScreenPhase.Leaving;
+        _fullScreenAnimation.Stop();
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (MacPresentation.IsFullScreen(handle))
+        {
+            MacPresentation.ToggleFullScreen(handle);
+        }
+
+        var lastSize = ClientSize;
+        var steady = 0;
+        WaitUntil(
+            () =>
+            {
+                // Out of the space, and the size has stopped changing: the system is done with the window.
+                if (MacPresentation.IsFullScreen(handle))
+                {
+                    steady = 0;
+                    return false;
+                }
+
+                steady = ClientSize == lastSize ? steady + 1 : 0;
+                lastSize = ClientSize;
+                return steady >= 4;
+            },
+            () => FinishNativeLeave(exit, handle));
+    }
+
+    /// <summary>
+    /// Gives the window back to the application after the system left its full screen space, and shrinks it to its normal
+    /// frame.
+    /// </summary>
+    /// <param name="exit">
+    /// How the window leaves full screen.
+    /// </param>
+    /// <param name="handle">
+    /// The <c>NSWindow</c> of the window.
+    /// </param>
+    private void FinishNativeLeave(FullScreenExit exit, IntPtr handle)
+    {
+        _macPhase = MacFullScreenPhase.Native;
+        if (MacPresentation.IsFullScreen(handle))
+        {
+            // The system did not get out of its full screen space in time. The window stays full screen for the
+            // application, so that both agree, and the user can ask again.
+            return;
+        }
+
+        _macPhase = MacFullScreenPhase.None;
+        _fullScreenExit = exit;
+        var fromPosition = Position;
+        var fromWidth = ClientSize.Width;
+        var fromHeight = ClientSize.Height;
+        var restoredAt = exit == FullScreenExit.Restore && _fullScreenMemory.Bounds is { } record && IsHeaderReachable(record.Position)
+            ? record.Position
+            : (PixelPoint?)null;
+        try
+        {
+            if (WindowState == WindowState.Normal)
+            {
+                OnWindowStateChanged();
+            }
+            else
+            {
+                WindowState = WindowState.Normal;
+            }
+        }
+        finally
+        {
+            _fullScreenExit = FullScreenExit.Restore;
+        }
+
+        // The window is back where it was; it is taken back to the size it has now and shrinks to it. The position is read
+        // from the record: the window only reports a position it was given once the system has moved it.
+        var toPosition = restoredAt ?? Position;
+        var toWidth = double.IsNaN(Width) ? fromWidth : Width;
+        var toHeight = double.IsNaN(Height) ? fromHeight : Height;
+        var limits = (MinWidth, MaxWidth, MinHeight, MaxHeight);
+        MinWidth = 0;
+        MaxWidth = double.PositiveInfinity;
+        MinHeight = 0;
+        MaxHeight = double.PositiveInfinity;
+        Position = fromPosition;
+        Width = fromWidth;
+        Height = fromHeight;
+        AnimateFrame(
+            toPosition,
+            toWidth,
+            toHeight,
+            () =>
+            {
+                (MinWidth, MaxWidth, MinHeight, MaxHeight) = limits;
+                RaiseGeometryChanged();
+            });
+    }
+
+    /// <summary>
+    /// Enters the full screen space of macOS. A borderless window may be left at its size by the system, which is noticed a
+    /// moment later; the window then fills the screen itself instead.
+    /// </summary>
+    private void EnterMacFullScreen()
+    {
+        // Avalonia asks for the full screen space only when it kept the window resizable, which a borderless one is not, so
+        // the window is made ready and the system is asked directly.
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        MacPresentation.PrepareFullScreen(handle);
+
+        // Taken down before the system moves the window, so that the way back leads to where it was. From here on the
+        // application treats the window as full screen, so the moves of the system are not taken for the user's.
+        if (RememberNormalBounds())
+        {
+            FullScreenChanged?.Invoke(this, true);
+        }
+
+        _widthBeforeFullScreen = double.IsNaN(Width) ? Bounds.Width : Width;
+        _macPhase = MacFullScreenPhase.Native;
+        OnWindowStateChanged();
+        MinHeight = 0;
+        var target = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (target is null)
+        {
+            BeginMacFullScreen(handle);
+            return;
+        }
+
+        // The window grows to what the full screen space gives it before the system switches, so that nothing jumps.
+        var area = target.WorkingArea;
+        AnimateFrame(
+            new PixelPoint(target.Bounds.X, area.Y),
+            target.Bounds.Width,
+            target.Bounds.Bottom - area.Y,
+            () => BeginMacFullScreen(handle));
+    }
+
+    /// <summary>
+    /// Asks the system for the full screen space and sizes the window once it is there.
+    /// </summary>
+    /// <param name="handle">
+    /// The <c>NSWindow</c> of the window.
+    /// </param>
+    private void BeginMacFullScreen(IntPtr handle)
+    {
+        if (_macPhase != MacFullScreenPhase.Native)
+        {
+            return;
+        }
+
+        if (!IsVisible)
+        {
+            // Hidden to the tray while the window grew: the system does not enter its space for a hidden window, so the
+            // window is not left in a full screen state that nothing completes.
+            _macPhase = MacFullScreenPhase.None;
+            OnWindowStateChanged();
+            return;
+        }
+
+        MacPresentation.ToggleFullScreen(handle);
+        _macPhase = MacFullScreenPhase.Entering;
+        WaitUntil(
+            () => _macPhase != MacFullScreenPhase.Entering || MacPresentation.IsFullScreen(handle),
+            () =>
+            {
+                if (_macPhase == MacFullScreenPhase.Entering)
+                {
+                    _macPhase = MacFullScreenPhase.Native;
+                }
+
+                if (_pendingLeave is { } pending)
+                {
+                    _pendingLeave = null;
+                    if (_macPhase == MacFullScreenPhase.Native)
+                    {
+                        LeaveFullScreen(pending);
+                    }
+
+                    return;
+                }
+
+                if (_macPhase != MacFullScreenPhase.Native)
+                {
+                    return;
+                }
+
+                var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+                if (!MacPresentation.IsFullScreen(handle) || screen is null)
+                {
+                    // The system did not make the window full screen; it fills the screen itself.
+                    _macPhase = MacFullScreenPhase.None;
+                    FillScreen();
+                    return;
+                }
+
+                // The system leaves the window at its size inside the full screen space, so it is given the size of the
+                // screen. The system keeps it below the camera housing of a screen that has one, as it does for any window.
+                Width = screen.Bounds.Width;
+                Height = screen.Bounds.Height;
+            });
+    }
+
+    /// <summary>
+    /// Moves and resizes the window to a frame in small steps, eased out.
+    /// </summary>
+    /// <param name="position">
+    /// The position to reach.
+    /// </param>
+    /// <param name="width">
+    /// The width to reach.
+    /// </param>
+    /// <param name="height">
+    /// The height to reach.
+    /// </param>
+    /// <param name="done">
+    /// Called once the window is there.
+    /// </param>
+    private void AnimateFrame(PixelPoint position, double width, double height, Action done)
+    {
+        var startPosition = Position;
+        var startWidth = ClientSize.Width;
+        var startHeight = ClientSize.Height;
+        _fullScreenAnimation.Run(
+            TimeSpan.FromMilliseconds(220),
+            progress =>
+            {
+                Position = new PixelPoint(
+                    (int)Math.Round(WindowWidthRules.Animate(startPosition.X, position.X, progress)),
+                    (int)Math.Round(WindowWidthRules.Animate(startPosition.Y, position.Y, progress)));
+                Width = WindowWidthRules.Animate(startWidth, width, progress);
+                Height = WindowWidthRules.Animate(startHeight, height, progress);
+            },
+            done);
+    }
+
+    /// <summary>
+    /// Runs an action as soon as a condition holds, looking at it often, or when the time is up. The system does not tell
+    /// when it has entered or left the full screen space, but sets a style bit of the window at the start.
+    /// </summary>
+    /// <param name="condition">
+    /// What to wait for.
+    /// </param>
+    /// <param name="action">
+    /// What to do then; it also runs when the time is up, and looks at the state itself.
+    /// </param>
+    private void WaitUntil(Func<bool> condition, Action action)
+    {
+        // One wait at a time: a new one replaces the one that is still running instead of racing it.
+        CancelWait();
+        var started = DateTime.UtcNow;
+        DispatcherTimer? timer = null;
+        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(30), DispatcherPriority.Normal, (_, _) =>
+        {
+            if (condition() || DateTime.UtcNow - started > TimeSpan.FromSeconds(2))
+            {
+                timer?.Stop();
+                if (ReferenceEquals(_waitTimer, timer))
+                {
+                    _waitTimer = null;
+                }
+
+                action();
+            }
+        });
+        _waitTimer = timer;
+        timer.Start();
+    }
+
+    /// <summary>
+    /// Stops the wait that is running, if any, without running its action.
+    /// </summary>
+    private void CancelWait()
+    {
+        _waitTimer?.Stop();
+        _waitTimer = null;
+    }
+
+    /// <summary>
+    /// Stops the wait for the system, which has no one left to act on.
+    /// </summary>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    protected override void OnClosed(EventArgs e)
+    {
+        CancelWait();
+        _fullScreenAnimation.Stop();
+        if (FillsScreen)
+        {
+            // The menu bar and the Dock are the system's, and do not come back by themselves.
+            MacPresentation.SetBarsHidden(false);
+        }
+
+        base.OnClosed(e);
+    }
+
+    /// <summary>
+    /// Makes the window as large as the screen it is on, which is what full screen is on macOS. The system's own full
+    /// screen leaves a borderless window at its size.
+    /// </summary>
+    private void FillScreen()
+    {
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null || WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
+        var entered = RememberNormalBounds();
+        _macPhase = MacFullScreenPhase.Own;
+        MacPresentation.SetBarsHidden(IsVisible);
+        OnWindowStateChanged();
+        _widthBeforeFullScreen ??= double.IsNaN(Width) ? Bounds.Width : Width;
+
+        // The screen is measured in points here, which is what the size of a window is measured in.
+        MinHeight = 0;
+        Position = screen.Bounds.Position;
+        Width = screen.Bounds.Width;
+        Height = screen.Bounds.Height;
+        if (entered)
+        {
+            FullScreenChanged?.Invoke(this, true);
+        }
+    }
+
+    /// <summary>
     /// Fills the screen with the window, or brings it back to its normal size.
     /// </summary>
     private void ToggleFullScreen()
     {
-        if (WindowState == WindowState.Normal)
+        if (WindowState == WindowState.Normal && !FillsScreen)
         {
             // The list is a narrow strip and has no full screen form; only the cards fill the screen.
-            if (CurrentLayout().Layout == WatchlistLayout.Cards)
+            if (CurrentLayout().Layout != WatchlistLayout.Cards)
+            {
+                return;
+            }
+
+            if (OperatingSystem.IsMacOS())
+            {
+                EnterMacFullScreen();
+            }
+            else
             {
                 WindowState = WindowState.FullScreen;
             }
@@ -1043,9 +1464,130 @@ public sealed partial class MainWindow : Window
     /// </param>
     private void OnResizeGripPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            RunDockDrag(() => BeginResizeDrag(WindowEdge.SouthEast, e), resize: true);
+            return;
+        }
+
+        // macOS does not carry out a resize the window asks the system for, so the grip resizes the window itself there.
+        if (OperatingSystem.IsMacOS() && sender is IInputElement grip)
+        {
+            if (FillsScreen)
+            {
+                // A window that fills the screen has nothing to resize.
+                return;
+            }
+
+            var width = double.IsNaN(Width) ? Bounds.Width : Width;
+            var height = double.IsNaN(Height) ? Bounds.Height : Height;
+            _gripDrag = new GripDrag(ScreenPointer(e), width, height);
+            _dock.SetDragging(true);
+            e.Pointer.Capture(grip);
+            return;
+        }
+
+        RunDockDrag(() => BeginResizeDrag(WindowEdge.SouthEast, e), resize: true);
+    }
+
+    /// <summary>
+    /// Gets the pointer position in points, the unit the size of a window is measured in. The system is asked for it,
+    /// because the position the window converts from its own coordinates is off while the window changes size: macOS counts
+    /// from the bottom of the screen, and the window only learns its new size after the fact.
+    /// </summary>
+    /// <param name="e">
+    /// The pointer event data.
+    /// </param>
+    /// <returns>
+    /// The position in points.
+    /// </returns>
+    private Point ScreenPointer(PointerEventArgs e) =>
+        MacTrayCursor.TryGetPoints(Screens, out var x, out var y)
+            ? new Point(x, y)
+            : this.PointToScreen(e.GetPosition(this)).ToPoint(1) / ScreenUnitScale;
+
+    /// <summary>
+    /// Follows the pointer with the bottom-right corner while the grip is dragged on macOS.
+    /// </summary>
+    /// <param name="sender">
+    /// The grip.
+    /// </param>
+    /// <param name="e">
+    /// The pointer event data.
+    /// </param>
+    private void OnResizeGripMoved(object? sender, PointerEventArgs e)
+    {
+        if (_gripDrag is not { } drag)
+        {
+            return;
+        }
+
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            // The release was missed, e.g. because the window was deactivated during the drag.
+            EndGripDrag();
+            return;
+        }
+
+        var pointer = ScreenPointer(e);
+        var height = Math.Max(MinHeight, Math.Min(MaxHeight, drag.Height + (pointer.Y - drag.Pointer.Y)));
+        Height = height;
+
+        // The list layout has a fixed width, so there the grip only resizes vertically.
+        if (CurrentLayout().Layout == WatchlistLayout.Cards)
+        {
+            var width = Math.Max(Math.Max(MinWidth, WindowWidthRules.CardsMinWidth), Math.Min(MaxWidth, drag.Width + (pointer.X - drag.Pointer.X)));
+            Width = width;
+            _cardsWidth = width;
+        }
+
+        RaiseGeometryChanged();
+    }
+
+    /// <summary>
+    /// Ends the resize by the grip on macOS.
+    /// </summary>
+    /// <param name="sender">
+    /// The grip.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnResizeGripReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.Pointer.Captured == sender)
+        {
+            e.Pointer.Capture(null);
+        }
+
+        EndGripDrag();
+    }
+
+    /// <summary>
+    /// Ends the resize by the grip on macOS when the pointer was taken away.
+    /// </summary>
+    /// <param name="sender">
+    /// The grip.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnResizeGripCaptureLost(object? sender, PointerCaptureLostEventArgs e) => EndGripDrag();
+
+    /// <summary>
+    /// Lets the window settle at its edge again after the resize by the grip.
+    /// </summary>
+    private void EndGripDrag()
+    {
+        if (_gripDrag is null)
+        {
+            return;
+        }
+
+        _gripDrag = null;
+        _dock.SetDragging(false);
+        if (_dock.ShouldWaitToHide)
+        {
+            ScheduleDockSettle(realign: true);
         }
     }
 
@@ -1084,7 +1626,7 @@ public sealed partial class MainWindow : Window
     {
         // A window that slides or rests beyond its edge would be saved off the screen; the position it is shown at
         // is the one that is remembered.
-        if (_dock.SuppressesGeometry || WindowState != WindowState.Normal)
+        if (_dock.SuppressesGeometry || WindowState != WindowState.Normal || FillsScreen)
         {
             return;
         }
@@ -1103,4 +1645,62 @@ public sealed partial class MainWindow : Window
     /// <see langword="true"/> when the point is on a screen.
     /// </returns>
     private bool IsOnAnyScreen(PixelPoint point) => Screens.All.Any(s => s.WorkingArea.Contains(point));
+
+    /// <summary>
+    /// Where a resize by the grip began.
+    /// </summary>
+    /// <param name="Pointer">
+    /// The pointer position in points.
+    /// </param>
+    /// <param name="Width">
+    /// The width of the window.
+    /// </param>
+    /// <param name="Height">
+    /// The height of the window.
+    /// </param>
+    private sealed record GripDrag(Point Pointer, double Width, double Height);
+
+    /// <summary>
+    /// Gets a value indicating whether the window fills the screen on macOS, by the system's full screen space or by its own
+    /// size.
+    /// </summary>
+    private bool FillsScreen => _macPhase != MacFullScreenPhase.None;
+
+    /// <summary>
+    /// Gets a value indicating whether the system's full screen space is what the window is in on macOS, or is asked to enter.
+    /// </summary>
+    private bool InNativeSpace => _macPhase is MacFullScreenPhase.Native or MacFullScreenPhase.Entering or MacFullScreenPhase.Leaving;
+
+    /// <summary>
+    /// The stages of full screen on macOS, which are exclusive: the flags they replace could be combined in ways that mean
+    /// nothing.
+    /// </summary>
+    private enum MacFullScreenPhase
+    {
+        /// <summary>
+        /// The window is not full screen.
+        /// </summary>
+        None,
+
+        /// <summary>
+        /// The window fills the screen by its own size, without the full screen space of the system, which leaves a
+        /// borderless window at its size.
+        /// </summary>
+        Own,
+
+        /// <summary>
+        /// The window is in the full screen space of the system, or about to ask for it.
+        /// </summary>
+        Native,
+
+        /// <summary>
+        /// The system has been asked for the full screen space and has not got there yet.
+        /// </summary>
+        Entering,
+
+        /// <summary>
+        /// The window is on its way out of the full screen space of the system.
+        /// </summary>
+        Leaving,
+    }
 }

@@ -31,6 +31,18 @@ public class MacTrayCursorTests
     }
 
     /// <summary>
+    /// Verifies a Retina screen reported in points, as macOS does for the screens of the app, needs no scale: the position
+    /// stays in points.
+    /// </summary>
+    [Fact]
+    public void ToScreenPixels_ScreenInPoints_KeepsPoints()
+    {
+        var position = MacTrayCursor.ToScreenPixels(1200.4, 890, 900, 1);
+
+        position.Should().Be(new PixelPoint(1200, 10));
+    }
+
+    /// <summary>
     /// Verifies the popup opens below an icon in the menu bar at the top of the screen.
     /// </summary>
     [Fact]

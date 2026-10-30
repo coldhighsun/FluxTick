@@ -1331,6 +1331,12 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool ShowMarketStatus { get; set; } = true;
 
     /// <summary>
+    /// Gets a value indicating whether the platform offers edge hiding at all. macOS does not let a window rest beyond the
+    /// screen edge, so the setting is not shown there.
+    /// </summary>
+    public bool AutoHideSupported => !OperatingSystem.IsMacOS();
+
+    /// <summary>
     /// Gets or sets a value indicating whether edge hiding can work here. It does until the platform turns out not to
     /// keep a window beyond the screen edge.
     /// </summary>
