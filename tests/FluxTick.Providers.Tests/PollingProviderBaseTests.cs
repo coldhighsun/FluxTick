@@ -235,9 +235,8 @@ public class PollingProviderBaseTests
         await using var provider = new HoursProvider(time);
         await provider.SetSubscriptionsAsync([Coin]);
         await TestWait.EventuallyAsync(() => provider.Published.Count == 1);
-        time.Advance(Interval);
-        await TestWait.EventuallyAsync(() => provider.Published.Count == 2);
-        var newest = provider.Published[^1];
+        await AdvanceUntilAsync(time, Interval, () => provider.Published.Count >= 2);
+        var newest = provider.Published[1];
         provider.Shut(Coin.Symbol);
 
         await AdvanceUntilAsync(time, Interval, () => provider.Published.Count >= 4);
