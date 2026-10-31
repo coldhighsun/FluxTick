@@ -121,7 +121,7 @@ public sealed partial class TrayPopupViewModel : ObservableObject
         }
 
         IsEmpty = picked.Count == 0;
-        HasAnyHolding = Items.Any(row => row.HasHolding);
+        HasAnyHolding = AssetRowViewModel.AnyHolding(Items);
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public sealed partial class TrayPopupViewModel : ObservableObject
     {
         if (e.PropertyName == nameof(AssetRowViewModel.HasHolding))
         {
-            HasAnyHolding = Items.Any(row => row.HasHolding);
+            HasAnyHolding = AssetRowViewModel.AnyHolding(Items);
         }
     }
 

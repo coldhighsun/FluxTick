@@ -118,6 +118,21 @@ public sealed partial class MainViewModel : LocalizedViewModel
     private readonly ProviderRegistry _registry;
 
     /// <summary>
+    /// The rows in the order the list shows: the sorted order while a sort is active, and else the order of <see cref="Rows"/>.
+    /// </summary>
+    private readonly ObservableCollection<AssetRowViewModel> _sortedRows = [];
+
+    /// <summary>
+    /// The sort that was picked and that the settings do not show yet, or <see langword="null"/> when they do.
+    /// </summary>
+    private (WatchlistSortKey Key, bool Descending)? _pendingSort;
+
+    /// <summary>
+    /// Whether a sort of the rows is queued after the updates that are being applied.
+    /// </summary>
+    private bool _sortRefreshQueued;
+
+    /// <summary>
     /// Converts the holdings to the currency of the portfolio total.
     /// </summary>
     private readonly ExchangeRateService _rates;
@@ -228,6 +243,10 @@ public sealed partial class MainViewModel : LocalizedViewModel
         IsCardLayout = settings.Current.Appearance.Layout == WatchlistLayout.Cards;
         CardSize = settings.Current.Appearance.CardSize;
         Grouping = settings.Current.Appearance.Grouping;
+        SortOptions = [.. Enum.GetValues<WatchlistSortKey>().Select(key => new SortOptionViewModel(key, ChooseSortKeyAsync))];
+        SortKey = settings.Current.Appearance.SortKey;
+        SortDescending = settings.Current.Appearance.SortDescending;
+        RefreshSortOptions();
 
         Settings.PropertyChanged += OnSettingsPagePropertyChanged;
         Settings.LayoutChosen += OnLayoutChosen;
@@ -293,13 +312,122 @@ public sealed partial class MainViewModel : LocalizedViewModel
     [NotifyPropertyChangedFor(nameof(LayoutToggleTip))]
     [NotifyPropertyChangedFor(nameof(IsCustomCardGrouping))]
     [NotifyPropertyChangedFor(nameof(ListItems))]
+    [NotifyPropertyChangedFor(nameof(IsSortLabelVisible))]
     public partial bool IsCardLayout { get; private set; }
 
     /// <summary>
     /// Gets the rows the list shows: all of them in the list layout, none in the card layout. A list without items
-    /// builds no views, so the list that is hidden behind the cards does not take part in every price update.
+    /// builds no views, so the list that is hidden behind the cards does not take part in every price update. The rows
+    /// are always read from <see cref="_sortedRows"/>, which follows <see cref="Rows"/> while the list keeps the order of the
+    /// watchlist, so that turning a sort on or off moves the rows that changed place and does not rebuild their views.
     /// </summary>
-    public IReadOnlyList<AssetRowViewModel> ListItems => IsCardLayout ? [] : Rows;
+    public IReadOnlyList<AssetRowViewModel> ListItems => IsCardLayout ? [] : _sortedRows;
+
+    /// <summary>
+    /// Gets what the rows of the list are ordered by.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsListSorted))]
+    [NotifyPropertyChangedFor(nameof(SortLabel))]
+    [NotifyPropertyChangedFor(nameof(IsSortLabelVisible))]
+    public partial WatchlistSortKey SortKey { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the largest value comes first when the list is sorted.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SortLabel))]
+    public partial bool SortDescending { get; private set; } = true;
+
+    /// <summary>
+    /// Gets the entries of the sort menus, which the header menu and the context menu of the list both show.
+    /// </summary>
+    public IReadOnlyList<SortOptionViewModel> SortOptions { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether any instrument has a holding. Without one there is no profit or loss to sort by,
+    /// so the menus turn that entry off.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasAnyHolding { get; private set; }
+
+    /// <summary>
+    /// Gets the short text in the header that says how the list is ordered, or an empty text for the order of the watchlist.
+    /// </summary>
+    public string SortLabel
+    {
+        get
+        {
+            return SortKey switch
+            {
+                WatchlistSortKey.ChangePercent => Loc.Get("Main_SortLabelChange", SortArrow),
+                WatchlistSortKey.HoldingPnlPercent => Loc.Get("Main_SortLabelPnl", SortArrow),
+                _ => string.Empty,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Gets the arrow that shows the direction of the sort in the header and in the sort menus.
+    /// </summary>
+    private string SortArrow => SortDescending ? "↓" : "↑";
+
+    /// <summary>
+    /// Gets a value indicating whether the header shows <see cref="SortLabel"/>: only while the list is sorted, as the
+    /// cards are not sorted.
+    /// </summary>
+    public bool IsSortLabelVisible => IsListSorted && !IsCardLayout;
+
+    /// <summary>
+    /// Gets a value indicating whether the list is ordered by a sort key instead of the watchlist order, which turns
+    /// off dragging the rows.
+    /// </summary>
+    public bool IsListSorted => SortKey != WatchlistSortKey.None;
+
+    /// <summary>
+    /// Brings the entries of the sort menus up to date with the sort, the holdings and the language.
+    /// </summary>
+    private void RefreshSortOptions()
+    {
+        foreach (var option in SortOptions)
+        {
+            var inUse = option.Key == SortKey;
+            var name = Loc.Get($"WatchlistSortKey_{option.Key}");
+            option.Text = inUse && option.Key != WatchlistSortKey.None ? $"{name} {SortArrow}" : name;
+            option.IsChecked = inUse;
+            option.IsEnabled = option.Key != WatchlistSortKey.HoldingPnlPercent || HasAnyHolding;
+            option.Tip = option.Key switch
+            {
+                WatchlistSortKey.None => null,
+                WatchlistSortKey.HoldingPnlPercent when !HasAnyHolding => Loc.Get("Main_SortNeedsHolding"),
+                _ => Loc.Get("Main_SortReverseHint"),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the sort menus after the sort changed.
+    /// </summary>
+    /// <param name="value">
+    /// The new sort key.
+    /// </param>
+    partial void OnSortKeyChanged(WatchlistSortKey value) => RefreshSortOptions();
+
+    /// <summary>
+    /// Refreshes the sort menus after the direction changed.
+    /// </summary>
+    /// <param name="value">
+    /// The new direction.
+    /// </param>
+    partial void OnSortDescendingChanged(bool value) => RefreshSortOptions();
+
+    /// <summary>
+    /// Refreshes the sort menus after the holdings changed.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnHasAnyHoldingChanged(bool value) => RefreshSortOptions();
 
     /// <summary>
     /// Gets a value indicating whether the cards are shown in the custom groups: the card layout with the custom
@@ -470,11 +598,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// </param>
     private void OnSettingsPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SettingsViewModel.Compact))
-        {
-            ApplyCompact();
-        }
-        else if (e.PropertyName == nameof(SettingsViewModel.RollPriceOnUpdate))
+        if (e.PropertyName == nameof(SettingsViewModel.RollPriceOnUpdate))
         {
             ApplyRoll();
         }
@@ -627,12 +751,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// </summary>
     [RelayCommand]
     public void ToggleLock() => Settings.Locked = !Settings.Locked;
-
-    /// <summary>
-    /// Toggles compact mode, which hides the sparklines and makes the cards smaller.
-    /// </summary>
-    [RelayCommand]
-    public void ToggleCompact() => Settings.Compact = !Settings.Compact;
 
     /// <summary>
     /// Toggles the flash of a row when its price changes.
@@ -824,6 +942,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         if (current >= 0)
         {
             Rows.Move(current, Math.Clamp(newIndex, 0, Rows.Count - 1));
+            RefreshSortedRows();
         }
 
         return _settings.UpdateAsync(s =>
@@ -1023,6 +1142,194 @@ public sealed partial class MainViewModel : LocalizedViewModel
         RebuildSections();
         LeaveFullScreenForList(layout);
         return task;
+    }
+
+    /// <summary>
+    /// Applies a pick in the sort menu: another key starts with the largest value first, and the key in use reverses the
+    /// direction. The result is shown right away.
+    /// </summary>
+    /// <param name="key">
+    /// The key the user picked.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task ChooseSortKeyAsync(WatchlistSortKey key)
+    {
+        // Without a holding there is no profit or loss to sort by; the menus turn that entry off.
+        if (RowSortRules.Normalize(key, HasAnyHolding) != key)
+        {
+            return Task.CompletedTask;
+        }
+
+        // The next state is decided on what was chosen last, not on what is shown: a click that arrives while the previous
+        // change is still being saved must move on from that change, not repeat it.
+        var (current, currentDescending) = ChosenSort();
+        var (newKey, descending) = RowSortRules.Choose(current, currentDescending, key);
+        return ApplySortAsync(newKey, descending);
+    }
+
+    /// <summary>
+    /// Gets the sort the user chose last: the pick that the settings do not show yet, or else the saved one. It can differ
+    /// from <see cref="SortKey"/>, which falls back to the order of the watchlist while no instrument has a holding.
+    /// </summary>
+    /// <returns>
+    /// The key and the direction.
+    /// </returns>
+    private (WatchlistSortKey Key, bool Descending) ChosenSort()
+    {
+        var appearance = _settings.Current.Appearance;
+        var saved = (appearance.SortKey, appearance.SortDescending);
+        return _pendingSort is { } pending && pending != saved ? pending : saved;
+    }
+
+    /// <summary>
+    /// Saves how the list is ordered and shows the result right away.
+    /// </summary>
+    /// <param name="key">
+    /// What to order by.
+    /// </param>
+    /// <param name="descending">
+    /// Whether the largest value comes first.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    private async Task ApplySortAsync(WatchlistSortKey key, bool descending)
+    {
+        // The update may wait for a save that is under way before it publishes, so the pick is remembered until the
+        // settings show it. Meanwhile neither a rebuild nor the next click goes back to the old order.
+        var chosen = (key, descending);
+        _pendingSort = chosen;
+        var task = _settings.UpdateAsync(s =>
+        {
+            s.Appearance.SortKey = key;
+            s.Appearance.SortDescending = descending;
+        });
+        ShowChosenSort(!IsCardLayout);
+        var failed = false;
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            // The pick is shown and nobody awaits the command, so the failure is logged here and not thrown at the menu.
+            _logger.LogError(ex, "Could not save the sort order");
+            failed = true;
+        }
+
+        if (_pendingSort == chosen)
+        {
+            _pendingSort = null;
+        }
+
+        // A pick that never reached the settings must not stay on screen: the next click would start from the saved sort.
+        if (failed)
+        {
+            ShowChosenSort(!IsCardLayout);
+        }
+    }
+
+    /// <summary>
+    /// Shows the sort the user chose. The profit or loss sort is only left out of what is shown while no instrument has a
+    /// holding; the choice itself stays saved, so it is back as soon as there is a holding again.
+    /// </summary>
+    /// <param name="showsList">
+    /// Whether the list layout is, or is about to be, the one on screen. A rebuild that switches back from the cards passes
+    /// <see langword="true"/> before <see cref="IsCardLayout"/> changes, so that the list never reads rows that went stale
+    /// while the cards were shown.
+    /// </param>
+    private void ShowChosenSort(bool showsList)
+    {
+        var (chosen, descending) = ChosenSort();
+        var key = RowSortRules.Normalize(chosen, HasAnyHolding);
+        UpdateSortedRows(key, descending, showsList);
+        SortKey = key;
+        SortDescending = descending;
+    }
+
+    /// <summary>
+    /// Sorts the rows again after a quote or the set of rows changed.
+    /// </summary>
+    private void RefreshSortedRows() => UpdateSortedRows(SortKey, SortDescending, !IsCardLayout);
+
+    /// <summary>
+    /// Asks for the rows to be sorted again once the updates that are being applied are through, so that a batch of quotes
+    /// costs one sort.
+    /// </summary>
+    private void QueueSortRefresh()
+    {
+        if (_sortRefreshQueued)
+        {
+            return;
+        }
+
+        _sortRefreshQueued = true;
+        Ui.PostBackground(() =>
+        {
+            _sortRefreshQueued = false;
+            RefreshSortedRows();
+        });
+    }
+
+    /// <summary>
+    /// Brings the rows of the list into the order of a sort, which for no sort is the order of <see cref="Rows"/>, and
+    /// tells the list only about what differs.
+    /// </summary>
+    /// <param name="key">
+    /// What to order by.
+    /// </param>
+    /// <param name="descending">
+    /// Whether the largest value comes first.
+    /// </param>
+    /// <param name="showsList">
+    /// Whether the list is shown.
+    /// </param>
+    private void UpdateSortedRows(WatchlistSortKey key, bool descending, bool showsList)
+    {
+        // The cards are not sorted, so nothing is worked out for a list that is not shown. The list is sorted again when
+        // the layout changes back, because RebuildSections shows the chosen sort before it changes the layout.
+        if (!showsList)
+        {
+            return;
+        }
+
+        var sorted = RowSortRules.Sort(Rows, key, descending, r => r.ChangePercent, r => r.PnlPercent, r => r.IsMarketShut);
+        if (_sortedRows.SequenceEqual(sorted))
+        {
+            return;
+        }
+
+        // The collection is changed in place, so that the list moves the rows that changed place and keeps the views of the
+        // others, together with their animations and the scroll position.
+        var wanted = sorted.ToHashSet();
+        for (var i = _sortedRows.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Contains(_sortedRows[i]))
+            {
+                _sortedRows.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < sorted.Count; i++)
+        {
+            if (i < _sortedRows.Count && _sortedRows[i] == sorted[i])
+            {
+                continue;
+            }
+
+            var current = _sortedRows.IndexOf(sorted[i]);
+            if (current < 0)
+            {
+                _sortedRows.Insert(i, sorted[i]);
+            }
+            else if (current != i)
+            {
+                _sortedRows.Move(current, i);
+            }
+        }
     }
 
     /// <summary>
@@ -1335,7 +1642,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
             {
                 row = new AssetRowViewModel(asset, ProviderName(asset.ProviderId))
                 {
-                    ShowSparkline = !Settings.Compact,
                     RollEnabled = Settings.RollPriceOnUpdate,
                     ShowMarketStatus = Settings.ShowMarketStatus,
                     CardSize = CardSize,
@@ -1368,6 +1674,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
             }
         }
 
+        HasAnyHolding = AssetRowViewModel.AnyHolding(Rows);
         Tray.Refresh();
         RebuildSections();
         RefreshPortfolioTip();
@@ -1383,7 +1690,12 @@ public sealed partial class MainViewModel : LocalizedViewModel
     {
         var settings = _settings.Current;
         var appearance = settings.Appearance;
-        IsCardLayout = appearance.Layout == WatchlistLayout.Cards || IsFullScreen;
+        var cards = appearance.Layout == WatchlistLayout.Cards || IsFullScreen;
+
+        // The rows of the list are brought up to date before the list is shown, so that it does not build views for rows
+        // that were removed while the cards were on screen.
+        ShowChosenSort(!cards);
+        IsCardLayout = cards;
         CardSize = appearance.CardSize;
         Grouping = appearance.Grouping;
 
@@ -1603,12 +1915,37 @@ public sealed partial class MainViewModel : LocalizedViewModel
             return;
         }
 
+        var sortInput = SortInputOf(row);
         row.Update(snapshot);
+
+        // Most ticks leave what the list is sorted by as it was, so the list is only sorted again when that changed.
+        if (SortInputOf(row) != sortInput)
+        {
+            QueueSortRefresh();
+        }
+
         if (row.HasHolding)
         {
             RefreshPortfolio();
         }
     }
+
+    /// <summary>
+    /// Gets what the current sort key takes from a row, to tell whether an update can change the order of the list.
+    /// </summary>
+    /// <param name="row">
+    /// The row.
+    /// </param>
+    /// <returns>
+    /// The value the list is sorted by and whether the market of the row is shut, which groups the rows when sorting by
+    /// the daily change.
+    /// </returns>
+    private (decimal? Value, bool Shut) SortInputOf(AssetRowViewModel row) => SortKey switch
+    {
+        WatchlistSortKey.ChangePercent => (row.ChangePercent, row.IsMarketShut),
+        WatchlistSortKey.HoldingPnlPercent => (row.PnlPercent, false),
+        _ => default,
+    };
 
     /// <summary>
     /// Gives every row the size of the cards.
@@ -1621,17 +1958,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
         foreach (var row in Rows)
         {
             row.CardSize = value;
-        }
-    }
-
-    /// <summary>
-    /// Shows or hides the sparkline of every row according to the compact setting.
-    /// </summary>
-    private void ApplyCompact()
-    {
-        foreach (var row in Rows)
-        {
-            row.ShowSparkline = !Settings.Compact;
         }
     }
 
@@ -1651,6 +1977,8 @@ public sealed partial class MainViewModel : LocalizedViewModel
     {
         OnPropertyChanged(nameof(LayoutToggleTip));
         OnPropertyChanged(nameof(FullScreenTip));
+        OnPropertyChanged(nameof(SortLabel));
+        RefreshSortOptions();
         foreach (var row in Rows)
         {
             row.RefreshLanguage(ProviderName(row.Asset.ProviderId));

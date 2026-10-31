@@ -270,7 +270,7 @@ public class GroupsSettingsTests
         var release = new TaskCompletionSource();
         h.Store.SaveGate = release.Task;
         var groups = h.SettingsPage.Groups;
-        var blocker = h.Settings.UpdateAsync(s => s.Appearance.Compact = true);
+        var blocker = h.Settings.UpdateAsync(s => s.Appearance.Locked = true);
 
         var add = groups.AddAsync("Late");
 
@@ -291,7 +291,7 @@ public class GroupsSettingsTests
         var release = new TaskCompletionSource();
         h.Store.SaveGate = release.Task;
         var groups = h.SettingsPage.Groups;
-        var blocker = h.Settings.UpdateAsync(s => s.Appearance.Compact = true);
+        var blocker = h.Settings.UpdateAsync(s => s.Appearance.Locked = true);
 
         var delete = groups.DeleteAsync(groups.Items[1]);
 

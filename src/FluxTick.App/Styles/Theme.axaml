@@ -2,7 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:FluxTick.App.Localization"
         xmlns:controls="using:FluxTick.App.Controls"
-        xmlns:views="using:FluxTick.App.Views">
+        xmlns:views="using:FluxTick.App.Views"
+        xmlns:vm="using:FluxTick.App.ViewModels">
 
   <Styles.Resources>
     <ResourceDictionary>
@@ -53,6 +54,16 @@
       <SolidColorBrush x:Key="WarnBrush" Color="{DynamicResource WarnColor}" />
       <!-- The font of the interface text; App.ApplyFont() replaces it with the one of the settings. -->
       <FontFamily x:Key="UiFont">$Default</FontFamily>
+      <!-- An entry of the sort menus, which the header menu and the context menu of the list both build from the same list. -->
+      <ControlTheme x:Key="SortMenuItemTheme" x:DataType="vm:SortOptionViewModel" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="Header" Value="{Binding Text}" />
+        <Setter Property="ToggleType" Value="Radio" />
+        <Setter Property="IsChecked" Value="{Binding IsChecked, Mode=OneWay}" />
+        <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+        <Setter Property="Command" Value="{Binding ChooseCommand}" />
+        <Setter Property="ToolTip.Tip" Value="{Binding Tip}" />
+        <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
+      </ControlTheme>
     </ResourceDictionary>
   </Styles.Resources>
 
@@ -415,6 +426,12 @@
     <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     <Setter Property="CornerRadius" Value="4" />
     <Setter Property="Padding" Value="4,1" />
+  </Style>
+  <!-- A chip that warns about the data (stale, delayed) is outlined, so that it stands out from the chips of a market state. -->
+  <Style Selector="Border.chip.warn">
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource WarnBrush}" />
+    <Setter Property="Padding" Value="3,0" />
   </Style>
 
   <Style Selector="Ellipse.dot">

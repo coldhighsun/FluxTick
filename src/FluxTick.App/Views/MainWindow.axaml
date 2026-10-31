@@ -35,6 +35,9 @@
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <Image Source="/Assets/fluxtick.png" Width="16" Height="16" />
             <TextBlock Text="FluxTick" FontWeight="SemiBold" FontSize="13" />
+            <!-- Says how the list is ordered; it is empty and hidden for the default order, and cut off when the window is narrow. -->
+            <TextBlock Text="{Binding SortLabel}" IsVisible="{Binding IsSortLabelVisible}" FontSize="11" Foreground="{DynamicResource MutedBrush}"
+                       VerticalAlignment="Center" MaxWidth="72" TextTrimming="CharacterEllipsis" />
           </StackPanel>
 
           <!-- The header holds up to nine buttons. Their width is set on each button (24 px instead of the 26 px of the
@@ -46,6 +49,16 @@
             <Button Classes="icon" Width="24" ToolTip.Tip="{Binding LayoutToggleTip}" Command="{Binding ToggleLayoutCommand}" Classes.active="{Binding IsCardLayout}"
                     AutomationProperties.Name="{loc:T Main_ToggleLayoutAuto}">
               <Path Data="M2 2h4v4H2zM8 2h4v4H8zM2 8h4v4H2zM8 8h4v4H8z" />
+            </Button>
+            <!-- Two arrows pointing opposite ways read as "sort". The menu picks what to sort by; picking the key in use again
+                 reverses the direction. -->
+            <Button Classes="icon" Width="24" IsVisible="{Binding !IsCardLayout}" ToolTip.Tip="{loc:T Main_Sort}"
+                    Classes.active="{Binding IsListSorted}" AutomationProperties.Name="{loc:T Main_Sort}">
+              <Path Data="M4 12V2M1.5 4.5L4 2l2.5 2.5M10 2v10M7.5 9.5L10 12l2.5-2.5" />
+              <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight" ItemsSource="{Binding SortOptions}"
+                            ItemContainerTheme="{StaticResource SortMenuItemTheme}" />
+              </Button.Flyout>
             </Button>
             <Button Name="GroupButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_GroupCards}" IsVisible="{Binding IsCardLayout}" AutomationProperties.Name="{loc:T Main_GroupCards}">
               <Path Data="M2 2.5h4v3H2zM2 8.5h4v3H2zM8 4h4M8 10h4" />

@@ -1307,12 +1307,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool AlwaysOnTop { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether rows hide their sparkline.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool Compact { get; set; }
-
-    /// <summary>
     /// Gets or sets a value indicating whether the window cannot be dragged.
     /// </summary>
     [ObservableProperty]
@@ -1479,7 +1473,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
-            Compact = current.Appearance.Compact;
             Locked = current.Appearance.Locked;
             RollPriceOnUpdate = current.Appearance.RollPriceOnUpdate;
             ShowMarketStatus = current.Appearance.ShowMarketStatus;
@@ -1637,14 +1630,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new value.
     /// </param>
     partial void OnAlwaysOnTopChanged(bool value) => SaveSetting(s => s.Appearance.AlwaysOnTop = value);
-
-    /// <summary>
-    /// Saves the compact flag.
-    /// </summary>
-    /// <param name="value">
-    /// The new value.
-    /// </param>
-    partial void OnCompactChanged(bool value) => SaveSetting(s => s.Appearance.Compact = value);
 
     /// <summary>
     /// Saves the flash-on-update flag.

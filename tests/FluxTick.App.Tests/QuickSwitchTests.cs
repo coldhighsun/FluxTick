@@ -533,27 +533,6 @@ public class QuickSwitchTests
     }
 
     /// <summary>
-    /// Verifies the compact entry of the right-click menu hides and shows the sparklines and is saved.
-    /// </summary>
-    [Fact]
-    public async Task ToggleCompact_FromMenu_HidesSparklinesAndPersists()
-    {
-        await using var h = new Harness(Harness.WatchlistOf(Btc));
-        await h.Main.InitializeAsync();
-
-        h.Main.ToggleCompactCommand.Execute(null);
-
-        h.Main.Settings.Compact.Should().BeTrue();
-        h.Main.Rows.Should().OnlyContain(r => !r.ShowSparkline);
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.Compact);
-
-        h.Main.ToggleCompactCommand.Execute(null);
-
-        h.Main.Rows.Should().OnlyContain(r => r.ShowSparkline);
-        await Harness.EventuallyAsync(() => !h.Store.Stored!.Appearance.Compact);
-    }
-
-    /// <summary>
     /// Verifies the list gets rows only in the list layout, so that the list hidden behind the cards builds no views.
     /// </summary>
     [Fact]
