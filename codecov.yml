@@ -1,0 +1,5 @@
+ignore:
+  # The Avalonia UI project is not covered by unit tests in a meaningful way.
+  - "src/FluxTick.App/**"
+  # Generated sources.
+  - "**/obj/**"
