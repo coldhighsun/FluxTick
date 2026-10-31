@@ -1,6 +1,7 @@
 # FluxTick
 
 [![CI](https://github.com/coldhighsun/FluxTick/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/FluxTick/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/coldhighsun/FluxTick/graph/badge.svg)](https://codecov.io/gh/coldhighsun/FluxTick)
 [![Release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?sort=semver&label=release)](https://github.com/coldhighsun/FluxTick/releases/latest)
 [![Pre-release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?include_prereleases&filter=*-*&sort=semver&label=pre-release)](https://github.com/coldhighsun/FluxTick/releases)
 [![Downloads](https://img.shields.io/github/downloads/coldhighsun/FluxTick/total)](https://github.com/coldhighsun/FluxTick/releases)
