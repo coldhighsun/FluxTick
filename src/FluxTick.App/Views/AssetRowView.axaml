@@ -13,32 +13,39 @@
       <!-- Tick flash: briefly tints the row in the direction of the last move. -->
       <Border Name="Flash" Grid.ColumnSpan="3" Grid.RowSpan="2" CornerRadius="6" Opacity="0" IsHitTestVisible="False" Margin="-6,-4" />
 
+      <!-- The first row has two lines: the name and its small icons above, the symbol, the class and the trading state
+           below. The holding has a line of its own under them. -->
       <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="1">
-        <!-- The name is the title and the symbol the subtitle. The name gives way (with an ellipsis) so that the class chip
-             and the bell always stay in view. -->
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+        <!-- The icons keep their place at the end of the line, so that a long name gives way to them and not the other way round. -->
+        <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
-          <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center" Margin="6,0,0,0">
-            <TextBlock Text="{Binding ClassLabel}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
-          </Border>
-          <!-- The trading state of the market, when it is not the regular session. -->
-          <Border Grid.Column="2" Classes="chip" VerticalAlignment="Center" Margin="4,0,0,0" IsVisible="{Binding HasMarketBadge}">
-            <TextBlock Text="{Binding MarketBadgeText}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
-          </Border>
-          <Path Grid.Column="3" Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
-                StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center" Margin="6,0,0,0"
-                IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
-          <!-- The instrument is on the list the tray popup shows. -->
-          <Path Grid.Column="4" Data="M1.5 1.5h7v7h-7zM3 4h4M3 6h3" Stroke="{DynamicResource MutedBrush}"
-                StrokeThickness="1" StrokeJoin="Round" Width="10" Height="10" Stretch="None" VerticalAlignment="Center" Margin="6,0,0,0"
-                IsVisible="{Binding ShowTrayMarker}" ToolTip.Tip="{loc:T Row_TrayTip}" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0" VerticalAlignment="Center">
+            <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
+                  StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center"
+                  IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
+            <!-- The instrument is on the list the tray popup shows. -->
+            <Path Data="M1.5 1.5h7v7h-7zM3 4h4M3 6h3" Stroke="{DynamicResource MutedBrush}"
+                  StrokeThickness="1" StrokeJoin="Round" Width="10" Height="10" Stretch="None" VerticalAlignment="Center"
+                  IsVisible="{Binding ShowTrayMarker}" ToolTip.Tip="{loc:T Row_TrayTip}" />
+          </StackPanel>
         </Grid>
-        <TextBlock Text="{Binding Symbol}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+        <!-- The class is quiet text beside the symbol, not a chip: only the state of the market or of the data has a chip,
+             so that it is the one thing in the line that stands out. -->
+        <!-- The symbol is the one that gives way (with an ellipsis), so that the class and the state always stay in view. -->
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Text="{Binding Symbol}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding ClassLabel}" Classes="muted" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center" />
+          <!-- The trading state of the market when it is not the regular session (also while it is shut), or a warning when the
+               data is not live. The change in percent on the right always stays in view. -->
+          <Border Grid.Column="2" Classes="chip" Classes.warn="{Binding RowBadgeIsWarn}" Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasRowBadge}">
+            <TextBlock Text="{Binding RowBadgeText}" Classes="warn" Classes.muted="{Binding !RowBadgeIsWarn}" FontSize="9" FontWeight="SemiBold" />
+          </Border>
+        </Grid>
       </StackPanel>
 
-      <controls:SparklineControl Grid.Column="1" Width="64" Height="26" Margin="8,0"
+      <!-- The chart fills the height of the two lines. -->
+      <controls:SparklineControl Grid.Column="1" Width="88" Margin="8,0"
                                  ToolTip.Tip="{loc:T Row_SparklineTip}"
-                                 IsVisible="{Binding ShowSparkline}"
                                  Points="{Binding Sparkline}"
                                  Timeline="{Binding SparklineTimeline}"
                                  AboveLevel="{Binding AlertAbove}"
@@ -48,7 +55,7 @@
                                  Classes.up="{Binding IsUp}"
                                  Classes.down="{Binding IsDown}" />
 
-      <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="86" Spacing="1">
+      <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="80" Spacing="1">
         <!-- The price rolls when it changes (see RowAnimator): the old number slides out of this clipped box while the new
              one slides in. PriceText is the real price and sizes the box; PriceOld lies over it and is only seen while it
              rolls. The transforms are elements, not strings, so that the animation has a TranslateTransform to change. -->
@@ -65,16 +72,18 @@
             </TextBlock.RenderTransform>
           </TextBlock>
         </Grid>
-        <TextBlock Text="{Binding ChangeText}" IsVisible="{Binding !HasStatus}" Classes="mono"
+        <TextBlock Text="{Binding ChangeDisplayText}" Classes="mono"
                    Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" FontSize="11" HorizontalAlignment="Right" />
-        <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" Classes="warn" Classes.muted="{Binding StatusIsNeutral}" FontSize="11" HorizontalAlignment="Right" />
       </StackPanel>
 
-      <!-- The profit or loss of what the user holds of the instrument. It has a row of its own, so that its length never
-           widens the price column and squeezes the name and the sparkline. -->
-      <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding PnlText}" IsVisible="{Binding HasHolding}" Classes="mono" FontSize="10"
-                 HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"
-                 ToolTip.Tip="{Binding HoldingText}" Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
+      <!-- The holding: what is held and at what price on the left, the profit or loss in money and percent on the right.
+           It has a line of its own, so that its length never widens the price column and squeezes the name and the chart.
+           Only rows with a holding have it, so rows differ in height. -->
+      <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnDefinitions="*,Auto" IsVisible="{Binding HasHolding}" Margin="0,2,0,0">
+        <TextBlock Text="{Binding HoldingText}" Classes="muted mono" FontSize="10" TextTrimming="CharacterEllipsis" />
+        <TextBlock Grid.Column="1" Text="{Binding PnlText}" Classes="mono" FontSize="11" Margin="8,0,0,0"
+                   Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
+      </Grid>
     </Grid>
   </Border>
 </UserControl>

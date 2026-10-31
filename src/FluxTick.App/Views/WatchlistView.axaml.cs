@@ -108,7 +108,7 @@ public sealed partial class WatchlistView : UserControl
         _groupDrag = new GroupDragController(SectionsHost, CardsScroller, this, () => DataContext as MainViewModel);
         SectionsHost.AddHandler(ContextRequestedEvent, OnSectionsContextRequested, RoutingStrategies.Tunnel);
         Root.AddHandler(ContextRequestedEvent, OnRootContextRequested, RoutingStrategies.Tunnel);
-        _ = new ListDragController(RowsHost, Scroller, MoveRowAsync, LiftRow);
+        _ = new ListDragController(RowsHost, Scroller, MoveRowAsync, LiftRow, () => DataContext is MainViewModel { IsListSorted: false });
     }
 
     /// <summary>
@@ -453,7 +453,7 @@ public sealed partial class WatchlistView : UserControl
     /// A task that completes once the new order is saved.
     /// </returns>
     private Task MoveRowAsync(int from, int to) =>
-        DataContext is MainViewModel vm && from >= 0 && from < vm.Rows.Count
+        DataContext is MainViewModel { IsListSorted: false } vm && from >= 0 && from < vm.Rows.Count
             ? vm.MoveToAsync(vm.Rows[from], to)
             : Task.CompletedTask;
 

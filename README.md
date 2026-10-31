@@ -160,9 +160,10 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Action | How |
 | --- | --- |
 | Move the window | Drag the header (unless *Lock position* is on). The header's arrow-to-a-bar button keeps the window always on top; the padlock button locks its position |
-| Resize | Drag the bottom-right grip. In the list layout the width is fixed (340 px, or 260 px in compact mode) and only the height changes; in the card layout the width is free and remembered |
+| Resize | Drag the bottom-right grip. In the list layout the width is fixed (360 px) and only the height changes; in the card layout the width is free and remembered |
 | Add an instrument | **+** in the header, or *Add instrument…* in the right-click menu of the empty area; pick an asset class and a data source, then search |
-| Reorder | Drag a row up or down |
+| Reorder | Drag a row up or down (not while the list is sorted) |
+| Sort the list | In list layout the header's two-arrows button (or the right-click menu of the empty area) picks *Default order*, *Daily change* or *Holding P/L %*. Picking the key in use again reverses the direction, and the header shows the order next to the title. Rows whose market is shut follow the open ones when sorting by daily change; instruments without a value come last. *Holding P/L %* is available once an instrument has a holding, and dragging rows is off while a sort is on |
 | Remove, change source | Right-click a row |
 | Move the Settings / Add window | Drag its header; **Esc** closes it |
 | Settings | The gear icon in the header, *Settings* in the tray menu, or at the bottom of the right-click menu of the empty area. Tabs: *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Data sources* and *Updates*. Expand a data source to edit its options; drag data sources to set their priority |
@@ -175,7 +176,6 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Restore a data source | *Restore defaults* in its expanded card resets its options (secret values such as keys are kept) |
 | Data source status | The footer shows one dot per data source in use (green connected, orange off or failing, grey idle or reconnecting), problems first, with a **+N** chip when not all fit. Click the footer for every source's state and error message |
 | Full screen | Double-click the header to fill the screen; double-click again or press Esc to go back to the previous size and position. Dragging the header in full screen leaves it and carries on dragging. If you quit in full screen, the next start is full screen again |
-| Compact mode | Hides the charts of the list layout (right-click menu of the empty area, or Settings) |
 | Card layout | The grid button in the header switches between list and cards (also in the right-click menu and Settings → Appearance) |
 | Card size | In card layout, pick *Small*, *Medium* or *Large* from the header, the right-click menu or Settings → Appearance. Small shows only symbol and price (the rest is in the tooltip); large adds a taller chart, the change in amount and percent, the reference price and the 60-minute low and high |
 | Group cards | In card layout the header's grouping button (or the right-click menu, or Settings → Appearance) picks *No grouping*, *By type*, *By data source* or *Custom groups*. Click a group header to collapse or expand it; drag a type or custom group header to reorder |

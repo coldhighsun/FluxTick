@@ -119,6 +119,35 @@ internal sealed class SettingsFile
         repaired |= result.Count != items.Count;
         return result;
     }
+
+    /// <summary>
+    /// Gets the elements of a list of optional enums that are members of the enum. A value that is not a member is read as
+    /// <see langword="null"/> and dropped.
+    /// </summary>
+    /// <typeparam name="T">
+    /// The enum type.
+    /// </typeparam>
+    /// <param name="items">
+    /// The list, or <see langword="null"/>.
+    /// </param>
+    /// <param name="repaired">
+    /// Set to <see langword="true"/> when an element was dropped.
+    /// </param>
+    /// <returns>
+    /// A new list of the elements that are members; empty when the list itself is.
+    /// </returns>
+    internal static List<T> KnownMembers<T>(List<T?>? items, ref bool repaired)
+        where T : struct, Enum
+    {
+        if (items is null)
+        {
+            return [];
+        }
+
+        var result = items.Where(item => item.HasValue).Select(item => item!.Value).ToList();
+        repaired |= result.Count != items.Count;
+        return result;
+    }
 }
 
 /// <summary>
@@ -354,11 +383,6 @@ internal sealed class AppearanceFile
     public bool? AlwaysOnTop { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether rows are shown without the sparkline.
-    /// </summary>
-    public bool? Compact { get; set; }
-
-    /// <summary>
     /// Gets or sets a value indicating whether the window position is locked.
     /// </summary>
     public bool? Locked { get; set; }
@@ -404,6 +428,16 @@ internal sealed class AppearanceFile
     public WatchlistLayout? Layout { get; set; }
 
     /// <summary>
+    /// Gets or sets what the rows of the list are ordered by.
+    /// </summary>
+    public WatchlistSortKey? SortKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the largest value comes first when the rows are sorted.
+    /// </summary>
+    public bool? SortDescending { get; set; }
+
+    /// <summary>
     /// Gets or sets how large the cards are.
     /// </summary>
     public CardSize? CardSize { get; set; }
@@ -416,7 +450,7 @@ internal sealed class AppearanceFile
     /// <summary>
     /// Gets or sets the asset classes whose card section is collapsed.
     /// </summary>
-    public List<AssetClass>? CollapsedTypes { get; set; }
+    public List<AssetClass?>? CollapsedTypes { get; set; }
 
     /// <summary>
     /// Gets or sets the ids of the providers whose card section is collapsed.
@@ -426,7 +460,7 @@ internal sealed class AppearanceFile
     /// <summary>
     /// Gets or sets the order of the asset class sections.
     /// </summary>
-    public List<AssetClass>? TypeOrder { get; set; }
+    public List<AssetClass?>? TypeOrder { get; set; }
 
     /// <summary>
     /// Converts what was read to appearance settings.
@@ -444,7 +478,6 @@ internal sealed class AppearanceFile
         {
             Opacity = Opacity ?? defaults.Opacity,
             AlwaysOnTop = AlwaysOnTop ?? defaults.AlwaysOnTop,
-            Compact = Compact ?? defaults.Compact,
             Locked = Locked ?? defaults.Locked,
             RollPriceOnUpdate = RollPriceOnUpdate ?? defaults.RollPriceOnUpdate,
             ShowMarketStatus = ShowMarketStatus ?? defaults.ShowMarketStatus,
@@ -454,11 +487,13 @@ internal sealed class AppearanceFile
             Font = Font?.Trim() ?? defaults.Font,
             Language = Language ?? defaults.Language,
             Layout = Layout ?? defaults.Layout,
+            SortKey = SortKey ?? defaults.SortKey,
+            SortDescending = SortDescending ?? defaults.SortDescending,
             CardSize = CardSize ?? defaults.CardSize,
             Grouping = Grouping ?? defaults.Grouping,
-            CollapsedTypes = [.. CollapsedTypes ?? []],
+            CollapsedTypes = SettingsFile.KnownMembers(CollapsedTypes, ref repaired),
             CollapsedProviders = SettingsFile.NotNull(CollapsedProviders, ref repaired),
-            TypeOrder = [.. TypeOrder ?? []],
+            TypeOrder = SettingsFile.KnownMembers(TypeOrder, ref repaired),
         };
     }
 }

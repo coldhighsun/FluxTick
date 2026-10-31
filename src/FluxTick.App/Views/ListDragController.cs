@@ -52,6 +52,12 @@ internal sealed class ListDragController
     private readonly Action<Control, bool>? _lift;
 
     /// <summary>
+    /// Tells whether dragging is allowed right now. A press while it returns <see langword="false"/> starts nothing.
+    /// When it is not given, dragging is always allowed.
+    /// </summary>
+    private readonly Func<bool>? _isEnabled;
+
+    /// <summary>
     /// The panel that hosts the item containers while a press or drag is in progress.
     /// </summary>
     private Panel? _panel;
@@ -121,12 +127,16 @@ internal sealed class ListDragController
     /// <param name="lift">
     /// Optional hook that styles the dragged item; see the field of the same name.
     /// </param>
-    public ListDragController(ItemsControl host, ScrollViewer scroller, Func<int, int, Task> move, Action<Control, bool>? lift = null)
+    /// <param name="isEnabled">
+    /// Optional check that turns dragging off; see the field of the same name.
+    /// </param>
+    public ListDragController(ItemsControl host, ScrollViewer scroller, Func<int, int, Task> move, Action<Control, bool>? lift = null, Func<bool>? isEnabled = null)
     {
         _host = host;
         _scroller = scroller;
         _move = move;
         _lift = lift;
+        _isEnabled = isEnabled;
 
         host.PointerPressed += OnPointerPressed;
         host.PointerMoved += OnPointerMoved;
@@ -146,6 +156,11 @@ internal sealed class ListDragController
     /// </param>
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (_isEnabled is not null && !_isEnabled())
+        {
+            return;
+        }
+
         if (!e.GetCurrentPoint(_host).Properties.IsLeftButtonPressed || _host.ItemsPanelRoot is not Panel { Children.Count: > 1 } panel)
         {
             return;

@@ -101,13 +101,6 @@
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_Compact}" />
-                    <TextBlock Text="{loc:T Settings_CompactHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                  </StackPanel>
-                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding Compact}" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_Layout}" />
                     <TextBlock Text="{loc:T Settings_LayoutHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>

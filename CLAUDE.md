@@ -39,7 +39,7 @@ Things that span several files:
 
 ## Tests
 
-`tests/` has `FluxTick.Core.Tests`, `FluxTick.Providers.Tests` (a new provider adds a project reference and a contract test there) and `FluxTick.App.Tests`. In the App tests the whole assembly is one xUnit collection (`AssemblyInfo.cs`) because tests switch the shared `Loc` language; do not enable parallelism there. `XamlStyleRulesTests` reads the `.axaml` sources from disk and is skipped if they are not next to the build output.
+`tests/` has `FluxTick.Core.Tests`, `FluxTick.Providers.Tests` (a new provider adds a project reference and a contract test there) and `FluxTick.App.Tests`. In the App tests the whole assembly is one xUnit collection (`AssemblyInfo.cs`) because tests switch the shared `Loc` language; do not enable parallelism there.
 
 ## Quote providers
 

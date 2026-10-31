@@ -104,6 +104,37 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string ChangeText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the daily change in percent that the list is sorted by, or <see langword="null"/> before the first
+    /// quote or when the quote has no reference price.
+    /// </summary>
+    [ObservableProperty]
+    public partial decimal? ChangePercent { get; set; }
+
+    /// <summary>
+    /// Gets the profit or loss of the holding in percent, which the list can be sorted by, or <see langword="null"/>
+    /// without a holding or before the first quote.
+    /// </summary>
+    public decimal? PnlPercent => Pnl?.Percent;
+
+    /// <summary>
+    /// Determines whether any of the rows has a holding.
+    /// </summary>
+    /// <param name="rows">
+    /// The rows.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when at least one row has a holding.
+    /// </returns>
+    public static bool AnyHolding(IEnumerable<AssetRowViewModel> rows) => rows.Any(row => row.HasHolding);
+
+    /// <summary>
+    /// Gets a value indicating whether the market of the instrument is shut according to its trading hours, so that
+    /// <see cref="ChangePercent"/> is the change of the last session. Unlike the closing price shown in the row, it does
+    /// not depend on the setting that shows the trading state: the order of the list must not change with a display setting.
+    /// </summary>
+    public bool IsMarketShut { get; private set; }
+
+    /// <summary>
     /// Gets or sets the price that was shown before the last change of the price, which the view rolls out of the way
     /// when the new price rolls in. It is set when <see cref="RollVersion"/> moves on.
     /// </summary>
@@ -178,6 +209,21 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string MarketBadgeText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the text of the chip that the list row shows beside the name: the trading state of the market, also
+    /// while it is shut, or the note that the data is not live. It is empty when there is nothing to tell. The list row
+    /// has no room for a status line, so it tells the state here and keeps the change in percent in view.
+    /// </summary>
+    [ObservableProperty]
+    public partial string RowBadgeText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="RowBadgeText"/> is a warning about the data and not the trading
+    /// state of the market.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool RowBadgeIsWarn { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the trading state of the market is shown.
     /// </summary>
     [ObservableProperty]
@@ -219,12 +265,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
         AlertFlashUp = up;
         AlertFlashVersion++;
     }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the sparkline is displayed.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool ShowSparkline { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether a price change advances <see cref="RollVersion" />. The view stops a
@@ -433,6 +473,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
             OnPropertyChanged(nameof(PnlPercentText));
             OnPropertyChanged(nameof(PnlCompactText));
             OnPropertyChanged(nameof(PnlText));
+            OnPropertyChanged(nameof(PnlPercent));
         }
     }
 
@@ -512,6 +553,17 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public bool HasMarketBadge => MarketBadgeText.Length > 0;
 
     /// <summary>
+    /// Gets a value indicating whether the chip of the list row is shown.
+    /// </summary>
+    public bool HasRowBadge => RowBadgeText.Length > 0;
+
+    /// <summary>
+    /// Gets the change in percent as the list row shows it: the change of the last quote, which for a shut market is
+    /// the change of the last session, or a dash before the first quote.
+    /// </summary>
+    public string ChangeDisplayText => ChangeText.Length > 0 ? ChangeText : PriceFormatter.Unavailable;
+
+    /// <summary>
     /// Gets a value indicating whether the prices are not coming in, whatever the reason (stale, reconnecting, failed,
     /// switched off), which the sparkline shows as a gray dashed line from the last price on. Delayed prices keep coming
     /// in, only with an old trade time, so they do not count.
@@ -544,6 +596,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public void Update(AssetSnapshot snapshot)
     {
         _lastSnapshot = snapshot;
+        IsMarketShut = IsClosingPrice(snapshot);
 
         // It is set before the health, whose change notifies IsPriceOutdated, so that no listener sees the two out of step.
         var closing = ShowMarketStatus && IsClosingPrice(snapshot);
@@ -564,6 +617,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
             var shownBefore = PriceText;
             PriceText = PriceFormatter.FormatPrice(quote.Price, Asset.AssetClass);
             ChangeText = PriceFormatter.FormatPercent(quote.ChangePercent);
+            ChangePercent = quote.ChangePercent;
             ReferenceText = quote.Reference is { } reference ? PriceFormatter.FormatPrice(reference, Asset.AssetClass) : PriceFormatter.Unavailable;
             ChangeAmountText = quote.Change is { } amount
                 ? (amount > 0m ? "+" : string.Empty) + PriceFormatter.FormatPrice(amount, Asset.AssetClass)
@@ -633,6 +687,13 @@ public sealed partial class AssetRowViewModel : ObservableObject
         StatusIsNeutral = shut;
         StatusText = shut ? MarketLabel(snapshot.MarketState) : StatusOf(snapshot);
         MarketBadgeText = chip ? MarketLabel(market) : string.Empty;
+
+        // The list row has one chip: a shut market first, then a fault of the data, then the other trading states. Delayed
+        // prices are no fault, so they only get the chip when there is no trading state to tell.
+        var isFault = !shut && StatusText.Length > 0 && snapshot.Health != AssetHealth.Delayed;
+        var showStatus = shut || isFault || MarketBadgeText.Length == 0;
+        RowBadgeText = showStatus ? StatusText : MarketBadgeText;
+        RowBadgeIsWarn = showStatus && !StatusIsNeutral && StatusText.Length > 0;
     }
 
     /// <summary>
@@ -680,6 +741,22 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// The new label.
     /// </param>
     partial void OnMarketBadgeTextChanged(string value) => OnPropertyChanged(nameof(HasMarketBadge));
+
+    /// <summary>
+    /// Notifies bindings of derived properties when the chip of the list row changes.
+    /// </summary>
+    /// <param name="value">
+    /// The new text.
+    /// </param>
+    partial void OnRowBadgeTextChanged(string value) => OnPropertyChanged(nameof(HasRowBadge));
+
+    /// <summary>
+    /// Notifies bindings of derived properties when the change text changes.
+    /// </summary>
+    /// <param name="value">
+    /// The new text.
+    /// </param>
+    partial void OnChangeTextChanged(string value) => OnPropertyChanged(nameof(ChangeDisplayText));
 
     /// <summary>
     /// Shows the instrument again after the trading state was turned on or off.

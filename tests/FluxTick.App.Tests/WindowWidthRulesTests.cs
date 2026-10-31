@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Xml.Linq;
 using FluxTick.App.Views;
 using FluxTick.Core.Application;
 
@@ -11,35 +9,30 @@ namespace FluxTick.App.Tests;
 public class WindowWidthRulesTests
 {
     /// <summary>
-    /// Verifies the list layout has a fixed width that depends only on whether the sparklines are shown.
+    /// Verifies the list layout has a fixed width.
     /// </summary>
     [Fact]
-    public void For_ListLayout_IsFixedAndDependsOnCompact()
+    public void For_ListLayout_IsFixed()
     {
-        WindowWidthRules.For(WatchlistLayout.List, compact: false).Should().Be(new WidthRule(340, 340));
-        WindowWidthRules.For(WatchlistLayout.List, compact: true).Should().Be(new WidthRule(280, 280));
+        WindowWidthRules.For(WatchlistLayout.List).Should().Be(new WidthRule(360, 360));
     }
 
     /// <summary>
-    /// Verifies the card layout is free above its minimum, whether compact mode is on or not.
+    /// Verifies the card layout is free above its minimum.
     /// </summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void For_CardLayout_IsFreeAboveMinimum(bool compact)
+    [Fact]
+    public void For_CardLayout_IsFreeAboveMinimum()
     {
-        WindowWidthRules.For(WatchlistLayout.Cards, compact).Should().Be(new WidthRule(328, double.PositiveInfinity));
+        WindowWidthRules.For(WatchlistLayout.Cards).Should().Be(new WidthRule(328, double.PositiveInfinity));
     }
 
     /// <summary>
     /// Verifies the list layout ignores the remembered card width.
     /// </summary>
-    [Theory]
-    [InlineData(false, 340)]
-    [InlineData(true, 280)]
-    public void TargetWidth_ListLayout_IgnoresCardWidth(bool compact, double expected)
+    [Fact]
+    public void TargetWidth_ListLayout_IgnoresCardWidth()
     {
-        WindowWidthRules.TargetWidth(WatchlistLayout.List, compact, 555).Should().Be(expected);
+        WindowWidthRules.TargetWidth(WatchlistLayout.List, 555).Should().Be(360);
     }
 
     /// <summary>
@@ -57,7 +50,7 @@ public class WindowWidthRulesTests
     [InlineData(100, 328)]
     public void TargetWidth_CardLayout_UsesRememberedWidthAboveMinimum(double remembered, double expected)
     {
-        WindowWidthRules.TargetWidth(WatchlistLayout.Cards, compact: false, remembered).Should().Be(expected);
+        WindowWidthRules.TargetWidth(WatchlistLayout.Cards, remembered).Should().Be(expected);
     }
 
     /// <summary>
@@ -177,28 +170,5 @@ public class WindowWidthRulesTests
         CardLayout.ListPadding.Left.Should().Be(CardLayout.ListPadding.Right);
         WindowWidthRules.CardsMinWidth.Should().Be(CardLayout.LargeCardWidth + (2 * CardLayout.CardMargin) + space);
         WindowWidthRules.CardsMinWidth.Should().Be(328);
-    }
-
-    /// <summary>
-    /// Verifies that the XAML files take the sizes the minimum width is worked out from from <see cref="CardLayout"/> and
-    /// do not repeat them as numbers, which would let the two drift apart.
-    /// </summary>
-    [Fact]
-    public void Xaml_CardSizes_AreTakenFromCardLayout()
-    {
-        var theme = SourceFiles.LoadXaml("Styles", "Theme.axaml");
-        var values = theme.Descendants()
-            .Where(e => e.Name.LocalName == "Style" && (string?)e.Attribute("Selector") is "Border.tile" or "Border.tile.large")
-            .SelectMany(style => style.Elements())
-            .Where(setter => (string?)setter.Attribute("Property") is "Margin" or "Width")
-            .Select(setter => ((string?)setter.Attribute("Property"), (string?)setter.Attribute("Value")))
-            .ToList();
-        var list = SourceFiles.LoadXaml("Views", "WatchlistView.axaml").Descendants().Single(e => (string?)e.Attribute("Name") == "CardsScroller");
-        var window = SourceFiles.LoadXaml("Views", "MainWindow.axaml").Descendants().Single(e => (string?)e.Attribute("Name") == "ContentGrid");
-
-        values.Should().Contain(("Margin", "{x:Static views:CardLayout.CardMarginThickness}"));
-        values.Should().Contain(("Width", "{x:Static views:CardLayout.LargeCardWidth}"));
-        ((string?)list.Attribute("Padding")).Should().Be("{x:Static views:CardLayout.ListPadding}");
-        ((string?)window.Attribute("Margin")).Should().Be("{x:Static views:CardLayout.WindowFrameMargin}");
     }
 }

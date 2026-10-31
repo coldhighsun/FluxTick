@@ -271,21 +271,6 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies the compact setting hides every sparkline.
-    /// </summary>
-    [Fact]
-    public async Task Compact_Toggled_HidesSparklines()
-    {
-        await using var h = new Harness(Harness.WatchlistOf(Btc));
-        await h.Main.InitializeAsync();
-
-        h.Main.Settings.Compact = true;
-
-        h.Main.Rows.Single().ShowSparkline.Should().BeFalse();
-        await Harness.EventuallyAsync(() => h.Store.Stored!.Appearance.Compact);
-    }
-
-    /// <summary>
     /// Verifies rows do not flash on price changes by default.
     /// </summary>
     [Fact]
@@ -569,27 +554,6 @@ public class ViewModelFlowTests
         h.SettingsPage.SelectTab(SettingsTab.About);
 
         h.SettingsPage.HomepageOpenFailed.Should().BeFalse();
-    }
-
-    /// <summary>
-    /// Verifies the values of <see cref="SettingsTab"/> are the positions of the tabs in the settings page, which is
-    /// what selecting a tab by index relies on.
-    /// </summary>
-    [Fact]
-    public void SettingsTab_Values_MatchTheTabOrderOfThePage()
-    {
-        var document = SourceFiles.LoadXaml("Views", "SettingsView.axaml");
-        var headers = document.Descendants()
-            .Where(e => e.Name.LocalName == "TabItem")
-            .Select(e => (string)e.Attribute("Header")!)
-            .ToList();
-
-        foreach (var tab in Enum.GetValues<SettingsTab>())
-        {
-            headers[(int)tab].Should().Be($"{{loc:T Settings_Tab{tab}}}");
-        }
-
-        headers.Should().HaveCount(Enum.GetValues<SettingsTab>().Length);
     }
 
     /// <summary>

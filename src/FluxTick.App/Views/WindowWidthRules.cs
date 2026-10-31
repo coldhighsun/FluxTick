@@ -14,22 +14,14 @@ namespace FluxTick.App.Views;
 internal readonly record struct WidthRule(double Min, double Max);
 
 /// <summary>
-/// Pure rules for the width of the main window. The list layout has a fixed width that depends on whether the
-/// sparkline column is shown; the card layout is free and remembers the width the user chose.
+/// Pure rules for the width of the main window. The list layout has a fixed width; the card layout is free and remembers the width the user chose.
 /// </summary>
 internal static class WindowWidthRules
 {
     /// <summary>
-    /// The width of the list layout with the sparkline column.
+    /// The width of the list layout.
     /// </summary>
-    public const double ListWidthWithChart = 340;
-
-    /// <summary>
-    /// The width of the list layout in compact mode, where the sparkline column is hidden. The name column keeps
-    /// the width it has in <see cref="ListWidthWithChart"/>, less the 80 pixels of the sparkline column, and 20 pixels
-    /// more than that keep the title and all the header buttons from crowding each other.
-    /// </summary>
-    public const double ListWidthCompact = 280;
+    public const double ListWidth = 360;
 
     /// <summary>
     /// The smallest width of the card layout: just wide enough for one large card, so that no space is left beside it.
@@ -69,17 +61,13 @@ internal static class WindowWidthRules
     /// <param name="layout">
     /// The watchlist layout.
     /// </param>
-    /// <param name="compact">
-    /// Whether compact mode is on, which hides the sparklines.
-    /// </param>
     /// <returns>
     /// The width limits. In the list layout both are the same, so the width is fixed.
     /// </returns>
-    public static WidthRule For(WatchlistLayout layout, bool compact) => layout switch
+    public static WidthRule For(WatchlistLayout layout) => layout switch
     {
         WatchlistLayout.Cards => new WidthRule(CardsMinWidth, double.PositiveInfinity),
-        _ when compact => new WidthRule(ListWidthCompact, ListWidthCompact),
-        _ => new WidthRule(ListWidthWithChart, ListWidthWithChart),
+        _ => new WidthRule(ListWidth, ListWidth),
     };
 
     /// <summary>
@@ -88,18 +76,15 @@ internal static class WindowWidthRules
     /// <param name="layout">
     /// The watchlist layout.
     /// </param>
-    /// <param name="compact">
-    /// Whether compact mode is on.
-    /// </param>
     /// <param name="cardsWidth">
     /// The width the user chose for the card layout.
     /// </param>
     /// <returns>
     /// The fixed width of the list layout, or the remembered width of the card layout kept within its limits.
     /// </returns>
-    public static double TargetWidth(WatchlistLayout layout, bool compact, double cardsWidth)
+    public static double TargetWidth(WatchlistLayout layout, double cardsWidth)
     {
-        var rule = For(layout, compact);
+        var rule = For(layout);
         return Math.Clamp(cardsWidth, rule.Min, rule.Max);
     }
 

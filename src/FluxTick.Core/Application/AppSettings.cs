@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluxTick.Abstractions;
+using FluxTick.Core.Infrastructure;
 
 namespace FluxTick.Core.Application;
 
@@ -81,6 +82,27 @@ public enum WatchlistLayout
     /// Fixed-size cards that flow into as many columns as the window width allows.
     /// </summary>
     Cards,
+}
+
+/// <summary>
+/// What the rows of the list layout are ordered by. The direction is a setting of its own.
+/// </summary>
+public enum WatchlistSortKey
+{
+    /// <summary>
+    /// The order of the watchlist, which the user arranges by dragging.
+    /// </summary>
+    None,
+
+    /// <summary>
+    /// The daily change in percent.
+    /// </summary>
+    ChangePercent,
+
+    /// <summary>
+    /// The profit or loss of the holding in percent.
+    /// </summary>
+    HoldingPnlPercent,
 }
 
 /// <summary>
@@ -296,11 +318,6 @@ public sealed class AppearanceSettings
     public bool AlwaysOnTop { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether rows are shown without the sparkline for a denser list.
-    /// </summary>
-    public bool Compact { get; set; }
-
-    /// <summary>
     /// Gets or sets a value indicating whether the window position is locked against dragging.
     /// </summary>
     public bool Locked { get; set; }
@@ -347,6 +364,16 @@ public sealed class AppearanceSettings
     /// Gets or sets how the watchlist is laid out.
     /// </summary>
     public WatchlistLayout Layout { get; set; } = WatchlistLayout.List;
+
+    /// <summary>
+    /// Gets or sets what the rows are ordered by when <see cref="Layout"/> is <see cref="WatchlistLayout.List"/>.
+    /// </summary>
+    public WatchlistSortKey SortKey { get; set; } = WatchlistSortKey.None;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the largest value comes first when the rows are sorted.
+    /// </summary>
+    public bool SortDescending { get; set; } = true;
 
     /// <summary>
     /// Gets or sets how large the cards are when <see cref="Layout"/> is <see cref="WatchlistLayout.Cards"/>.
@@ -467,13 +494,14 @@ public sealed class AppSettings
 {
     /// <summary>
     /// The serializer options used to persist and clone settings. A file is read through <c>SettingsFile</c>, which
-    /// takes care of values that are missing or null.
+    /// takes care of values that are missing or null; its optional enums are read by <c>LenientEnumConverterFactory</c>,
+    /// so a value that is not a member of the enum counts as missing.
     /// </summary>
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new LenientEnumConverterFactory(), new JsonStringEnumConverter() },
     };
 
     /// <summary>

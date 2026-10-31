@@ -141,6 +141,8 @@ public sealed class RoutingAndSettingsTests : IDisposable
         settings.Appearance.ShowMarketStatus = false;
         settings.Appearance.AutoHideAtEdge = false;
         settings.Appearance.Layout = WatchlistLayout.Cards;
+        settings.Appearance.SortKey = WatchlistSortKey.HoldingPnlPercent;
+        settings.Appearance.SortDescending = false;
         settings.Appearance.Grouping = CardGrouping.Custom;
         settings.Appearance.CollapsedTypes.Add(AssetClass.Forex);
         settings.Groups.Add(new WatchGroup { Id = "g1", Name = "Core", Collapsed = true });
@@ -161,6 +163,8 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Appearance.ShowMarketStatus.Should().BeFalse();
         loaded.Appearance.AutoHideAtEdge.Should().BeFalse();
         loaded.Appearance.Layout.Should().Be(WatchlistLayout.Cards);
+        loaded.Appearance.SortKey.Should().Be(WatchlistSortKey.HoldingPnlPercent);
+        loaded.Appearance.SortDescending.Should().BeFalse();
         loaded.Appearance.Grouping.Should().Be(CardGrouping.Custom);
         loaded.Appearance.CollapsedTypes.Should().Equal(AssetClass.Forex);
         loaded.Groups.Should().ContainSingle().Which.Should().BeEquivalentTo(new WatchGroup { Id = "g1", Name = "Core", Collapsed = true });
@@ -181,6 +185,8 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var loaded = await store.LoadAsync();
 
         loaded!.Appearance.Layout.Should().Be(WatchlistLayout.List);
+        loaded.Appearance.SortKey.Should().Be(WatchlistSortKey.None);
+        loaded.Appearance.SortDescending.Should().BeTrue();
         loaded.Appearance.Grouping.Should().Be(CardGrouping.None);
         loaded.Appearance.CollapsedTypes.Should().BeEmpty();
         loaded.Groups.Should().BeEmpty();
@@ -348,7 +354,6 @@ public sealed class RoutingAndSettingsTests : IDisposable
         {
             Opacity = 0.5,
             AlwaysOnTop = false,
-            Compact = true,
             Locked = true,
             RollPriceOnUpdate = true,
             AutoHideAtEdge = false,
@@ -459,6 +464,39 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies an enum that is not a member, an unknown name or a number out of range, is read as its default, and the
+    /// rest of the file is kept.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_EnumOutOfRange_UsesTheDefaultAndKeepsTheRest()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            { "watchlist": [{ "providerId": "p", "symbol": "S", "assetClass": "Nonsense" }],
+              "appearance": { "opacity": 0.8, "layout": 42, "sortKey": 7, "themeMode": "Sideways", "grouping": "ByType", "typeOrder": ["Equity", 99, "Nope"] } }
+            """);
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var loaded = await store.LoadAsync();
+
+        var defaults = new AppearanceSettings();
+        loaded!.Appearance.Opacity.Should().Be(0.8);
+        loaded.Appearance.Layout.Should().Be(defaults.Layout);
+        loaded.Appearance.SortKey.Should().Be(defaults.SortKey);
+        loaded.Appearance.ThemeMode.Should().Be(defaults.ThemeMode);
+        loaded.Appearance.Grouping.Should().Be(CardGrouping.ByType);
+        loaded.Appearance.TypeOrder.Should().Equal(AssetClass.Equity);
+        loaded.Watchlist.Single().AssetClass.Should().Be(new WatchlistEntry().AssetClass);
+        loaded.Repaired.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies a repair made while reading is reported once by <see cref="AppSettings.Normalize"/>, and a file that only
     /// lacks values, as one from an older version does, is no repair.
     /// </summary>
@@ -483,7 +521,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
 
     /// <summary>
     /// Verifies every setting that is written can be read back: each public property of the settings classes has one of
-    /// the same name and the same type, apart from nullability and the file classes, in the class it is read into, so that a new setting is not lost at the next start.
+    /// the same name and the same type, apart from nullability (also of the elements of a list) and the file classes, in the class it is read into, so that a new setting is not lost at the next start.
     /// </summary>
     /// <param name="settingsType">
     /// The settings class.
@@ -506,7 +544,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var written = settingsType.GetProperties()
             .Where(p => p.SetMethod is { IsPublic: true } && p.GetCustomAttribute<System.Text.Json.Serialization.JsonIgnoreAttribute>() is null)
             .Select(p => (p.Name, Type: ReadAs(p.PropertyType)));
-        var read = fileType.GetProperties().Select(p => (p.Name, Type: Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType));
+        var read = fileType.GetProperties().Select(p => (p.Name, Type: ReadAs(p.PropertyType)));
 
         read.Should().BeEquivalentTo(written);
     }
@@ -545,15 +583,15 @@ public sealed class RoutingAndSettingsTests : IDisposable
         var manager = new SettingsManager(store, NullLogger<SettingsManager>.Instance, time);
         await manager.LoadAsync(new AppSettings());
 
-        await manager.UpdateAsync(s => s.Appearance.Compact = true);
-        await manager.UpdateAsync(s => s.Appearance.Compact = false);
-        await manager.UpdateAsync(s => s.Appearance.Compact = true);
+        await manager.UpdateAsync(s => s.Appearance.Locked = true);
+        await manager.UpdateAsync(s => s.Appearance.Locked = false);
+        await manager.UpdateAsync(s => s.Appearance.Locked = true);
 
         store.Loads.Should().Be(2, "the start and the first change; the next ones wait for the interval");
         manager.StoredSettingsUnreadable.Should().BeTrue();
 
         time.Advance(TimeSpan.FromSeconds(6));
-        await manager.UpdateAsync(s => s.Appearance.Compact = false);
+        await manager.UpdateAsync(s => s.Appearance.Locked = false);
 
         store.Loads.Should().Be(3, "the interval has passed, so the file is tried again");
     }
@@ -569,7 +607,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         await manager.LoadAsync(new AppSettings());
         manager.StoredSettingsUnreadable.Should().BeTrue();
 
-        await manager.UpdateAsync(s => s.Appearance.Compact = true);
+        await manager.UpdateAsync(s => s.Appearance.Locked = true);
         manager.StoredSettingsUnreadable.Should().BeFalse();
     }
 

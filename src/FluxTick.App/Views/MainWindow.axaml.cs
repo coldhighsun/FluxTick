@@ -70,7 +70,7 @@ public sealed partial class MainWindow : Window
     /// The width the user chose for the card layout. The list layout has a fixed width of its own, so this is the
     /// value that is remembered and saved.
     /// </summary>
-    private double _cardsWidth = WindowWidthRules.ListWidthWithChart;
+    private double _cardsWidth = WindowWidthRules.ListWidth;
 
     /// <summary>
     /// The resize by the grip that is under way on macOS, or <see langword="null"/> when there is none.
@@ -142,7 +142,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Width = WindowWidthRules.ListWidthWithChart;
+        Width = WindowWidthRules.ListWidth;
         MinWidth = WindowWidthRules.CardsMinWidth;
         PositionChanged += (_, _) =>
         {
@@ -191,10 +191,10 @@ public sealed partial class MainWindow : Window
     public void RestoreGeometry(WindowSettings saved)
     {
         _cardsWidth = Math.Max(saved.Width, WindowWidthRules.CardsMinWidth);
-        var (layout, compact) = CurrentLayout();
-        var rule = WindowWidthRules.For(layout, compact);
+        var layout = CurrentLayout();
+        var rule = WindowWidthRules.For(layout);
         MinWidth = 0;
-        Width = WindowWidthRules.TargetWidth(layout, compact, _cardsWidth);
+        Width = WindowWidthRules.TargetWidth(layout, _cardsWidth);
         MinWidth = rule.Min;
         MaxWidth = rule.Max;
         _appliedRule = rule;
@@ -533,8 +533,7 @@ public sealed partial class MainWindow : Window
                 Position = record.Position;
             }
 
-            var (layout, compact) = CurrentLayout();
-            if (_appliedRule != default && WindowWidthRules.For(layout, compact) == _appliedRule)
+            if (_appliedRule != default && WindowWidthRules.For(CurrentLayout()) == _appliedRule)
             {
                 FinishWidthChange(_appliedRule);
             }
@@ -603,18 +602,16 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Gets the layout and the compact flag that decide the width of the window.
+    /// Gets the layout that decides the width of the window.
     /// </summary>
     /// <returns>
-    /// The layout and whether compact mode is on; the list layout without compact mode when there is no view model.
+    /// The layout; the list layout when there is no view model.
     /// </returns>
-    private (WatchlistLayout Layout, bool Compact) CurrentLayout() =>
-        _observed is { } viewModel
-            ? (viewModel.IsCardLayout ? WatchlistLayout.Cards : WatchlistLayout.List, viewModel.Settings.Compact)
-            : (WatchlistLayout.List, false);
+    private WatchlistLayout CurrentLayout() =>
+        _observed is { IsCardLayout: true } ? WatchlistLayout.Cards : WatchlistLayout.List;
 
     /// <summary>
-    /// Fits the width of the window to a change of the layout or of compact mode.
+    /// Fits the width of the window to a change of the layout.
     /// </summary>
     /// <param name="sender">
     /// The view model that changed.
@@ -624,7 +621,7 @@ public sealed partial class MainWindow : Window
     /// </param>
     private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.IsCardLayout) or nameof(SettingsViewModel.Compact))
+        if (e.PropertyName == nameof(MainViewModel.IsCardLayout))
         {
             ApplyWidthRule();
         }
@@ -655,17 +652,17 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var (layout, compact) = CurrentLayout();
-        var rule = WindowWidthRules.For(layout, compact);
+        var layout = CurrentLayout();
+        var rule = WindowWidthRules.For(layout);
 
-        // The card layout does not depend on compact mode, so toggling it there must not touch the window.
+        // A change that leaves the rule as it is must not touch the window.
         if (rule == _appliedRule)
         {
             return;
         }
 
         _appliedRule = rule;
-        var target = WindowWidthRules.TargetWidth(layout, compact, _cardsWidth);
+        var target = WindowWidthRules.TargetWidth(layout, _cardsWidth);
         _widthAnimation.Stop();
 
         // The width rules keep the window on the screen, which would pull a hidden window half way out, and a slide that
@@ -792,7 +789,7 @@ public sealed partial class MainWindow : Window
     {
         // Every resize the application did not ask for counts: the user dragging the grip, but also the system
         // snapping the window or a change of screen scaling. The ones this class asks for are its own width rule.
-        if (e.Reason != WindowResizeReason.Application && WindowState == WindowState.Normal && CurrentLayout().Layout == WatchlistLayout.Cards)
+        if (e.Reason != WindowResizeReason.Application && WindowState == WindowState.Normal && CurrentLayout() == WatchlistLayout.Cards)
         {
             _cardsWidth = Math.Max(e.ClientSize.Width, WindowWidthRules.CardsMinWidth);
         }
@@ -1433,7 +1430,7 @@ public sealed partial class MainWindow : Window
         if (WindowState == WindowState.Normal && !FillsScreen)
         {
             // The list is a narrow strip and has no full screen form; only the cards fill the screen.
-            if (CurrentLayout().Layout != WatchlistLayout.Cards)
+            if (CurrentLayout() != WatchlistLayout.Cards)
             {
                 return;
             }
@@ -1533,7 +1530,7 @@ public sealed partial class MainWindow : Window
         Height = height;
 
         // The list layout has a fixed width, so there the grip only resizes vertically.
-        if (CurrentLayout().Layout == WatchlistLayout.Cards)
+        if (CurrentLayout() == WatchlistLayout.Cards)
         {
             var width = Math.Max(Math.Max(MinWidth, WindowWidthRules.CardsMinWidth), Math.Min(MaxWidth, drag.Width + (pointer.X - drag.Pointer.X)));
             Width = width;
