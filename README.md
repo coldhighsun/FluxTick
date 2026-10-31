@@ -121,7 +121,7 @@ Things to know on macOS:
 
 - Only Apple Silicon (M1 and later) is built, there is no Intel build. macOS 12 or later is required.
 - The boss-key hotkey and *Launch at startup* are Windows-only and not available. Clicking the menu bar icon opens the
-  instrument list (experimental on macOS); its *Show / hide*, *Settings* and *Exit* entries sit at the bottom of the list, as
+  instrument list; its *Show / hide*, *Settings* and *Exit* entries sit at the bottom of the list, as
   the icon has no menu of its own.
 - There is no Keychain integration yet: API keys are stored as plain text (file mode 600) in `~/.config/FluxTick`, which
   also holds the settings and logs.

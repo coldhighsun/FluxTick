@@ -110,7 +110,7 @@ xattr -dr com.apple.quarantine /Applications/FluxTick.app
 macOS 上的注意事项：
 
 - 仅构建 Apple Silicon（M1 及更新），没有 Intel 版本；需要 macOS 12 或更高版本。
-- 老板键和*开机自启动*仅限 Windows，macOS 上不可用。点击菜单栏图标会弹出资产列表（macOS 上为试验性功能），图标本身没有菜单，
+- 老板键和*开机自启动*仅限 Windows，macOS 上不可用。点击菜单栏图标会弹出资产列表，图标本身没有菜单，
   *显示/隐藏*、*设置*和*退出*放在列表底部。
 - 暂未接入钥匙串：API Key 以明文（文件权限 600）保存在 `~/.config/FluxTick`，设置和日志也在该目录。
 - 程序是单文件自解压，首次启动可能多花几秒。
