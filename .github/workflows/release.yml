@@ -56,6 +56,15 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path publish\win-x64\FluxTick.exe -DestinationPath "FluxTick-${{ github.ref_name }}-win-x64-portable.zip"
 
+      # The runner image only has Inno Setup 6, which lacks the official Simplified Chinese translation that 7 ships.
+      - name: Install Inno Setup 7
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          winget install --id JRSoftware.InnoSetup.7 --exact --scope machine --location C:\InnoSetup7 `
+            --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+          if (-not (Test-Path 'C:\InnoSetup7\ISCC.exe')) { throw 'Inno Setup 7 was not installed' }
+
       # The in-app updater installs FluxTick-{tag}-{rid}-setup.exe.
       - name: Build installer
         if: matrix.rid == 'win-x64'
@@ -64,7 +73,7 @@ jobs:
           $tag = '${{ github.ref_name }}'
           $version = $tag.TrimStart('v')
           $numeric = ($version -split '-')[0] + '.0'
-          iscc /Qp "/DAppVersion=$version" "/DNumericVersion=$numeric" `
+          & 'C:\InnoSetup7\ISCC.exe' /Qp "/DAppVersion=$version" "/DNumericVersion=$numeric" `
             "/DSourceExe=$PWD\publish\win-x64\FluxTick.exe" "/DOutputDir=$PWD" `
             "/DOutputName=FluxTick-$tag-win-x64-setup" installer\FluxTick.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
