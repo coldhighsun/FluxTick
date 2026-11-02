@@ -458,9 +458,6 @@
     <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     <Setter Property="Opacity" Value="0.9" />
   </Style>
-  <Style Selector="Border.row.dimmed > Grid">
-    <Setter Property="Opacity" Value="0.55" />
-  </Style>
 
   <!-- Cards of the card layout. The size is fixed and set by the card size setting: small (the symbol and the price only),
        medium (the base style) and large (a taller chart and more figures). What the small card leaves out has the class
@@ -525,6 +522,20 @@
   <Style Selector="Border.tile.small TextBlock.price.tickdown, Border.tile.large TextBlock.price.tickdown">
     <Setter Property="Foreground" Value="{DynamicResource DownBrush}" />
   </Style>
+  <!-- An instrument whose prices stopped (a shut market among them) is faded and its moves are drawn in gray, in the
+       list, the cards and the tray popup alike: the colors of the move would otherwise keep it looking live. Only the
+       text colored by a move (change, profit or loss, price tick) turns gray; the rest keeps its own color, a warning
+       among it as it says why, and so do the alert levels of the chart. These rules come after the card rules that color
+       the price by the move (price.tickup, price.tickdown) so that the gray wins over them. -->
+  <Style Selector="Border.row.dimmed > Grid, Border.tile.dimmed > Grid, Grid.stopped">
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
+  <Style Selector="Border.row.dimmed TextBlock.up, Border.row.dimmed TextBlock.down, Border.row.dimmed TextBlock.tickup, Border.row.dimmed TextBlock.tickdown, Border.tile.dimmed TextBlock.up, Border.tile.dimmed TextBlock.down, Border.tile.dimmed TextBlock.tickup, Border.tile.dimmed TextBlock.tickdown, Grid.stopped TextBlock.up, Grid.stopped TextBlock.down, Grid.stopped TextBlock.tickup, Grid.stopped TextBlock.tickdown">
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="Border.row.dimmed controls|SparklineControl, Border.tile.dimmed controls|SparklineControl">
+    <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
+  </Style>
   <Style Selector="Border.tile controls|SparklineControl.chart">
     <Setter Property="MinHeight" Value="16" />
   </Style>
@@ -533,9 +544,6 @@
   </Style>
   <Style Selector="Border.tile:pointerover">
     <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
-  </Style>
-  <Style Selector="Border.tile.dimmed > Grid">
-    <Setter Property="Opacity" Value="0.55" />
   </Style>
   <Style Selector="Border.tile.small :is(Control).detail">
     <Setter Property="IsVisible" Value="False" />

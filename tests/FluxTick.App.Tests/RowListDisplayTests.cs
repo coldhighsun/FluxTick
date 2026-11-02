@@ -49,6 +49,59 @@ public class RowListDisplayTests
     }
 
     /// <summary>
+    /// Verifies a shut market is dimmed even when its source goes on sending prices that look live, and is not dimmed
+    /// again once the market opens.
+    /// </summary>
+    [Fact]
+    public void Update_MarketClosedWithLivePrices_DimsUntilItOpens()
+    {
+        var row = new AssetRowViewModel(Stock, "p");
+
+        row.Update(Snapshot(AssetHealth.Live, MarketState.Closed));
+
+        row.IsStopped.Should().BeFalse();
+        row.IsDimmed.Should().BeTrue();
+
+        row.Update(Snapshot(AssetHealth.Live, MarketState.Open));
+
+        row.IsDimmed.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the closing price of a shut market is not outdated, and is once the market opens with the prices still stale.
+    /// </summary>
+    [Fact]
+    public void Update_StaleInShutMarket_PriceIsOutdatedOnlyOnceTheMarketOpens()
+    {
+        var row = new AssetRowViewModel(Stock, "p");
+
+        row.Update(Snapshot(AssetHealth.Stale, MarketState.Closed));
+
+        row.IsPriceOutdated.Should().BeFalse();
+
+        row.Update(Snapshot(AssetHealth.Stale, MarketState.Open));
+
+        row.IsPriceOutdated.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies IsDimmed is notified when only the market state changes and the health stays the same.
+    /// </summary>
+    [Fact]
+    public void Update_MarketOpensWithSameHealth_NotifiesIsDimmed()
+    {
+        var row = new AssetRowViewModel(Stock, "p");
+        row.Update(Snapshot(AssetHealth.Live, MarketState.Closed));
+        var notified = new List<string?>();
+        row.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
+
+        row.Update(Snapshot(AssetHealth.Live, MarketState.Open));
+
+        notified.Should().Contain(nameof(AssetRowViewModel.IsDimmed));
+        row.IsDimmed.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies a problem with the data is told as a warning chip and the last change stays in view.
     /// </summary>
     [Fact]

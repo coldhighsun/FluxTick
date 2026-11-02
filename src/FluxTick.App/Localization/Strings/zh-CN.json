@@ -222,8 +222,6 @@
   "Settings_FontHint": "没有半粗字重或等宽数字的字体可能显示不整齐",
   "Settings_FontSystem": "系统默认",
   "Settings_LanguageHint": "自动：跟随系统语言",
-  "Settings_MarketStatus": "显示市场状态",
-  "Settings_MarketStatusHint": "标出盘前、盘后和休市；休市价格仍计入总额",
   "Settings_LaunchAtLogin": "开机自启动",
   "Settings_LaunchAtLoginHint": "登录 Windows 时自动启动",
   "Settings_Layout": "布局",

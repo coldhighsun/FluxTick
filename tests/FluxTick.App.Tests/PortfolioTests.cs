@@ -212,11 +212,10 @@ public class PortfolioTests
     }
 
     /// <summary>
-    /// Verifies that the closing price of a shut market counts in the total, and that turning the trading state off, which
-    /// makes it stale again, works the total out again without waiting for a quote.
+    /// Verifies that the closing price of a shut market counts in the total.
     /// </summary>
     [Fact]
-    public async Task RefreshPortfolio_ShutMarket_CountsUntilTheTradingStateIsTurnedOff()
+    public async Task RefreshPortfolio_ShutMarket_CountsTheClosingPrice()
     {
         var settings = Harness.WatchlistOf(Btc);
         settings.General.BaseCurrency = "USD";
@@ -232,14 +231,6 @@ public class PortfolioTests
         h.Main.RefreshPortfolio();
 
         h.Main.PortfolioText.Should().Contain("+10.00 USD").And.NotContain(Loc.Get("Portfolio_Stale", 1));
-
-        h.Main.Settings.ShowMarketStatus = false;
-
-        await Harness.EventuallyAsync(() => h.Main.PortfolioText == Loc.Get("Portfolio_Stale", 1));
-
-        h.Main.Settings.ShowMarketStatus = true;
-
-        await Harness.EventuallyAsync(() => h.Main.PortfolioText.Contains("+10.00 USD") && !h.Main.PortfolioText.Contains(Loc.Get("Portfolio_Stale", 1)));
     }
 
     /// <summary>

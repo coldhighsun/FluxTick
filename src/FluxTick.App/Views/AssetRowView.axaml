@@ -51,7 +51,7 @@
                                  AboveLevel="{Binding AlertAbove}"
                                  BelowLevel="{Binding AlertBelow}"
                                  Price="{Binding CurrentPrice}"
-                                 IsStopped="{Binding IsStopped}"
+                                 IsStopped="{Binding IsDimmed}"
                                  Classes.up="{Binding IsUp}"
                                  Classes.down="{Binding IsDown}" />
 
