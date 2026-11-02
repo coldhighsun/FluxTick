@@ -47,8 +47,8 @@ public sealed record ExchangeEndpoints(Uri WebSocket, Uri Rest)
         string restBaseUrl,
         string restHint = "Used for history and symbol search.") =>
     [
-        new ProviderOptionDefinition(WebSocketUrlKey, "WebSocket endpoint", ProviderOptionType.String, webSocketUrl, webSocketHint),
-        new ProviderOptionDefinition(RestBaseUrlKey, "REST endpoint", ProviderOptionType.String, restBaseUrl, restHint),
+        new ProviderOptionDefinition(WebSocketUrlKey, "WebSocket endpoint", ProviderOptionType.String, webSocketUrl, webSocketHint, Advanced: true),
+        new ProviderOptionDefinition(RestBaseUrlKey, "REST endpoint", ProviderOptionType.String, restBaseUrl, restHint, Advanced: true),
     ];
 
     /// <summary>

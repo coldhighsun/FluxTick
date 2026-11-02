@@ -53,13 +53,15 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
                 "WebSocket endpoint",
                 ProviderOptionType.String,
                 "wss://streamer.finance.yahoo.com/?version=2",
-                "Used for live prices. If it is unreachable from your network, prices come from the API endpoint instead."),
+                "Used for live prices. If it is unreachable from your network, prices come from the API endpoint instead.",
+                Advanced: true),
             new ProviderOptionDefinition(
                 BaseUrlKey,
                 "API endpoint",
                 ProviderOptionType.String,
                 "https://query1.finance.yahoo.com",
-                "Alternative: https://query2.finance.yahoo.com"),
+                "Alternative: https://query2.finance.yahoo.com",
+                Advanced: true),
         ]);
 
     /// <inheritdoc />

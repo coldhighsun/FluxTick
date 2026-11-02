@@ -47,7 +47,8 @@ public sealed class TencentProviderFactory : IMarketDataProviderFactory
                 "Quote endpoint",
                 ProviderOptionType.String,
                 "https://qt.gtimg.cn",
-                "Used for prices. Symbol search and history use smartbox.gtimg.cn and web.ifzq.gtimg.cn."),
+                "Used for prices. Symbol search and history use smartbox.gtimg.cn and web.ifzq.gtimg.cn.",
+                Advanced: true),
         ],
         EnabledByDefault: false);
 

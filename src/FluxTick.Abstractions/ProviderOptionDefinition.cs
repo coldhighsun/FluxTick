@@ -128,6 +128,12 @@ public readonly record struct OptionValidation(OptionValidationError Error, stri
 /// blank, such as an API key. The settings page opens the options of a source that is switched on while one is missing,
 /// and the source is not enabled in the settings file until every required value is given.
 /// </param>
+/// <param name="Advanced">
+/// Whether the option is rarely changed, such as an endpoint address or the interval at which a live stream is topped
+/// up. The interval at which prices are fetched is not advanced, as users change it. A required option must not be
+/// advanced, as the collapsed section would hide a value the user has to give; <c>ProviderRegistry</c> rejects it. The
+/// settings page keeps advanced options in a collapsed section so the options most users need stay in view.
+/// </param>
 public sealed record ProviderOptionDefinition(
     string Key,
     string Label,
@@ -137,7 +143,8 @@ public sealed record ProviderOptionDefinition(
     IReadOnlyList<string>? Choices = null,
     double? Min = null,
     double? Max = null,
-    bool Required = false)
+    bool Required = false,
+    bool Advanced = false)
 {
     /// <summary>
     /// The key of the option in which the polled sources keep how often they fetch prices.

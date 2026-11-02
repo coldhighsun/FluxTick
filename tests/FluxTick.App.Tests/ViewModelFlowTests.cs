@@ -602,53 +602,55 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies data sources start collapsed, also after the page is reloaded, and expand independently.
+    /// Verifies the page starts on the list, also after it is reloaded, and a data source opens its detail page and goes
+    /// back to the list.
     /// </summary>
     [Fact]
-    public async Task ProviderEntries_StartCollapsedAndExpandIndependently()
+    public async Task ProviderEntries_StartOnTheListAndOpenTheDetailPage()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
         h.SettingsPage.Reload();
         var providers = h.SettingsPage.Providers;
-        providers.Should().OnlyContain(p => !p.IsExpanded);
+        h.SettingsPage.SelectedProvider.Should().BeNull();
+        h.SettingsPage.IsProviderDetailOpen.Should().BeFalse();
 
-        providers[0].IsExpanded = true;
+        providers[0].OpenCommand.Execute(null);
 
-        providers.Skip(1).Should().OnlyContain(p => !p.IsExpanded);
-        providers[0].IsExpanded = false;
-        providers[0].IsExpanded.Should().BeFalse();
+        h.SettingsPage.SelectedProvider.Should().BeSameAs(providers[0]);
+        h.SettingsPage.IsProviderDetailOpen.Should().BeTrue();
+        h.SettingsPage.CloseProviderDetailCommand.Execute(null);
+        h.SettingsPage.SelectedProvider.Should().BeNull();
+        h.SettingsPage.IsProviderDetailOpen.Should().BeFalse();
     }
 
     /// <summary>
-    /// Verifies switching a data source on leaves its card as it was.
+    /// Verifies switching a data source on leaves the page on the list.
     /// </summary>
     [Fact]
-    public async Task EnablingProvider_KeepsItsCardCollapsed()
+    public async Task EnablingProvider_KeepsTheListShown()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
         var provider = h.SettingsPage.Providers.First();
         provider.Enabled = false;
-        provider.IsExpanded = false;
 
         provider.Enabled = true;
 
-        provider.IsExpanded.Should().BeFalse();
+        h.SettingsPage.SelectedProvider.Should().BeNull();
     }
 
     /// <summary>
-    /// Verifies an invalid option is not flagged while the user is still typing, saving opens the section and flags it,
+    /// Verifies an invalid option is not flagged while the user is still typing, saving opens the detail page and flags it,
     /// and a valid value clears the flag.
     /// </summary>
     [Fact]
-    public async Task InvalidOption_FlagsAndExpandsOnSave_AndValidValueClears()
+    public async Task InvalidOption_FlagsAndOpensTheDetailPageOnSave_AndValidValueClears()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
         var provider = h.SettingsPage.Providers.First();
         var interval = provider.Options.Single(o => o.Definition.Key == "Interval");
-        provider.IsExpanded = false;
         provider.HasOptionError.Should().BeFalse();
 
         interval.Text = "not a number";
@@ -657,7 +659,7 @@ public class ViewModelFlowTests
         provider.SaveCommand.Execute(null);
 
         provider.HasOptionError.Should().BeTrue();
-        provider.IsExpanded.Should().BeTrue();
+        h.SettingsPage.SelectedProvider.Should().BeSameAs(provider);
         interval.Text = "10";
         provider.HasOptionError.Should().BeFalse();
     }
@@ -737,7 +739,7 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies a save with an invalid input is refused as a whole and opens the card, and that reverting brings back the
+    /// Verifies a save with an invalid input is refused as a whole and opens the detail page, and that reverting brings back the
     /// saved values.
     /// </summary>
     [Fact]
@@ -751,13 +753,12 @@ public class ViewModelFlowTests
         interval.Text = "10";
         provider.SaveCommand.Execute(null);
         await Harness.EventuallyAsync(() => h.Store.Stored!.Providers[id].Options.GetValueOrDefault("Interval") == "00:00:10");
-        provider.IsExpanded = false;
 
         interval.Text = "not a number";
         provider.Options.Single(o => o.Definition.Key == "Url").Text = "https://b";
         provider.SaveCommand.Execute(null);
 
-        provider.IsExpanded.Should().BeTrue();
+        h.SettingsPage.SelectedProvider.Should().BeSameAs(provider);
         interval.Error.Should().NotBeEmpty();
         h.Store.Stored!.Providers[id].Options["Interval"].Should().Be("00:00:10");
         h.Store.Stored.Providers[id].Options.ContainsKey("Url").Should().BeFalse();
@@ -892,10 +893,10 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
-    /// Verifies expanding a data source neither changes its enabled state nor publishes any settings change.
+    /// Verifies opening a data source neither changes its enabled state nor publishes any settings change.
     /// </summary>
     [Fact]
-    public async Task ExpandingProvider_DoesNotChangeEnabledStateOrWriteSettings()
+    public async Task OpeningProvider_DoesNotChangeEnabledStateOrWriteSettings()
     {
         await using var h = new Harness();
         await h.Main.InitializeAsync();
@@ -904,9 +905,9 @@ public class ViewModelFlowTests
         var changes = 0;
         h.Settings.Changed += (_, _) => changes++;
 
-        provider.IsExpanded = true;
+        provider.OpenCommand.Execute(null);
 
-        // Updates are serialized, so a barrier update completes after any update the expansion might have started;
+        // Updates are serialized, so a barrier update completes after any update opening might have started;
         // it is the only change that may be published.
         await h.Settings.UpdateAsync(_ => { });
         changes.Should().Be(1);

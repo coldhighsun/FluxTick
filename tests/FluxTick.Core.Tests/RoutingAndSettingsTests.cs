@@ -61,6 +61,20 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies a factory that declares a required option as advanced is rejected, as the collapsed section would hide
+    /// a value the user has to give.
+    /// </summary>
+    [Fact]
+    public void Constructor_WithRequiredAdvancedOption_Throws()
+    {
+        var option = new ProviderOptionDefinition("ApiKey", "Key", ProviderOptionType.Secret, string.Empty, Required: true, Advanced: true);
+
+        var act = () => new ProviderRegistry([new OptionsOnlyFactory(option)]);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*ApiKey*");
+    }
+
+    /// <summary>
     /// Verifies lookups find known providers and report unknown ones.
     /// </summary>
     [Fact]
@@ -933,6 +947,22 @@ public sealed class RoutingAndSettingsTests : IDisposable
         await manager.UpdateAsync(s => s.Watchlist.Clear());
 
         manager.Current.Appearance.CollapsedProviders.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A factory that declares the given options and creates nothing.
+    /// </summary>
+    /// <param name="options">
+    /// The declared options.
+    /// </param>
+    private sealed class OptionsOnlyFactory(params ProviderOptionDefinition[] options) : IMarketDataProviderFactory
+    {
+        /// <inheritdoc />
+        public ProviderDescriptor Descriptor { get; } =
+            new("opts", "Opts", "Test", [AssetClass.Crypto], ProviderUpdateMode.Streaming, Options: options);
+
+        /// <inheritdoc />
+        public IMarketDataProvider Create(ProviderCreationContext context) => new FakeProvider(Descriptor, context.Options);
     }
 
     /// <summary>
