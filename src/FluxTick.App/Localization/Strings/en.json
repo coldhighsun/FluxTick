@@ -1,7 +1,9 @@
 {
   "About_Author": "Author",
+  "About_DataHeader": "Data",
   "About_Homepage": "Project home page",
   "About_License": "License",
+  "About_UpdatesHeader": "Updates",
   "Add_AlertsConflict": "{0} has an alert for the same condition at both {1} and {2} ({3}). Delete one of the two first, then change the data source.",
   "Add_AlreadyOnList": "{0} is already on your list.",
   "Add_AssetClass": "ASSET CLASS",

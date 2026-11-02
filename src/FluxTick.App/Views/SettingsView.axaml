@@ -455,39 +455,44 @@
       <TabItem Header="{loc:T Settings_TabAbout}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
-            <!-- The icon with the name of the app and its version beside it, the two together in the middle; the tag line is in
-                 the footer of the window. -->
-            <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center" Margin="0,4,0,16">
+            <!-- The hero, a compact strip in the middle: the icon with the name of the app over its version in a pill; the tag
+                 line is in the footer of the window. -->
+            <StackPanel Orientation="Horizontal" Spacing="14" HorizontalAlignment="Center" Margin="0,2,0,12">
               <Image Source="/Assets/fluxtick.png" Width="72" Height="72" VerticalAlignment="Center" />
-              <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="{Binding About.Product}" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding Updates.CurrentVersionText}" Classes="muted mono" FontSize="12"
-                           IsVisible="{Binding Updates, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <StackPanel Spacing="4" VerticalAlignment="Center">
+                <TextBlock Text="{Binding About.Product}" FontSize="20" FontWeight="SemiBold" />
+                <Border Classes="chip" HorizontalAlignment="Left" Padding="8,2"
+                        IsVisible="{Binding Updates, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <TextBlock Text="{Binding Updates.CurrentVersionText}" Classes="muted mono" FontSize="11" />
+                </Border>
               </StackPanel>
             </StackPanel>
-            <Border Classes="card">
-              <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <TextBlock Text="{loc:T About_Author}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding About.Author}" Classes="muted" VerticalAlignment="Center" />
+            <Border Classes="card" Padding="12,4" Margin="0,0,0,4">
+              <StackPanel>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" Margin="0,8">
+                  <TextBlock Text="{loc:T About_Author}" Classes="muted" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding About.Author}" VerticalAlignment="Center" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <TextBlock Text="{loc:T About_License}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding About.License}" Classes="muted" VerticalAlignment="Center" />
+                <Border Height="1" Background="{DynamicResource BorderBrush}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" Margin="0,8">
+                  <TextBlock Text="{loc:T About_License}" Classes="muted" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding About.License}" VerticalAlignment="Center" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <TextBlock Text="{loc:T About_Homepage}" VerticalAlignment="Center" />
+                <Border Height="1" Background="{DynamicResource BorderBrush}" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" Margin="0,4">
+                  <TextBlock Text="{loc:T About_Homepage}" Classes="muted" VerticalAlignment="Center" />
                   <Button Grid.Column="1" Classes="link" Content="{Binding About.HomepageUrl}" Command="{Binding OpenProjectHomepageCommand}"
                           HorizontalAlignment="Right" VerticalAlignment="Center" />
                 </Grid>
-                <TextBlock Text="{loc:T Settings_OpenHomepageFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
-                           IsVisible="{Binding HomepageOpenFailed}" />
               </StackPanel>
             </Border>
+            <TextBlock Text="{loc:T Settings_OpenHomepageFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap" Margin="2,0,0,8"
+                       IsVisible="{Binding HomepageOpenFailed}" />
             <!-- The update section has its own view model, which is none when the page has no updates. -->
-            <Border Classes="card" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel"
+            <Border Classes="card" Padding="12" Margin="0,8,0,8" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel"
                     IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}">
-              <StackPanel Spacing="8">
+              <StackPanel Spacing="10">
+                <TextBlock Text="{loc:T About_UpdatesHeader}" FontWeight="SemiBold" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Update_AutoCheck}" />
@@ -499,8 +504,8 @@
                 <StackPanel Spacing="6">
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Classes="outline" Content="{loc:T Update_Check}" Command="{Binding CheckCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding ShowCheck}" />
-                    <Button Classes="outline" Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
-                    <Button Classes="outline" Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                    <Button Classes="primary" Content="{loc:T Update_UpdateNow}" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
+                    <Button Classes="primary" Content="{loc:T Update_Download}" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
                     <Button Classes="outline" Content="{loc:T Update_OpenFolder}" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsDownloaded}" />
                   </StackPanel>
                   <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextWrapping="Wrap"
@@ -518,15 +523,20 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </StackPanel>
             </Border>
-            <!-- Where the data is kept: two buttons at the bottom of the page. -->
-            <StackPanel Spacing="6" Margin="0,6,0,8">
-              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                <Button Classes="outline" Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}" />
-                <Button Classes="outline" Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}" />
+            <!-- Where the data is kept: the two folder buttons side by side in a card of their own. -->
+            <Border Classes="card" Padding="12" Margin="0,0,0,8">
+              <StackPanel Spacing="10">
+                <TextBlock Text="{loc:T About_DataHeader}" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                  <Button Classes="outline" Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                  <Button Grid.Column="1" Classes="outline" Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                </Grid>
+                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding FolderOpenFailed}" />
               </StackPanel>
-              <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap" HorizontalAlignment="Center"
-                         IsVisible="{Binding FolderOpenFailed}" />
-            </StackPanel>
+            </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
