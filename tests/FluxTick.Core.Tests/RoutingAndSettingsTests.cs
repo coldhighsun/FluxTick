@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using FluxTick.Abstractions;
 using FluxTick.Core.Application;
 using FluxTick.Core.Infrastructure;
@@ -318,6 +319,394 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Should().BeNull();
         File.Exists(path).Should().BeFalse();
         File.Exists($"{path}.bad").Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a file that a power loss filled with zeros is replaced by the copy kept before the last save.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithZeroFilledFile_RestoresTheCopyOfThePreviousSave()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var first = new AppSettings();
+        first.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(first);
+        await store.SaveAsync(new AppSettings());
+        await File.WriteAllBytesAsync(path, new byte[512]);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+        File.Exists($"{path}.bad").Should().BeTrue();
+        (await store.LoadAsync())!.Groups.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// Verifies a copy that is corrupt too is not used.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithCorruptFileAndCorruptCopy_ReturnsNull()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, "{ not json");
+        await File.WriteAllBytesAsync($"{path}.bak", new byte[16]);
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        (await store.LoadAsync()).Should().BeNull();
+    }
+
+    /// <summary>
+    /// Verifies an empty file is replaced by the copy of the previous save.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithEmptyFile_RestoresTheCopyOfThePreviousSave()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(settings);
+        await store.SaveAsync(settings);
+        await File.WriteAllBytesAsync(path, []);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+    }
+
+    /// <summary>
+    /// Verifies a corrupt file without any copy loads as null.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithCorruptFileAndNoCopy_ReturnsNull()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, "{ not json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        (await store.LoadAsync()).Should().BeNull();
+    }
+
+    /// <summary>
+    /// Verifies a copy that holds a JSON null is not used.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithCorruptFileAndNullCopy_ReturnsNull()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        await File.WriteAllTextAsync(path, "{ not json");
+        await File.WriteAllTextAsync($"{path}.bak", "null");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        (await store.LoadAsync()).Should().BeNull();
+    }
+
+    /// <summary>
+    /// Verifies a copy that cannot be opened at the moment is reported instead of being taken for a missing one.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithCorruptFileAndLockedCopy_Throws()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        await store.SaveAsync(new AppSettings());
+        await store.SaveAsync(new AppSettings());
+        await File.WriteAllTextAsync(path, "{ not json");
+        using var locked = new FileStream($"{path}.bak", FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var act = () => store.LoadAsync();
+
+        await act.Should().ThrowAsync<IOException>();
+        File.Exists(path).Should().BeTrue();
+        File.Exists($"{path}.bad").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a restore that cannot write the file leaves the corrupt file in place, so that the next start restores it.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WhenRestoreCannotWrite_KeepsCorruptFileAndRestoresNextTime()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(settings);
+        await store.SaveAsync(settings);
+        await File.WriteAllTextAsync(path, "{ not json");
+        AppSettings? firstLoad;
+        using (new FileStream($"{path}.tmp", FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            firstLoad = await store.LoadAsync();
+        }
+
+        var secondLoad = await store.LoadAsync();
+
+        firstLoad!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+        secondLoad!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+        (await File.ReadAllTextAsync(path)).Should().Contain("First");
+    }
+
+    /// <summary>
+    /// Verifies a settings file that holds a JSON null is replaced by the copy of the previous save.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithNullFile_RestoresTheCopyOfThePreviousSave()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(settings);
+        await store.SaveAsync(settings);
+        await File.WriteAllTextAsync(path, "null");
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+    }
+
+    /// <summary>
+    /// Verifies saves that overlap all complete and leave a valid file.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task SaveAsync_Concurrently_LeavesAValidFile()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        await store.SaveAsync(new AppSettings());
+
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => store.SaveAsync(new AppSettings())));
+
+        (await store.LoadAsync()).Should().NotBeNull();
+        File.Exists($"{path}.bad").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies loads that overlap saves never see a half-replaced file and never set a file aside.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WhileSaving_NeverSeesBrokenFile()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var initial = new AppSettings();
+        initial.Groups.Add(new WatchGroup { Id = "g", Name = "Start" });
+        await store.SaveAsync(initial);
+        await store.SaveAsync(initial);
+
+        var saves = Enumerable.Range(0, 20).Select(async i =>
+        {
+            var settings = new AppSettings();
+            settings.Groups.Add(new WatchGroup { Id = "g", Name = $"Save{i}" });
+            await Task.Yield();
+            await store.SaveAsync(settings);
+        }).ToArray();
+        var loads = Enumerable.Range(0, 20).Select(async _ =>
+        {
+            await Task.Yield();
+            return await store.LoadAsync();
+        }).ToArray();
+
+        await Task.WhenAll(saves);
+        var loaded = await Task.WhenAll(loads);
+
+        loaded.Should().OnlyContain(x => x != null && x.Groups.Count == 1);
+        File.Exists($"{path}.bad").Should().BeFalse();
+
+        // Every save ran after "Start", so a load that put the older copy back over them would show here.
+        (await store.LoadAsync())!.Groups.Single().Name.Should().StartWith("Save");
+    }
+
+    /// <summary>
+    /// Verifies a settings file that is gone while its copy is left is restored from the copy instead of being taken for a first run.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithMissingFileAndCopy_RestoresTheCopy()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(settings);
+        await store.SaveAsync(settings);
+        File.Delete(path);
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+        File.Exists(path).Should().BeTrue();
+        File.Exists($"{path}.bad").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a save that moved the old file to the copy but could not put its own file in place is restored from its
+    /// complete temporary file, which is newer than the copy.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithMissingFileAndCompleteTemporaryFile_RestoresTheUnfinishedSave()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var older = new AppSettings();
+        older.Groups.Add(new WatchGroup { Id = "g", Name = "Older" });
+        await store.SaveAsync(older);
+        var newer = new AppSettings();
+        newer.Groups.Add(new WatchGroup { Id = "g", Name = "Newer" });
+        await File.WriteAllBytesAsync($"{path}.tmp", JsonSerializer.SerializeToUtf8Bytes(newer, AppSettings.JsonOptions));
+        File.Move(path, $"{path}.bak");
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Groups.Should().ContainSingle().Which.Name.Should().Be("Newer");
+        (await File.ReadAllTextAsync(path)).Should().Contain("Newer");
+        File.Exists($"{path}.tmp").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies an incomplete temporary file is not used and the copy is restored instead.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task LoadAsync_WithMissingFileAndIncompleteTemporaryFile_RestoresTheCopy()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(settings);
+        await File.WriteAllBytesAsync($"{path}.tmp", new byte[64]);
+        File.Move(path, $"{path}.bak");
+
+        var loaded = await store.LoadAsync();
+
+        loaded!.Groups.Should().ContainSingle().Which.Name.Should().Be("First");
+        File.Exists($"{path}.tmp").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a save that fails does not leave its temporary file behind.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task SaveAsync_WhenFileCannotBeReplaced_DeletesTheTemporaryFile()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        Directory.CreateDirectory(path);
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        var act = () => store.SaveAsync(new AppSettings());
+
+        await act.Should().ThrowAsync<Exception>();
+        File.Exists($"{path}.tmp").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the first save has nothing to keep as a copy and leaves no temporary files behind.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task SaveAsync_FirstSave_WritesNoCopyAndNoTemporaryFile()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+
+        await store.SaveAsync(new AppSettings());
+
+        File.Exists(path).Should().BeTrue();
+        File.Exists($"{path}.bak").Should().BeFalse();
+        File.Exists($"{path}.tmp").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a corrupt file that is still in place is not kept as the copy, so the good copy survives the next save.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task SaveAsync_WithCorruptCurrentFile_KeepsTheGoodCopy()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "First" });
+        await store.SaveAsync(settings);
+        await store.SaveAsync(settings);
+        await File.WriteAllTextAsync(path, "{ not json");
+
+        await store.SaveAsync(new AppSettings());
+
+        (await File.ReadAllTextAsync($"{path}.bak")).Should().Contain("First");
+    }
+
+    /// <summary>
+    /// Verifies a copy that cannot be written does not stop the save.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the check is done.
+    /// </returns>
+    [Fact]
+    public async Task SaveAsync_WithLockedCopy_StillSavesTheFile()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        await store.SaveAsync(new AppSettings());
+        await store.SaveAsync(new AppSettings());
+        var settings = new AppSettings();
+        settings.Groups.Add(new WatchGroup { Id = "g", Name = "Latest" });
+        using var locked = new FileStream($"{path}.bak", FileMode.Open, FileAccess.Read, FileShare.None);
+
+        await store.SaveAsync(settings);
+
+        (await File.ReadAllTextAsync(path)).Should().Contain("Latest");
+        File.Exists($"{path}.tmp").Should().BeFalse();
     }
 
     /// <summary>
