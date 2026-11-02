@@ -12,7 +12,79 @@
     <Style Selector="Grid.dependent:disabled">
       <Setter Property="Opacity" Value="0.45" />
     </Style>
+    <!-- A data source row: the whole left part is one flat button. -->
+    <Style Selector="Button.providerRow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.providerRow:pointerover /template/ ContentPresenter, Button.providerRow:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.providerRow:pointerover Path.chevron">
+      <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
+    </Style>
   </UserControl.Styles>
+  <UserControl.Resources>
+    <!-- One compact row of the data source list: a button that opens the detail page, and the enable switch beside it. -->
+    <DataTemplate x:Key="ProviderRowTemplate" x:DataType="vm:ProviderSettingsViewModel">
+      <StackPanel>
+      <TextBlock Text="{Binding SectionTitle}" Classes="section" Margin="2,6,0,6" IsVisible="{Binding HasSectionTitle}" />
+      <Border Classes="card" Padding="8,6" Margin="0,0,0,6">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+          <Button Classes="providerRow" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Name}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+              <StackPanel Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <Border Classes="chip warn" IsVisible="{Binding HasMissingRequired}" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Provider_NeedsSetup}" Classes="warn" FontSize="10" />
+                  </Border>
+                  <Border Classes="chip warn" IsVisible="{Binding HasOptionError}" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_CheckSettings}" Classes="warn" FontSize="10" />
+                  </Border>
+                  <Border Classes="chip warn" IsVisible="{Binding IsDirty}" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_Unsaved}" Classes="warn" FontSize="10" />
+                  </Border>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <Ellipse Classes="dot" Classes.good="{Binding StatusGood}" Classes.bad="{Binding StatusBad}" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="150"
+                             ToolTip.Tip="{Binding StatusText}" />
+                  <TextBlock Text="·" Classes="muted" FontSize="11" />
+                  <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="10" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                             ToolTip.Tip="{Binding Summary}" />
+                </StackPanel>
+              </StackPanel>
+              <Path Grid.Column="1" Classes="chevron" Data="M5 3l4 4-4 4" Width="14" Height="14" VerticalAlignment="Center" />
+            </Grid>
+          </Button>
+          <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- The editor of one option; the same for every type, with the editor of the option's type shown. -->
+    <DataTemplate x:Key="OptionEditorTemplate" x:DataType="vm:OptionViewModel">
+      <StackPanel Spacing="3" Margin="0,6,0,0">
+        <TextBlock FontSize="11" Classes="muted">
+          <Run Text="{Binding Label}" /><Run Text="{Binding Unit}" />
+        </TextBlock>
+        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" IsVisible="{Binding IsPlainText}" PasswordChar="{Binding PasswordChar}" />
+        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" IsVisible="{Binding IsNumber}"
+                 views:NumericInput.Enabled="True" views:NumericInput.Kind="{Binding NumberKind}" />
+        <ToggleSwitch IsChecked="{Binding BoolValue}" IsVisible="{Binding IsBool}" />
+        <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" IsVisible="{Binding IsChoice}" HorizontalAlignment="Stretch" />
+        <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Classes="muted" FontSize="10" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Error}" Classes="warn" FontSize="11" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
 
   <Grid RowDefinitions="*,Auto" Margin="0,10,0,0">
     <TabControl Grid.Row="0" Classes="settings" SelectedIndex="{Binding SelectedTabIndex}">
@@ -247,93 +319,137 @@
       </TabItem>
 
       <TabItem Header="{loc:T Settings_TabSources}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
-            <!-- Filter by asset class; the list below has the enabled sources first, each group in ascending order of name. -->
-            <ItemsControl ItemsSource="{Binding ProviderClassFilters}" Margin="0,0,0,10">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ProviderClassFilterViewModel">
-                  <ToggleButton Classes="filter" IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Label}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <ItemsControl Name="ProvidersList" ItemsSource="{Binding FilteredProviders}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ProviderSettingsViewModel">
+        <Grid>
+          <!-- The list: search, filters, a count, and one compact row per data source. A row opens the detail page. -->
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding !IsProviderDetailOpen}">
+            <StackPanel Margin="14,10,14,4">
+              <TextBox Text="{Binding ProviderSearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="{loc:T Settings_SearchSources}"
+                       AutomationProperties.Name="{loc:T Settings_SearchSources}" Margin="0,0,0,6" />
+              <TextBlock Text="{Binding ProvidersSummary}" Classes="muted" FontSize="11" Margin="2,0,0,8" />
+
+              <ItemsControl ItemsSource="{Binding ProviderStatusFilters}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ProviderStatusFilterViewModel">
+                    <ToggleButton Classes="filter" IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Label}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding ProviderClassFilters}" Margin="0,0,0,6">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ProviderClassFilterViewModel">
+                    <ToggleButton Classes="filter" IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Label}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <TextBlock Text="{loc:T Settings_NoSourceMatches}" Classes="muted" HorizontalAlignment="Center" Margin="0,24"
+                         IsVisible="{Binding HasNoProviderMatch}" />
+
+              <ItemsControl ItemsSource="{Binding FilteredProviders}" ItemTemplate="{StaticResource ProviderRowTemplate}" />
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- The detail page of the data source that was opened. Save and revert stay at the bottom, outside the scrolling area. -->
+          <!-- The wrapper carries the visibility: the grid inside replaces the data context with the opened source. -->
+          <Grid IsVisible="{Binding IsProviderDetailOpen}">
+            <Grid RowDefinitions="Auto,*,Auto" DataContext="{Binding SelectedProvider}" x:DataType="vm:ProviderSettingsViewModel">
+              <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="14,10,14,6">
+                <Button Classes="outline" Command="{Binding $parent[views:SettingsView].((vm:SettingsViewModel)DataContext).CloseProviderDetailCommand}"
+                        Padding="8,4" AutomationProperties.Name="{loc:T Settings_BackToSources}" ToolTip.Tip="{loc:T Settings_BackToSources}">
+                  <Path Classes="chevron" Data="M9 3l-4 4 4 4" Width="14" Height="14" />
+                </Button>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <Ellipse Classes="dot" Classes.good="{Binding StatusGood}" Classes.bad="{Binding StatusBad}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}" />
+                  </StackPanel>
+                </StackPanel>
+                <ToggleSwitch Grid.Column="2" IsChecked="{Binding Enabled}" />
+              </Grid>
+
+              <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="14,4,14,8" Spacing="8">
                   <Border Classes="card">
                     <StackPanel Spacing="6">
-                      <!-- Header: click to expand or collapse; the enable switch stays outside the button. -->
-                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                        <ToggleButton Classes="disclosure" Cursor="Hand" IsChecked="{Binding IsExpanded, Mode=TwoWay}"
-                                      AutomationProperties.Name="{Binding Name}">
-                          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Path Classes="chevron" Classes.expanded="{Binding IsExpanded}" Data="M5 3l4 4-4 4" Width="14" Height="14" VerticalAlignment="Center" />
-                            <StackPanel>
-                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                              <StackPanel Orientation="Horizontal" Spacing="5">
-                                <Ellipse Classes="dot" Classes.good="{Binding StatusGood}" Classes.bad="{Binding StatusBad}" VerticalAlignment="Center" />
-                                <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="150"
-                                           ToolTip.Tip="{Binding StatusText}" />
-                                <TextBlock Text="{loc:T Settings_CheckSettings}" Classes="warn" FontSize="11" IsVisible="{Binding HasOptionError}" />
-                              </StackPanel>
-                            </StackPanel>
-                          </StackPanel>
-                        </ToggleButton>
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" />
-                      </Grid>
-
-                      <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
-                        <TextBlock Text="{Binding Description}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="10" />
-                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasHomepage}">
-                          <TextBlock Text="{loc:T Settings_Website}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
-                          <Button Classes="link" Content="{Binding HomepageHost}" Command="{Binding OpenHomepageCommand}" FontSize="11"
-                                  HorizontalAlignment="Left" VerticalAlignment="Center" ToolTip.Tip="{Binding HomepageUrl}"
-                                  AutomationProperties.Name="{Binding HomepageHost}" />
-                        </StackPanel>
-
-                        <ItemsControl ItemsSource="{Binding Options}">
+                      <TextBlock Text="{Binding Description}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ItemsControl ItemsSource="{Binding AssetClassLabels}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <WrapPanel />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
                           <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:OptionViewModel">
-                              <StackPanel Spacing="3" Margin="0,6,0,0">
-                                <TextBlock FontSize="11" Classes="muted">
-                                  <Run Text="{Binding Label}" /><Run Text="{Binding Unit}" />
-                                </TextBlock>
-                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" IsVisible="{Binding IsPlainText}" PasswordChar="{Binding PasswordChar}" />
-                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" IsVisible="{Binding IsNumber}"
-                                         views:NumericInput.Enabled="True" views:NumericInput.Kind="{Binding NumberKind}" />
-                                <ToggleSwitch IsChecked="{Binding BoolValue}" IsVisible="{Binding IsBool}" />
-                                <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" IsVisible="{Binding IsChoice}" HorizontalAlignment="Stretch" />
-                                <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Classes="muted" FontSize="10" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Error}" Classes="warn" FontSize="11" />
-                              </StackPanel>
+                            <DataTemplate x:DataType="x:String">
+                              <Border Classes="chip" Margin="0,0,4,0">
+                                <TextBlock Text="{Binding}" FontSize="10" Classes="muted" />
+                              </Border>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
-
-                        <!-- Save and revert show while there are edits; restore defaults is always there. -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" IsVisible="{Binding HasOptions}">
-                          <Button Classes="primary" Content="{loc:T Settings_Save}" Command="{Binding SaveCommand}" IsVisible="{Binding IsDirty}"
-                                  FontSize="11" Padding="12,4" />
-                          <Button Classes="outline" Content="{loc:T Settings_Revert}" Command="{Binding RevertCommand}" IsVisible="{Binding IsDirty}"
-                                  FontSize="11" Padding="10,4" />
-                          <Button Classes="outline" Content="{loc:T Settings_RestoreDefaults}" Command="{Binding RestoreDefaultsCommand}"
-                                  FontSize="11" Padding="10,4" ToolTip.Tip="{loc:T Settings_RestoreDefaultsTip}" />
-                          <TextBlock Text="{loc:T Settings_Unsaved}" Classes="muted" FontSize="11" VerticalAlignment="Center" IsVisible="{Binding IsDirty}" />
-                        </StackPanel>
+                        <TextBlock Text="{Binding ModeLabel}" Classes="muted" FontSize="10" VerticalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasHomepage}">
+                        <TextBlock Text="{loc:T Settings_Website}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                        <Button Classes="link" Content="{Binding HomepageHost}" Command="{Binding OpenHomepageCommand}" FontSize="11"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" ToolTip.Tip="{Binding HomepageUrl}"
+                                AutomationProperties.Name="{Binding HomepageHost}" />
                       </StackPanel>
                     </StackPanel>
                   </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-        </ScrollViewer>
+
+                  <Border Classes="card" IsVisible="{Binding HasBasicOptions}">
+                    <ItemsControl ItemsSource="{Binding BasicOptions}" ItemTemplate="{StaticResource OptionEditorTemplate}" />
+                  </Border>
+
+                  <Border Classes="card" IsVisible="{Binding HasAdvancedOptions}">
+                    <Expander Header="{loc:T Settings_AdvancedOptions}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" Padding="0"
+                              Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                      <!-- The built-in expander paints its own header and content; the card behind it is the surface. -->
+                      <Expander.Resources>
+                        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderHeaderBackgroundDisabled" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+                        <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+                      </Expander.Resources>
+                      <ItemsControl ItemsSource="{Binding AdvancedOptions}" ItemTemplate="{StaticResource OptionEditorTemplate}" />
+                    </Expander>
+                  </Border>
+
+                  <TextBlock Text="{loc:T Settings_NoOptions}" Classes="muted" FontSize="11" HorizontalAlignment="Center" Margin="0,8"
+                             IsVisible="{Binding !HasOptions}" />
+                </StackPanel>
+              </ScrollViewer>
+
+              <!-- Save and revert show while there are edits; restore defaults is always there. -->
+              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="14,4,14,8" IsVisible="{Binding HasOptions}">
+                <Button Classes="primary" Content="{loc:T Settings_Save}" Command="{Binding SaveCommand}" IsVisible="{Binding IsDirty}"
+                        FontSize="11" Padding="12,4" />
+                <Button Classes="outline" Content="{loc:T Settings_Revert}" Command="{Binding RevertCommand}" IsVisible="{Binding IsDirty}"
+                        FontSize="11" Padding="10,4" />
+                <Button Classes="outline" Content="{loc:T Settings_RestoreDefaults}" Command="{Binding RestoreDefaultsCommand}"
+                        FontSize="11" Padding="10,4" ToolTip.Tip="{loc:T Settings_RestoreDefaultsTip}" />
+                <TextBlock Text="{loc:T Settings_Unsaved}" Classes="muted" FontSize="11" VerticalAlignment="Center" IsVisible="{Binding IsDirty}" />
+              </StackPanel>
+            </Grid>
+          </Grid>
+        </Grid>
       </TabItem>
 
       <TabItem Header="{loc:T Settings_TabAbout}">

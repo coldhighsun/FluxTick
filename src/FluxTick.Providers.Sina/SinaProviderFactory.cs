@@ -53,13 +53,15 @@ public sealed class SinaProviderFactory : IMarketDataProviderFactory
                 "WebSocket endpoint",
                 ProviderOptionType.String,
                 "wss://hq.sinajs.cn/wskt",
-                "Used for live prices. If it is unreachable from your network, prices come from the quote endpoint instead."),
+                "Used for live prices. If it is unreachable from your network, prices come from the quote endpoint instead.",
+                Advanced: true),
             new ProviderOptionDefinition(
                 QuoteUrlKey,
                 "Quote endpoint",
                 ProviderOptionType.String,
                 "https://hq.sinajs.cn",
-                "Used for prices. Symbol search uses suggest3.sinajs.cn."),
+                "Used for prices. Symbol search uses suggest3.sinajs.cn.",
+                Advanced: true),
         ],
         EnabledByDefault: false);
 

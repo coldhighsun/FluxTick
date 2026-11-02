@@ -414,6 +414,21 @@ public sealed partial class OptionViewModel : ObservableObject
 }
 
 /// <summary>
+/// Describes a request to show the detail page of a data source.
+/// </summary>
+/// <param name="OnlyIfFree">
+/// Whether the page may be shown only when no other data source's page is open, as when the request comes from a switch
+/// that was refused a moment ago rather than from a click.
+/// </param>
+public sealed class ProviderOpenRequestedEventArgs(bool OnlyIfFree) : EventArgs
+{
+    /// <summary>
+    /// Gets a value indicating whether the page may be shown only when no other data source's page is open.
+    /// </summary>
+    public bool OnlyIfFree { get; } = OnlyIfFree;
+}
+
+/// <summary>
 /// The settings entry of one data source: enable switch, options and live status.
 /// </summary>
 public sealed partial class ProviderSettingsViewModel : ObservableObject
@@ -442,6 +457,11 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// Whether a required option had no saved value, as last announced.
     /// </summary>
     private bool _missingRequired;
+
+    /// <summary>
+    /// The labels of the supported asset classes, built on first use and again after the language changed.
+    /// </summary>
+    private IReadOnlyList<string>? _assetClassLabels;
 
     /// <summary>
     /// Suppresses change notifications while loading.
@@ -480,10 +500,89 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         _openWebsite = openWebsite ?? (url => ExternalLinks.TryOpenWebsite(url));
         Options = new ObservableCollection<OptionViewModel>(
             descriptor.OptionDefinitions.Select(d => new OptionViewModel(d, null, OnOptionEdited, descriptor)));
+        BasicOptions = [.. Options.Where(o => !o.Definition.Advanced)];
+        AdvancedOptions = [.. Options.Where(o => o.Definition.Advanced)];
         foreach (var option in Options)
         {
             option.PropertyChanged += OnOptionPropertyChanged;
         }
+    }
+
+    /// <summary>
+    /// Raised when the entry asks for its detail page to be shown, as when the switch is refused for a missing value or
+    /// a save finds an invalid one.
+    /// </summary>
+    public event EventHandler<ProviderOpenRequestedEventArgs>? OpenRequested;
+
+    /// <summary>
+    /// Shows the detail page of the data source.
+    /// </summary>
+    [RelayCommand]
+    public void Open() => OpenRequested?.Invoke(this, new ProviderOpenRequestedEventArgs(false));
+
+    /// <summary>
+    /// Gets the options most users need, which the detail page shows first.
+    /// </summary>
+    public IReadOnlyList<OptionViewModel> BasicOptions { get; }
+
+    /// <summary>
+    /// Gets the rarely changed options, which the detail page keeps in a collapsed section.
+    /// </summary>
+    public IReadOnlyList<OptionViewModel> AdvancedOptions { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the source has options that most users need.
+    /// </summary>
+    public bool HasBasicOptions => BasicOptions.Count > 0;
+
+    /// <summary>
+    /// Gets a value indicating whether the source has rarely changed options.
+    /// </summary>
+    public bool HasAdvancedOptions => AdvancedOptions.Count > 0;
+
+    /// <summary>
+    /// Gets a value indicating whether a rarely changed option holds an error, which keeps its section open.
+    /// </summary>
+    public bool HasAdvancedError => AdvancedOptions.Any(o => o.Error.Length > 0);
+
+    /// <summary>
+    /// Gets the labels of the asset classes the source supports.
+    /// </summary>
+    public IReadOnlyList<string> AssetClassLabels => _assetClassLabels ??= [.. Descriptor.SupportedAssetClasses.Select(c => EnumLabel.Of(c))];
+
+    /// <summary>
+    /// Gets the label of how the source gets its prices: streaming or polling.
+    /// </summary>
+    public string ModeLabel => Loc.Get(Descriptor.UpdateMode == ProviderUpdateMode.Streaming ? "Provider_Streaming" : "Provider_Polling");
+
+    /// <summary>
+    /// Gets a value indicating whether the source is on but not working: it lacks a required value, holds an invalid
+    /// option or reports an error.
+    /// </summary>
+    public bool NeedsAttention => Enabled && (HasMissingRequired || HasOptionError || StatusBad);
+
+    /// <summary>
+    /// Determines whether the source matches a search text, ignoring case: the text is part of the name, the id, the
+    /// description or the name of a supported asset class. An empty text matches every source.
+    /// </summary>
+    /// <param name="query">
+    /// The search text.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the source matches.
+    /// </returns>
+    public bool Matches(string? query)
+    {
+        var text = query?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return true;
+        }
+
+        return Name.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || Descriptor.Id.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || Description.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || AssetClassLabels.Any(l => l.Contains(text, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -536,8 +635,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// <summary>
     /// Gets a summary line of the mode and supported asset classes.
     /// </summary>
-    public string Summary =>
-        $"{Loc.Get(Descriptor.UpdateMode == ProviderUpdateMode.Streaming ? "Provider_Streaming" : "Provider_Polling")} · {string.Join(", ", Descriptor.SupportedAssetClasses.Select(c => EnumLabel.Of(c)))}";
+    public string Summary => $"{ModeLabel} · {string.Join(", ", AssetClassLabels)}";
 
     /// <summary>
     /// Gets the option editors.
@@ -578,10 +676,23 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     public partial bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the description and options are shown.
+    /// Gets or sets the title of the group in the list that starts with this source, or <see langword="null"/> when the
+    /// source does not start a group.
     /// </summary>
     [ObservableProperty]
-    public partial bool IsExpanded { get; set; }
+    [NotifyPropertyChangedFor(nameof(HasSectionTitle))]
+    public partial string? SectionTitle { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this source starts a group in the list.
+    /// </summary>
+    public bool HasSectionTitle => SectionTitle is not null;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the section of the rarely changed options is open.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsAdvancedExpanded { get; set; }
 
     /// <summary>
     /// Gets or sets the status text.
@@ -635,7 +746,13 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
 
         if (!valid)
         {
-            IsExpanded = true;
+            // The error text may be the same as the last time, which raises no change; so the section opens here as well.
+            if (HasAdvancedError)
+            {
+                IsAdvancedExpanded = true;
+            }
+
+            Open();
             return;
         }
 
@@ -770,6 +887,9 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(Summary));
+        _assetClassLabels = null;
+        OnPropertyChanged(nameof(AssetClassLabels));
+        OnPropertyChanged(nameof(ModeLabel));
         UpdateStatus(_status);
         foreach (var option in Options)
         {
@@ -806,6 +926,14 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     /// </param>
     partial void OnEnabledChanged(bool value)
     {
+        // A source that needs a value, such as a key, can not be switched on before the value is saved. It is marked
+        // before anything is announced, so the list does not follow the switch while it is on its way back.
+        var refused = !_loading && value && HasMissingRequired;
+        if (refused)
+        {
+            IsEnableRefused = true;
+        }
+
         OnPropertyChanged(nameof(HasOptionError));
         UpdateStatus(_status);
         if (_loading)
@@ -813,18 +941,16 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
             return;
         }
 
-        // A source that needs a value, such as a key, can not be switched on before the value is saved: the switch goes
-        // back, and the card opens on the field that is missing.
-        if (value && HasMissingRequired)
+        // The switch goes back, and the detail page opens on the field that is missing.
+        if (refused)
         {
-            IsExpanded = true;
             foreach (var option in Options)
             {
                 option.ShowErrorIfMissing();
             }
 
             // Not inside this binding update, which the switch is still part of; or it could keep showing the old state.
-            IsEnableRefused = true;
+            // The detail page opens after the switch is back, for the same reason.
             _later(() =>
             {
                 _loading = true;
@@ -837,6 +963,12 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
                     _loading = false;
                     IsEnableRefused = false;
                 }
+
+                // What the list ignored while the switch was on its way back. This must come after IsEnableRefused is
+                // cleared, or the list ignores it as well.
+                OnPropertyChanged(nameof(NeedsAttention));
+                // The user may have moved on in the meantime, so this must not take over another source's page.
+                OpenRequested?.Invoke(this, new ProviderOpenRequestedEventArgs(true));
             });
 
             return;
@@ -862,10 +994,27 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasOptionError));
+        OnPropertyChanged(nameof(HasAdvancedError));
         UpdateStatus(_status);
-        if (HasOptionError)
+        if (HasAdvancedError)
         {
-            IsExpanded = true;
+            IsAdvancedExpanded = true;
+        }
+    }
+
+    /// <summary>
+    /// Raises the change of <see cref="NeedsAttention"/> whenever one of the values it is made of changes, so a new
+    /// input only has to be added here.
+    /// </summary>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName is nameof(Enabled) or nameof(HasMissingRequired) or nameof(HasOptionError) or nameof(StatusBad))
+        {
+            base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(NeedsAttention)));
         }
     }
 }
@@ -911,6 +1060,16 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Whether the choices of the asset class filter are being set by the page itself.
     /// </summary>
     private bool _selectingProviderClass;
+
+    /// <summary>
+    /// Whether the statuses of the data sources are being refreshed, which raises the summary once at the end.
+    /// </summary>
+    private bool _refreshingStatuses;
+
+    /// <summary>
+    /// Whether the choices of the state filter are being set by the page itself.
+    /// </summary>
+    private bool _selectingProviderStatus;
 
     /// <summary>
     /// Whether the desktop shows tray icons. It is assumed until the desktop has answered, which can take a moment on
@@ -1015,8 +1174,13 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         foreach (var provider in Providers)
         {
             provider.PropertyChanged += OnProviderPropertyChanged;
+            provider.OpenRequested += OnProviderOpenRequested;
         }
 
+        ProviderStatusFilters =
+        [
+            .. Enum.GetValues<ProviderStatusFilter>().Select(f => new ProviderStatusFilterViewModel(f, OnProviderStatusFilterChanged)),
+        ];
         ProviderClassFilters =
         [
             new ProviderClassFilterViewModel(null, OnProviderClassFilterChanged),
@@ -1025,6 +1189,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
                 .Select(c => new ProviderClassFilterViewModel(c, OnProviderClassFilterChanged)),
         ];
         ProviderClassFilters[0].IsSelected = true;
+        ProviderStatusFilters[0].IsSelected = true;
         market.ProviderStatusChanged += OnProviderStatusChanged;
         Reload();
         StartTrayProbe(trayProbe ?? TrayAvailability.Detect);
@@ -1037,13 +1202,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         foreach (var provider in Providers)
         {
             provider.PropertyChanged -= OnProviderPropertyChanged;
+            provider.OpenRequested -= OnProviderOpenRequested;
         }
 
         Alerts.Dispose();
     }
 
     /// <summary>
-    /// Puts a data source that was switched on or off in its place in the list.
+    /// Puts a data source that was switched on or off in its place in the list, and counts the ones that need attention.
     /// </summary>
     /// <param name="sender">
     /// The data source entry.
@@ -1053,9 +1219,40 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// </param>
     private void OnProviderPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!_loading && e.PropertyName == nameof(ProviderSettingsViewModel.Enabled) && sender is not ProviderSettingsViewModel { IsEnableRefused: true })
+        if (_loading || sender is ProviderSettingsViewModel { IsEnableRefused: true })
         {
-            RebuildFilteredProviders();
+            return;
+        }
+
+        switch (e.PropertyName)
+        {
+            case nameof(ProviderSettingsViewModel.Enabled):
+                RebuildFilteredProviders();
+                break;
+
+            // Only the count above the list follows a change of this. The rows stay where they are until the user changes
+            // the search or a filter or switches a source, so a status that flickers does not make rows come and go
+            // under the pointer.
+            case nameof(ProviderSettingsViewModel.NeedsAttention) when !_refreshingStatuses:
+                OnPropertyChanged(nameof(ProvidersSummary));
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Shows the detail page of a data source that asked for it.
+    /// </summary>
+    /// <param name="sender">
+    /// The data source entry.
+    /// </param>
+    /// <param name="e">
+    /// The event data.
+    /// </param>
+    private void OnProviderOpenRequested(object? sender, ProviderOpenRequestedEventArgs e)
+    {
+        if (sender is ProviderSettingsViewModel provider && (!e.OnlyIfFree || SelectedProvider is null || SelectedProvider == provider))
+        {
+            SelectedProvider = provider;
         }
     }
 
@@ -1185,8 +1382,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public ObservableCollection<ProviderSettingsViewModel> Providers { get; }
 
     /// <summary>
-    /// Gets the data sources the page lists: those that match the asset class filter, the enabled
-    /// ones first, each group in ascending order of name.
+    /// Gets the data sources the page lists: those that match the search and both filters, the enabled ones first, each
+    /// group in ascending order of name. It is one collection, so that a source that is switched moves inside it and
+    /// keeps its row, and with it the keyboard focus.
     /// </summary>
     public ObservableCollection<ProviderSettingsViewModel> FilteredProviders { get; } = [];
 
@@ -1194,6 +1392,74 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the choices of the asset class filter: all, then each asset class that some data source supports.
     /// </summary>
     public IReadOnlyList<ProviderClassFilterViewModel> ProviderClassFilters { get; }
+
+    /// <summary>
+    /// Gets the choices of the state filter: all, enabled, and those that need attention.
+    /// </summary>
+    public IReadOnlyList<ProviderStatusFilterViewModel> ProviderStatusFilters { get; }
+
+    /// <summary>
+    /// Gets the state filter in effect.
+    /// </summary>
+    private ProviderStatusFilter SelectedStatusFilter =>
+        ProviderStatusFilters.FirstOrDefault(f => f.IsSelected)?.Filter ?? ProviderStatusFilter.All;
+
+    /// <summary>
+    /// Gets or sets the text the data source list is searched for.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ProviderSearchText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the data source whose detail page is shown, or <see langword="null"/> for the list.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsProviderDetailOpen))]
+    public partial ProviderSettingsViewModel? SelectedProvider { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the detail page of a data source is shown.
+    /// </summary>
+    public bool IsProviderDetailOpen => SelectedProvider is not null;
+
+    /// <summary>
+    /// Gets the line above the list that counts the data sources that are on and those that need attention.
+    /// </summary>
+    public string ProvidersSummary
+    {
+        get
+        {
+            var enabled = 0;
+            var attention = 0;
+            foreach (var provider in Providers)
+            {
+                enabled += provider.Enabled ? 1 : 0;
+                attention += provider.NeedsAttention ? 1 : 0;
+            }
+
+            var summary = Loc.Get("Settings_ProvidersSummary", enabled, Providers.Count);
+            return attention > 0 ? $"{summary} · {Loc.Get("Settings_ProvidersAttention", attention)}" : summary;
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether no data source matches the search and the filters.
+    /// </summary>
+    public bool HasNoProviderMatch => FilteredProviders.Count == 0;
+
+    /// <summary>
+    /// Shows the list of data sources again.
+    /// </summary>
+    [RelayCommand]
+    private void CloseProviderDetail() => SelectedProvider = null;
+
+    /// <summary>
+    /// Shows the data sources that match the new search text.
+    /// </summary>
+    /// <param name="value">
+    /// The new text.
+    /// </param>
+    partial void OnProviderSearchTextChanged(string value) => RebuildFilteredProviders();
 
     /// <summary>
     /// Gets a value indicating whether the platform can start the app at sign-in.
@@ -1452,9 +1718,26 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     {
         FolderOpenFailed = false;
         HomepageOpenFailed = false;
+
+        // A source with unsaved edits keeps them (see ProviderSettingsViewModel.Load), so its detail page stays open on
+        // them, and the search and filters stay as they were for when the user goes back to the list.
+        var keepDetail = SelectedProvider is { IsDirty: true };
+        if (!keepDetail)
+        {
+            SelectedProvider = null;
+        }
+
         _loading = true;
         try
         {
+            // The search and the state filter start over, so that the page does not open on an empty list; the asset
+            // class filter is kept. The list is built once below, after the sources are loaded.
+            if (!keepDetail)
+            {
+                ProviderSearchText = string.Empty;
+                ProviderStatusFilters[0].IsSelected = true;
+            }
+
             var current = _settings.Current;
 
             // The system's entry is the only record; it is not saved to the settings file, as the user may remove it in
@@ -1838,6 +2121,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             filter.RefreshLanguage();
         }
 
+        foreach (var filter in ProviderStatusFilters)
+        {
+            filter.RefreshLanguage();
+        }
+
         RebuildFilteredProviders();
     }
 
@@ -1923,46 +2211,113 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     }
 
     /// <summary>
-    /// Fills <see cref="FilteredProviders"/> with the data sources that match the asset class filter: the enabled ones
-    /// first, each group in ascending order of the displayed name.
+    /// Keeps exactly one choice of the state filter checked and shows the data sources it matches.
+    /// </summary>
+    /// <param name="changed">
+    /// The choice that was checked or unchecked.
+    /// </param>
+    private void OnProviderStatusFilterChanged(ProviderStatusFilterViewModel changed)
+    {
+        if (_selectingProviderStatus)
+        {
+            return;
+        }
+
+        _selectingProviderStatus = true;
+        try
+        {
+            var chosen = changed.IsSelected ? changed : ProviderStatusFilters.FirstOrDefault(f => f.IsSelected) ?? changed;
+            foreach (var filter in ProviderStatusFilters)
+            {
+                filter.IsSelected = filter == chosen;
+            }
+        }
+        finally
+        {
+            _selectingProviderStatus = false;
+        }
+
+        RebuildFilteredProviders();
+    }
+
+    /// <summary>
+    /// Fills <see cref="FilteredProviders"/> with the data sources that match the search text and both filters: the
+    /// enabled ones first, each group in ascending order of the displayed name.
     /// </summary>
     private void RebuildFilteredProviders()
     {
+        // Reload builds the list once when it is done.
+        if (_loading)
+        {
+            return;
+        }
+
         var assetClass = ProviderClassFilters.FirstOrDefault(f => f.IsSelected)?.AssetClass;
+        var status = SelectedStatusFilter;
         var matching = Providers
             .Where(p => assetClass is not { } c || p.Descriptor.Supports(c))
+            .Where(p => status switch
+            {
+                ProviderStatusFilter.Enabled => p.Enabled,
+                ProviderStatusFilter.NeedsAttention => p.NeedsAttention,
+                _ => true,
+            })
+            .Where(p => p.Matches(ProviderSearchText))
             .Select(p => (Provider: p, p.Enabled, p.Name))
             .OrderByDescending(p => p.Enabled)
             .ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(p => p.Provider)
             .ToList();
-        var shown = matching.ToHashSet();
 
-        // Only what changed is removed, inserted or moved, so that the cards that stay keep their controls, and with them
-        // the focus and the scroll position.
-        for (var index = FilteredProviders.Count - 1; index >= 0; index--)
+        var wanted = matching.Select(p => p.Provider).ToList();
+        SyncProviders(FilteredProviders, wanted);
+
+        // The first source of each group carries the group's title; the others have none.
+        for (var index = 0; index < wanted.Count; index++)
         {
-            if (!shown.Contains(FilteredProviders[index]))
+            var starts = index == 0 || wanted[index - 1].Enabled != wanted[index].Enabled;
+            wanted[index].SectionTitle = starts ? Loc.Get(wanted[index].Enabled ? "Settings_SourcesEnabled" : "Settings_SourcesDisabled") : null;
+        }
+
+        OnPropertyChanged(nameof(HasNoProviderMatch));
+        OnPropertyChanged(nameof(ProvidersSummary));
+    }
+
+    /// <summary>
+    /// Makes a collection of data sources equal to a list. Only what changed is removed, inserted or moved, so that the
+    /// rows that stay keep their controls, and with them the focus and the scroll position.
+    /// </summary>
+    /// <param name="target">
+    /// The collection the page shows.
+    /// </param>
+    /// <param name="wanted">
+    /// The data sources it should hold, in order.
+    /// </param>
+    private static void SyncProviders(ObservableCollection<ProviderSettingsViewModel> target, List<ProviderSettingsViewModel> wanted)
+    {
+        var shown = wanted.ToHashSet();
+        for (var index = target.Count - 1; index >= 0; index--)
+        {
+            if (!shown.Contains(target[index]))
             {
-                FilteredProviders.RemoveAt(index);
+                target.RemoveAt(index);
             }
         }
 
-        for (var index = 0; index < matching.Count; index++)
+        for (var index = 0; index < wanted.Count; index++)
         {
-            if (index < FilteredProviders.Count && FilteredProviders[index] == matching[index])
+            if (index < target.Count && target[index] == wanted[index])
             {
                 continue;
             }
 
-            var current = FilteredProviders.IndexOf(matching[index]);
+            var current = target.IndexOf(wanted[index]);
             if (current < 0)
             {
-                FilteredProviders.Insert(index, matching[index]);
+                target.Insert(index, wanted[index]);
             }
             else
             {
-                FilteredProviders.Move(current, index);
+                target.Move(current, index);
             }
         }
     }
@@ -1999,9 +2354,20 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// </summary>
     public void RefreshStatuses()
     {
-        foreach (var provider in Providers)
+        // The summary is raised once below, not for every source whose status flips.
+        _refreshingStatuses = true;
+        try
         {
-            provider.UpdateStatus(Market.GetProviderStatus(provider.Descriptor.Id));
+            foreach (var provider in Providers)
+            {
+                provider.UpdateStatus(Market.GetProviderStatus(provider.Descriptor.Id));
+            }
         }
+        finally
+        {
+            _refreshingStatuses = false;
+        }
+
+        OnPropertyChanged(nameof(ProvidersSummary));
     }
 }

@@ -156,12 +156,17 @@ Optional descriptor arguments:
 - `EnabledByDefault: false` keeps the source off on first run, so the user turns it on in **Settings → Data sources**
   (Tencent, OKX and Simulated do this). Use it for demo sources and for sources that only suit some users.
 - `RequiresApiKey` (read-only) is true when the source has a `Required` option, such as a key.
-- `Homepage` is the official site of the data source (an https address). The settings page shows it as a link on the card of the source, so the user can open it; leave it out only for a source that makes up its data.
+- `Homepage` is the official site of the data source (an https address). The settings page shows it as a link on the detail page of the source, so the user can open it; leave it out only for a source that makes up its data.
 
 Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The settings page generates the right editor
 and validates input from the definition. `ProviderOptions` always returns a valid value, falling back to the default
 for anything missing or malformed. A `Duration` must be greater than zero (a poll interval of zero would spin), whatever
 `Min` and `Max` you declare, so do not use zero as a default.
+
+The data source list shows one compact row per source (name, status, asset classes, an on/off switch), with a search box
+and filters, and a click opens a detail page with the options. Mark options that most users never change, such as
+endpoint addresses or the top-up interval of a stream, with `Advanced: true`: they go into a collapsed **Advanced** section, so the
+options that matter (a key, the price poll interval) stay in view; leave the poll interval basic. Never mark a `Required` option as advanced.
 
 How the settings page stores options, so you know what your declaration promises:
 
@@ -173,14 +178,14 @@ How the settings page stores options, so you know what your declaration promises
   `00:00:05` and `00:00:05.0000000` are the same value), so rewriting such a value in another form never restarts a
   running provider. `String`, `Secret` and `Choice` values are compared as exact text.
 - A stored value that does not validate is treated as the default, in the provider and in the editor alike.
-- Edits to the options of a source are a draft: the card shows **Save** and **Revert** buttons, and nothing reaches
+- Edits to the options of a source are a draft: the detail page shows **Save** and **Revert** buttons, and nothing reaches
   `settings.json` until the user saves, so a running provider restarts once per save, not once per keystroke. Saving
   checks every option and refuses invalid values. The enable switch takes effect at once. An edit that was not saved is
   kept when the settings window is closed and opened again.
 - A `String` or `Secret` option declared with `Required: true` (an API key, say) must not be blank while the source is
-  on. A source that has no saved value for one can not be switched on: the switch goes back, and the card opens on the
+  on. A source that has no saved value for one can not be switched on: the switch goes back, and the detail page opens on the
   missing field. A source that is switched on in `settings.json` but lacks one (for example after an update adds it) is
-  not started: the settings page opens and flags it, and `AppSettings.IsProviderEnabled` is false for it.
+  not started: the settings page flags it ("Needs setup" on its row, and under the **Needs attention** filter), and `AppSettings.IsProviderEnabled` is false for it.
 - Each data source that declares options has a **Restore defaults** button that puts the editors of its options back to
   their declared defaults, as a draft the user then saves. `Secret` options (keys, tokens) are left alone, because they are
   credentials rather than settings.

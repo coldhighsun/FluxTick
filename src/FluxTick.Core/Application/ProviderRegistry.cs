@@ -19,7 +19,7 @@ public sealed class ProviderRegistry
     /// All available factories.
     /// </param>
     /// <exception cref="ArgumentException">
-    /// Two factories declare the same provider id.
+    /// Two factories declare the same provider id, or a factory declares an option that is both required and advanced.
     /// </exception>
     public ProviderRegistry(IEnumerable<IMarketDataProviderFactory> factories)
     {
@@ -29,6 +29,15 @@ public sealed class ProviderRegistry
             if (!_factories.TryAdd(factory.Descriptor.Id, factory))
             {
                 throw new ArgumentException($"Duplicate provider id '{factory.Descriptor.Id}'.", nameof(factories));
+            }
+
+            // A value the user must give can not sit in the collapsed section of advanced options.
+            var hidden = factory.Descriptor.OptionDefinitions.FirstOrDefault(o => o is { Required: true, Advanced: true });
+            if (hidden is not null)
+            {
+                throw new ArgumentException(
+                    $"The option '{hidden.Key}' of provider '{factory.Descriptor.Id}' is required, so it can not be advanced.",
+                    nameof(factories));
             }
         }
     }

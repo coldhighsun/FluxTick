@@ -20,5 +20,6 @@ public static class StreamingOptions
         "00:05:00",
         "While the live stream is connected, how long it, or a single instrument on it, may deliver no prices before they are topped up from the API during trading hours. Not used while the stream is down (see the fallback poll interval) or while the market is not open.",
         Min: 10,
-        Max: 3600);
+        Max: 3600,
+        Advanced: true);
 }

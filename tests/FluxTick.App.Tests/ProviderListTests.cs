@@ -52,13 +52,15 @@ public class ProviderListTests
         await using var h = new Harness(new AppSettings());
         await h.Main.InitializeAsync();
         var resets = 0;
-        h.SettingsPage.FilteredProviders.CollectionChanged += (_, e) =>
+        void CountResets(object? sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.Action == NotifyCollectionChangedAction.Reset)
             {
                 resets++;
             }
-        };
+        }
+
+        h.SettingsPage.FilteredProviders.CollectionChanged += CountResets;
 
         h.SettingsPage.FilteredProviders[0].Enabled = false;
 
@@ -67,10 +69,10 @@ public class ProviderListTests
     }
 
     /// <summary>
-    /// Verifies switching a source on does not expand a card that has no required value missing.
+    /// Verifies switching a source on does not open the detail page of a source that has no required value missing.
     /// </summary>
     [Fact]
-    public async Task Enabled_SwitchedOn_DoesNotExpandTheCard()
+    public async Task Enabled_SwitchedOn_DoesNotOpenTheDetailPage()
     {
         await using var h = new Harness(new AppSettings());
         await h.Main.InitializeAsync();
@@ -79,7 +81,7 @@ public class ProviderListTests
 
         provider.Enabled = true;
 
-        provider.IsExpanded.Should().BeFalse();
+        h.SettingsPage.SelectedProvider.Should().BeNull();
     }
 
     /// <summary>
@@ -172,10 +174,10 @@ public class ProviderListTests
     }
 
     /// <summary>
-    /// Verifies a source without required values does not open when it is switched on.
+    /// Verifies a source without required values does not open its detail page when it is switched on.
     /// </summary>
     [Fact]
-    public async Task Enabled_SwitchedOnWithoutRequiredOptions_StaysCollapsed()
+    public async Task Enabled_SwitchedOnWithoutRequiredOptions_StaysOnTheList()
     {
         await using var h = CreateWithKeyedSource();
         await h.Main.InitializeAsync();
@@ -184,15 +186,15 @@ public class ProviderListTests
 
         plain.Enabled = true;
 
-        plain.IsExpanded.Should().BeFalse();
+        h.SettingsPage.SelectedProvider.Should().BeNull();
         plain.HasOptionError.Should().BeFalse();
     }
 
     /// <summary>
-    /// Verifies a source that is enabled in the settings but lacks a required value is opened and flagged when the page loads.
+    /// Verifies a source that is enabled in the settings but lacks a required value is flagged when the page loads, without leaving the list.
     /// </summary>
     [Fact]
-    public async Task Reload_EnabledSourceLacksRequiredValue_IsFlaggedAndOpened()
+    public async Task Reload_EnabledSourceLacksRequiredValue_IsFlaggedOnTheList()
     {
         var settings = new AppSettings();
         settings.Providers["keyed"] = new ProviderSettings { Enabled = true };
@@ -201,7 +203,9 @@ public class ProviderListTests
 
         var keyed = h.SettingsPage.Providers.Single(p => p.Descriptor.Id == "keyed");
 
-        keyed.IsExpanded.Should().BeTrue();
+        h.SettingsPage.SelectedProvider.Should().BeNull();
+        keyed.NeedsAttention.Should().BeTrue();
+        keyed.HasMissingRequired.Should().BeTrue();
         keyed.HasOptionError.Should().BeTrue();
         keyed.StatusText.Should().Be(Loc.Get("Provider_NeedsSetup"));
         keyed.StatusBad.Should().BeTrue();
@@ -217,21 +221,21 @@ public class ProviderListTests
         new(new AppSettings(), extraFactory: new FakeFactory("keyed", [AssetClass.Commodity], requiresKey: true));
 
     /// <summary>
-    /// Verifies a source whose required value is not saved can not be switched on: the switch goes back, the card opens on
+    /// Verifies a source whose required value is not saved can not be switched on: the switch goes back, the detail page opens on
     /// the missing field, and nothing is written.
     /// </summary>
     [Fact]
-    public async Task Enabled_SwitchedOnWithRequiredValueMissing_GoesBackAndOpensTheCard()
+    public async Task Enabled_SwitchedOnWithRequiredValueMissing_GoesBackAndOpensTheDetailPage()
     {
         await using var h = CreateWithKeyedSource();
         await h.Main.InitializeAsync();
         var keyed = h.SettingsPage.Providers.Single(p => p.Descriptor.Id == "keyed");
-        keyed.IsExpanded.Should().BeFalse();
+        h.SettingsPage.SelectedProvider.Should().BeNull();
 
         keyed.Enabled = true;
 
         keyed.Enabled.Should().BeFalse();
-        keyed.IsExpanded.Should().BeTrue();
+        h.SettingsPage.SelectedProvider.Should().BeSameAs(keyed);
         keyed.HasOptionError.Should().BeFalse("a source that is off is not flagged");
         var key = keyed.Options.Single(o => o.Definition.Key == "ApiKey");
         key.Error.Should().NotBeEmpty();

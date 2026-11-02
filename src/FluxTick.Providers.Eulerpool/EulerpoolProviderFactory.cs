@@ -65,13 +65,15 @@ public sealed class EulerpoolProviderFactory : IMarketDataProviderFactory
                 "WebSocket endpoint",
                 ProviderOptionType.String,
                 "wss://api.eulerpool.com/v1/subscribe",
-                "Used for live prices. The documented host stream.eulerpool.com refuses connections from applications."),
+                "Used for live prices. The documented host stream.eulerpool.com refuses connections from applications.",
+                Advanced: true),
             new ProviderOptionDefinition(
                 BaseUrlKey,
                 "API endpoint",
                 ProviderOptionType.String,
                 "https://api.eulerpool.com",
-                "Used for symbol search, first prices and as a fallback."),
+                "Used for symbol search, first prices and as a fallback.",
+                Advanced: true),
         ],
         EnabledByDefault: false);
 
