@@ -41,6 +41,8 @@ Things that span several files:
 
 `tests/` has `FluxTick.Core.Tests`, `FluxTick.Providers.Tests` (a new provider adds a project reference and a contract test there) and `FluxTick.App.Tests`. In the App tests the whole assembly is one xUnit collection (`AssemblyInfo.cs`) because tests switch the shared `Loc` language; do not enable parallelism there.
 
+UI features do not need unit tests: do not add tests for views, styles, bindings or other presentation-only behavior. Logic in the pure "Math"/"Rules" classes and in Core, Abstractions and the providers is still tested as usual.
+
 ## Quote providers
 
 - Design for future data sources. Put functionality shared by sources in a base class (`MarketDataProviderBase`, or the helpers in `FluxTick.Providers.Common`); leave source-specific behavior that does not extract cleanly to each source's own project. Do not add source-specific branches to `FluxTick.Core` or the UI.
