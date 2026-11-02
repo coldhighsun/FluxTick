@@ -1,7 +1,9 @@
 {
   "About_Author": "作者",
+  "About_DataHeader": "数据",
   "About_Homepage": "项目主页",
   "About_License": "许可证",
+  "About_UpdatesHeader": "更新",
   "Add_AlertsConflict": "{0} 在 {1} 和 {2} 上都有相同条件的报警（{3}）。请先删除其中一条，再更换数据源。",
   "Add_AlreadyOnList": "{0} 已在你的列表中。",
   "Add_AssetClass": "资产类别",
