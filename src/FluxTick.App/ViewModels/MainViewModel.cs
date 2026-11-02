@@ -602,16 +602,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
         {
             ApplyRoll();
         }
-        else if (e.PropertyName == nameof(SettingsViewModel.ShowMarketStatus))
-        {
-            foreach (var row in Rows)
-            {
-                row.ShowMarketStatus = Settings.ShowMarketStatus;
-            }
-
-            // Whether the price of a closed market counts depends on it.
-            RefreshPortfolio();
-        }
         else if (e.PropertyName is nameof(SettingsViewModel.SelectedLayout) or nameof(SettingsViewModel.SelectedGrouping) or nameof(SettingsViewModel.SelectedCardSize))
         {
             RebuildSections();
@@ -1643,7 +1633,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
                 row = new AssetRowViewModel(asset, ProviderName(asset.ProviderId))
                 {
                     RollEnabled = Settings.RollPriceOnUpdate,
-                    ShowMarketStatus = Settings.ShowMarketStatus,
                     CardSize = CardSize,
                 };
                 Rows.Insert(i, row);

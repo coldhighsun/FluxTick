@@ -393,11 +393,6 @@ internal sealed class AppearanceFile
     public bool? RollPriceOnUpdate { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the trading state of the market is shown.
-    /// </summary>
-    public bool? ShowMarketStatus { get; set; }
-
-    /// <summary>
     /// Gets or sets a value indicating whether the window hides at the screen edge.
     /// </summary>
     public bool? AutoHideAtEdge { get; set; }
@@ -480,7 +475,6 @@ internal sealed class AppearanceFile
             AlwaysOnTop = AlwaysOnTop ?? defaults.AlwaysOnTop,
             Locked = Locked ?? defaults.Locked,
             RollPriceOnUpdate = RollPriceOnUpdate ?? defaults.RollPriceOnUpdate,
-            ShowMarketStatus = ShowMarketStatus ?? defaults.ShowMarketStatus,
             AutoHideAtEdge = AutoHideAtEdge ?? defaults.AutoHideAtEdge,
             ColorConvention = ColorConvention ?? defaults.ColorConvention,
             ThemeMode = ThemeMode ?? defaults.ThemeMode,

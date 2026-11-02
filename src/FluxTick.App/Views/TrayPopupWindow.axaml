@@ -23,9 +23,6 @@
     <Style Selector="ItemsControl.holdings TextBlock.placeholder.noHolding">
       <Setter Property="IsVisible" Value="True" />
     </Style>
-    <Style Selector="Grid.stopped">
-      <Setter Property="Opacity" Value="0.55" />
-    </Style>
   </Window.Styles>
 
   <Border Margin="6" Padding="10,8" CornerRadius="10" BorderThickness="1"

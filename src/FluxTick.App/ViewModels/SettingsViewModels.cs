@@ -1319,12 +1319,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool RollPriceOnUpdate { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether rows tell whether the market of the instrument is trading.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool ShowMarketStatus { get; set; } = true;
-
-    /// <summary>
     /// Gets a value indicating whether the platform offers edge hiding at all. macOS does not let a window rest beyond the
     /// screen edge, so the setting is not shown there.
     /// </summary>
@@ -1475,7 +1469,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Locked = current.Appearance.Locked;
             RollPriceOnUpdate = current.Appearance.RollPriceOnUpdate;
-            ShowMarketStatus = current.Appearance.ShowMarketStatus;
             AutoHideAtEdge = current.Appearance.AutoHideAtEdge;
             SelectedColorConvention = current.Appearance.ColorConvention;
             SelectedThemeMode = current.Appearance.ThemeMode;
@@ -1638,14 +1631,6 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new value.
     /// </param>
     partial void OnRollPriceOnUpdateChanged(bool value) => SaveSetting(s => s.Appearance.RollPriceOnUpdate = value);
-
-    /// <summary>
-    /// Saves the setting when it changes.
-    /// </summary>
-    /// <param name="value">
-    /// The new value.
-    /// </param>
-    partial void OnShowMarketStatusChanged(bool value) => SaveSetting(s => s.Appearance.ShowMarketStatus = value);
 
     /// <summary>
     /// Saves the edge auto-hide setting.

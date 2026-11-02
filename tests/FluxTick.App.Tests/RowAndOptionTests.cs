@@ -292,25 +292,6 @@ public class RowAndOptionTests
     }
 
     /// <summary>
-    /// Verifies turning the trading state off brings back the delayed label of a delayed price in a shut market.
-    /// </summary>
-    [Fact]
-    public void ShowMarketStatus_WhenTurnedOff_RestoresDelayed()
-    {
-        var row = new AssetRowViewModel(Btc, "p");
-        row.Update(Snapshot(110m, 100m, AssetHealth.Delayed) with { MarketState = MarketState.Closed });
-
-        row.ShowMarketStatus = false;
-
-        row.StatusText.Should().Be("Delayed");
-        row.IsPriceOutdated.Should().BeFalse();
-
-        row.ShowMarketStatus = true;
-
-        row.StatusText.Should().Be("Closed");
-    }
-
-    /// <summary>
     /// Verifies the tooltip of a small card, which has no status line, tells that the price is delayed.
     /// </summary>
     [Fact]
@@ -357,28 +338,6 @@ public class RowAndOptionTests
         row.MarketBadgeText.Should().Be(badge);
         row.HasMarketBadge.Should().Be(badge.Length > 0);
         row.HasStatus.Should().BeFalse();
-    }
-
-    /// <summary>
-    /// Verifies turning the trading state off brings back "stale" and removes the chip, and turning it on shows them again.
-    /// </summary>
-    [Fact]
-    public void ShowMarketStatus_WhenTurnedOff_RestoresStaleAndHidesTheChip()
-    {
-        var row = new AssetRowViewModel(Btc, "p");
-        row.Update(Snapshot(110m, 100m, AssetHealth.Stale) with { MarketState = MarketState.Closed });
-
-        row.ShowMarketStatus = false;
-
-        row.StatusText.Should().Be("Stale");
-        row.StatusIsNeutral.Should().BeFalse();
-        row.IsPriceOutdated.Should().BeTrue("with the trading state off the price is stale again, as the row says");
-        row.HasMarketBadge.Should().BeFalse();
-
-        row.ShowMarketStatus = true;
-
-        row.StatusText.Should().Be("Closed");
-        row.IsPriceOutdated.Should().BeFalse();
     }
 
     /// <summary>

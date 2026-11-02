@@ -38,12 +38,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     private AssetSnapshot? _lastSnapshot;
 
     /// <summary>
-    /// Whether the prices of the snapshot shown last stopped because the market is shut, so that they still count in a
-    /// total. It is only so while the trading state is shown; with it off the prices are stale again.
-    /// </summary>
-    private bool _isClosingPrice;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="AssetRowViewModel"/> class.
     /// </summary>
     /// <param name="asset">
@@ -129,8 +123,8 @@ public sealed partial class AssetRowViewModel : ObservableObject
 
     /// <summary>
     /// Gets a value indicating whether the market of the instrument is shut according to its trading hours, so that
-    /// <see cref="ChangePercent"/> is the change of the last session. Unlike the closing price shown in the row, it does
-    /// not depend on the setting that shows the trading state: the order of the list must not change with a display setting.
+    /// <see cref="ChangePercent"/> is the change of the last session. It also marks the closing prices, which still count
+    /// in a total.
     /// </summary>
     public bool IsMarketShut { get; private set; }
 
@@ -222,12 +216,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial bool RowBadgeIsWarn { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the trading state of the market is shown.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool ShowMarketStatus { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a counter incremented on every price change; the view plays a flash animation when it changes.
@@ -574,18 +562,19 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// Gets a value indicating whether the last price is too old to count in a total: the prices went stale, the source
     /// failed or is off or missing. A source that is reconnecting is not outdated yet, so that a short break does not
     /// make the holdings of a whole source drop out of the total and come back. Prices that stopped because the market
-    /// is shut are the closing prices and still count, while the trading state is shown. Delayed prices are still the
+    /// is shut are the closing prices and still count. Delayed prices are still the
     /// latest the source delivers, so they count too.
     /// </summary>
     public bool IsPriceOutdated =>
         Health is AssetHealth.StaleReconnecting or AssetHealth.Failed or AssetHealth.ProviderDisabled or AssetHealth.ProviderMissing
-        || (Health == AssetHealth.Stale && !_isClosingPrice);
+        || (Health == AssetHealth.Stale && !IsMarketShut);
 
     /// <summary>
     /// Gets a value indicating whether the displayed data is not trustworthy and should be dimmed, which it is while the
-    /// prices are not coming in.
+    /// prices are not coming in or the market is shut, even when a source goes on sending the last price of a shut market
+    /// and the prices look live.
     /// </summary>
-    public bool IsDimmed => IsStopped;
+    public bool IsDimmed => IsStopped || IsMarketShut;
 
     /// <summary>
     /// Applies a new snapshot of the instrument.
@@ -596,16 +585,16 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public void Update(AssetSnapshot snapshot)
     {
         _lastSnapshot = snapshot;
-        IsMarketShut = IsClosingPrice(snapshot);
+        var shut = IsClosingPrice(snapshot);
+        var shutChanged = shut != IsMarketShut;
 
         // It is set before the health, whose change notifies IsPriceOutdated, so that no listener sees the two out of step.
-        var closing = ShowMarketStatus && IsClosingPrice(snapshot);
-        var closingChanged = closing != _isClosingPrice;
-        _isClosingPrice = closing;
+        IsMarketShut = shut;
         Health = snapshot.Health;
-        if (closingChanged)
+        if (shutChanged)
         {
             OnPropertyChanged(nameof(IsPriceOutdated));
+            OnPropertyChanged(nameof(IsDimmed));
         }
 
         ApplyMarketStatus(snapshot);
@@ -677,12 +666,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </param>
     private void ApplyMarketStatus(AssetSnapshot snapshot)
     {
-        var market = ShowMarketStatus ? snapshot.MarketState : MarketState.Unknown;
+        var market = snapshot.MarketState;
 
         // A market that is shut is told as such instead of "stale": the prices stopped because nothing trades, not because
         // the data is bad. The snapshot only says so while prices are still being received; a source that went quiet keeps
         // the warning.
-        var shut = _isClosingPrice;
+        var shut = IsMarketShut;
         var chip = !shut && market is MarketState.PreMarket or MarketState.AfterHours or MarketState.Break or MarketState.Closed;
         StatusIsNeutral = shut;
         StatusText = shut ? MarketLabel(snapshot.MarketState) : StatusOf(snapshot);
@@ -757,28 +746,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// The new text.
     /// </param>
     partial void OnChangeTextChanged(string value) => OnPropertyChanged(nameof(ChangeDisplayText));
-
-    /// <summary>
-    /// Shows the instrument again after the trading state was turned on or off.
-    /// </summary>
-    /// <param name="value">
-    /// The new value.
-    /// </param>
-    partial void OnShowMarketStatusChanged(bool value)
-    {
-        if (_lastSnapshot is { } snapshot)
-        {
-            var closing = value && IsClosingPrice(snapshot);
-            if (closing != _isClosingPrice)
-            {
-                _isClosingPrice = closing;
-                OnPropertyChanged(nameof(IsPriceOutdated));
-            }
-
-            ApplyMarketStatus(snapshot);
-            RefreshTooltip();
-        }
-    }
 
     /// <summary>
     /// Gets the label of a trading state.

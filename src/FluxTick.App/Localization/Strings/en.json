@@ -171,8 +171,6 @@
   "Settings_FontHint": "Fonts without a semibold weight or equal-width digits may look uneven.",
   "Settings_FontSystem": "System default",
   "Settings_LanguageHint": "Auto: follow the system language",
-  "Settings_MarketStatus": "Show the state of the market",
-  "Settings_MarketStatusHint": "Marks pre-market, after hours and closed; closed prices count in the totals",
   "Settings_LaunchAtLogin": "Launch at startup",
   "Settings_LaunchAtLoginHint": "Start automatically when you sign in to Windows",
   "Settings_Layout": "Layout",

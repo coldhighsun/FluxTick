@@ -137,8 +137,9 @@ public sealed class SparklineControl : Control
 
     /// <summary>
     /// Gets or sets a value indicating whether the prices are not coming in, whatever the reason (stale, reconnecting,
-    /// failed, switched off), which carries the last price on to the right edge as a dashed line in
-    /// <see cref="StoppedStroke"/>.
+    /// failed, switched off) or the market is shut, which carries the last price on to the right edge as a dashed line in
+    /// <see cref="StoppedStroke"/>. The views bind it to the dimmed state of the row, so a shut market whose source goes
+    /// on sending the last price is drawn as stopped too.
     /// </summary>
     public bool IsStopped
     {
