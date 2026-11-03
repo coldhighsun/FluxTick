@@ -58,12 +58,13 @@ public class WindowHeightRulesTests
     }
 
     /// <summary>
-    /// Verifies a small card never takes the window below the smallest height of the list layout.
+    /// Verifies a small card only needs its own height, which can be below the smallest height of the list layout.
     /// </summary>
     [Fact]
-    public void MinHeight_CardLayout_NeverBelowListMinimum()
+    public void MinHeight_CardLayout_SmallCard_CanBeBelowListMinimum()
     {
-        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Small, grouped: false, chrome: 40).Should().Be(WindowHeightRules.ListMinHeight);
+        // 80 around the list + 4 + 6 padding + 2 * 3 margin + 54 for the card.
+        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Small, grouped: false, chrome: 80).Should().Be(150);
     }
 
     /// <summary>
@@ -74,5 +75,22 @@ public class WindowHeightRulesTests
     {
         // The 272 of an ungrouped large card + 20 for the header + 8 above it and 2 below.
         WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Large, grouped: true, chrome: 80).Should().Be(302);
+    }
+
+    /// <summary>
+    /// Verifies the height is a whole number of screen pixels and at least one pixel above the input.
+    /// </summary>
+    [Theory]
+    [InlineData(194.33, 1.5)]
+    [InlineData(200, 1.5)]
+    [InlineData(200, 1)]
+    [InlineData(200.2, 1.25)]
+    public void RoundUpToPixels_FractionalScale_GivesWholePixelsAboveInput(double height, double scale)
+    {
+        var result = WindowHeightRules.RoundUpToPixels(height, scale);
+
+        (result * scale).Should().BeApproximately(Math.Round(result * scale), 1e-6);
+        result.Should().BeGreaterThanOrEqualTo(height + (1 / scale) - 1e-6);
+        result.Should().BeLessThan(height + (2 / scale));
     }
 }

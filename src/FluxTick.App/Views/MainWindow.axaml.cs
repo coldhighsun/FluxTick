@@ -706,7 +706,11 @@ public sealed partial class MainWindow : Window
         var chrome = ClientSize.Height - Watchlist.Bounds.Height;
         var layout = viewModel.IsCardLayout ? WatchlistLayout.Cards : WatchlistLayout.List;
         var minHeight = WindowHeightRules.MinHeight(layout, viewModel.CardSize, viewModel.Grouping != CardGrouping.None, chrome);
-        if (layout == WatchlistLayout.List)
+        if (layout == WatchlistLayout.Cards)
+        {
+            minHeight = WindowHeightRules.RoundUpToPixels(minHeight, RenderScaling);
+        }
+        else
         {
             // Rows that are not laid out yet say nothing; the list reports its height when it has one.
             if (Watchlist.ListContentHeight is not { } content)
