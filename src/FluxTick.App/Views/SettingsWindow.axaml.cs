@@ -15,7 +15,7 @@ public sealed partial class SettingsWindow : ToolWindow
     /// <summary>
     /// The fixed width, wider than the other tool windows so that the lists of the settings have room.
     /// </summary>
-    private const double SettingsWidth = 540;
+    private const double SettingsWidth = 480;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsWindow"/> class.
