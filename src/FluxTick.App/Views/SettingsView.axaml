@@ -414,7 +414,7 @@
                   </Border>
 
                   <Border Classes="card" IsVisible="{Binding HasAdvancedOptions}">
-                    <Expander Header="{loc:T Settings_AdvancedOptions}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" Padding="0"
+                    <Expander Header="{loc:T Settings_AdvancedOptions}" IsExpanded="{Binding IsAdvancedExpanded, Mode=TwoWay}" Padding="0" MinHeight="28"
                               Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                       <!-- The built-in expander paints its own header and content; the card behind it is the surface. -->
                       <Expander.Resources>
