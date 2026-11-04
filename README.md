@@ -23,8 +23,17 @@ commodities side by side, from the data sources *you* choose.
   <img src="docs/images/en/main-cards.png" alt="FluxTick watchlist (card layout, dark theme)" width="300" />
 </p>
 <p align="center">
-  <img src="docs/images/en/group-custom.png" alt="Custom groups" width="250" />
-  <img src="docs/images/en/alerts.png" alt="FluxTick price alerts" width="300" />
+  <img src="docs/images/en/group-custom.png" alt="Custom groups" width="300" />
+  <img src="docs/images/en/alerts.png" alt="FluxTick price alerts" width="250" />
+</p>
+
+<p align="center">
+  <img src="docs/images/en/list-sorted.png" alt="List sorted by daily change" width="250" />
+  <img src="docs/images/en/holdings.png" alt="Holdings with profit and loss" width="250" />
+</p>
+<p align="center">
+  <img src="docs/images/en/chart-range.png" alt="Large cards with a one-day chart" width="420" />
+  <img src="docs/images/en/settings-sources.png" alt="Data sources in Settings" width="250" />
 </p>
 
 > Screenshots use the built-in simulated data source (`--demo`).
@@ -35,8 +44,14 @@ commodities side by side, from the data sources *you* choose.
 - **List or cards**: switch the watchlist to cards that flow onto as many columns as the window is wide. Group them
   by asset class, by data source or into your own groups; groups collapse individually, and cards can be dragged to
   reorder them or move them between groups.
-- **Live prices**: 60-minute sparklines drawn along the time (a dashed line where no price came in), change vs.
+- **Live prices**: sparklines drawn along the time (a dashed line where no price came in), change vs.
   previous close / 24h open, and an optional rolling animation of the price number (off by default).
+- **Chart time span**: the sparkline shows the last hour by default; the header's chart button switches it to one day,
+  five days, one month, six months or one year, with a percentage axis, a hover tooltip and the change over the span.
+  A source that cannot serve a longer span keeps showing its last hour.
+- **Sort the list**: order the list layout by daily change or holding profit/loss %; rows whose market is shut follow
+  the open ones.
+- **Market state**: rows show pre-market, after hours, break and closed, judged by the exchange's trading hours.
 - **Price alerts**: right-click an instrument and choose **Price alerts…** to be told when its price rises or falls to
   a level. An alert fires once (or every time with **Repeat**), shows a small notification, makes the card or row
   flash, and keeps working while the window is hidden.
@@ -75,8 +90,8 @@ commodities side by side, from the data sources *you* choose.
 | **Bybit** | Crypto spot pairs | WebSocket stream | No API key. Not served in some regions. Off by default. |
 | **Simulated** | Anything | Local random walk | For demos, screenshots and offline development. Off by default. |
 
-Sources that are off by default are enabled in **Settings → Data sources**. To show an instrument from one of them,
-pick it in the *Add instrument* window or drag the sources into your order of preference on the *Data sources* tab: the first enabled source that supports an asset class is the default for it.
+Sources that are off by default are enabled in **Settings → Sources**. To show an instrument from one of them,
+pick it in the *Add instrument* window or drag the sources into your order of preference on the *Sources* tab: the first enabled source that supports an asset class is the default for it.
 
 > Market data may be delayed or inaccurate and is **not investment advice**. FluxTick is not affiliated with any of
 > the data providers. Respect each provider's terms of use.
@@ -130,7 +145,7 @@ Things to know on macOS:
 - Updates are not installed automatically: FluxTick downloads and verifies the new `.dmg` and tells you; replace the app
   in `Applications` yourself.
 
-On Windows, FluxTick looks for a newer release when it starts and about once a day while it runs (stable releases only, pre-releases are ignored). It then offers to download, verify and install the new setup program, and starts again when done. This can be turned off under Settings → Updates.
+On Windows, FluxTick looks for a newer release when it starts and about once a day while it runs (stable releases only, pre-releases are ignored). It then offers to download, verify and install the new setup program, and starts again when done. This can be turned off under Settings → About.
 
 ### Run from source
 
@@ -166,7 +181,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Sort the list | In list layout the header's two-arrows button (or the right-click menu of the empty area) picks *Default order*, *Daily change* or *Holding P/L %*. Picking the key in use again reverses the direction, and the header shows the order next to the title. Rows whose market is shut follow the open ones when sorting by daily change; instruments without a value come last. *Holding P/L %* is available once an instrument has a holding, and dragging rows is off while a sort is on |
 | Remove, change source | Right-click a row |
 | Move the Settings / Add window | Drag its header; **Esc** closes it |
-| Settings | The gear icon in the header, *Settings* in the tray menu, or at the bottom of the right-click menu of the empty area. Tabs: *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Data sources* and *Updates*. Expand a data source to edit its options; drag data sources to set their priority |
+| Settings | The gear icon in the header, *Settings* in the tray menu, or at the bottom of the right-click menu of the empty area. Tabs: *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Sources* and *About* (which also holds the update settings). Expand a data source to edit its options; drag data sources to set their priority |
 | Launch at startup | Windows only, off by default; Settings → General |
 | Start in the tray | Off by default; Settings → General (or the `--minimized` option) keeps the window hidden at startup until you double-click the tray icon (a single click where the system cannot list the instruments, i.e. anywhere but Windows) |
 | Single instance | Only one copy runs per user; starting FluxTick again brings the running window forward, even when it is hidden in the tray |
@@ -190,7 +205,7 @@ Options at their built-in default are not written to `settings.json`. Before eac
 
 ### API keys
 
-Some data sources need an API key (today only Eulerpool; such sources are off by default until you enter the key under Settings → Data sources). Keys are entered in a masked field and handled like this:
+Some data sources need an API key (today only Eulerpool; such sources are off by default until you enter the key under Settings → Sources). Keys are entered in a masked field and handled like this:
 
 - **Where they are kept:** in `settings.json`, in the same folder as the other settings, and in the copies of it in that folder (`settings.json.bak`, the file before the last save, and `settings.json.bad`, a damaged file set aside). They are not kept anywhere else, never written to the logs and never put in a URL; they are only sent to the data source they belong to.
 - **Windows:** keys are encrypted with the Windows Data Protection API (DPAPI) for your user account and written as `protected:v1:…`. Only the same user on the same machine can open them, and each one is bound to its own data source and option, so it cannot be moved to another. A key from an older version that was stored as plain text is encrypted the first time the app starts. Older copies of the settings file may still hold it as plain text: `settings.json.bak` until the next change of the settings replaces it, and `settings.json.bad` until you delete it.
