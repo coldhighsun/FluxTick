@@ -647,6 +647,10 @@ public class ChartRangeTests
         var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () => release.Task, rangeToken: t => loadToken.TrySetResult(t));
         var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
         await service.ApplyAsync(SettingsFor(Btc));
+
+        // The history of the last hour arrives in the background and raises a snapshot of its own; on a slow machine that
+        // would land after the handler below is attached and be counted as the answer of the range load.
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count > 0);
         service.SetChartRange(HistoryRange.Day);
         var token = await loadToken.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var raised = 0;
