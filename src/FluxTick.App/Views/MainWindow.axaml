@@ -53,7 +53,7 @@
             </Button>
             <!-- Two arrows pointing opposite ways read as "sort". The menu picks what to sort by; picking the key in use again
                  reverses the direction. -->
-            <Button Classes="icon" Width="24" IsVisible="{Binding !IsCardLayout}" ToolTip.Tip="{loc:T Main_Sort}"
+            <Button Name="SortButton" Classes="icon" Width="24" IsVisible="{Binding !IsCardLayout}" ToolTip.Tip="{loc:T Main_Sort}"
                     Classes.active="{Binding IsListSorted}" AutomationProperties.Name="{loc:T Main_Sort}">
               <Path Data="M4 12V2M1.5 4.5L4 2l2.5 2.5M10 2v10M7.5 9.5L10 12l2.5-2.5" />
               <Button.Flyout>

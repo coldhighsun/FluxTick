@@ -301,8 +301,11 @@ public sealed partial class MainWindow
             menu.Close();
         }
 
-        GroupButton.Flyout?.Hide();
-        StatusButton.Flyout?.Hide();
+        foreach (var button in DockFlyoutButtons())
+        {
+            button.Flyout?.Hide();
+        }
+
         GroupNamePrompt.CloseAll();
     }
 
@@ -466,9 +469,16 @@ public sealed partial class MainWindow
             && _toolWindow is null
             && OpenMenus.Count == 0
             && !GroupNamePrompt.IsOpen
-            && GroupButton.Flyout is not { IsOpen: true }
-            && StatusButton.Flyout is not { IsOpen: true };
+            && !DockFlyoutButtons().Any(button => button.Flyout is { IsOpen: true });
     }
+
+    /// <summary>
+    /// Lists the buttons whose menu or flyout must keep the docked window out while it is open.
+    /// </summary>
+    /// <returns>
+    /// The sort, group, card size, chart range and status buttons.
+    /// </returns>
+    private Button[] DockFlyoutButtons() => [SortButton, GroupButton, CardSizeButton, ChartRangeButton, StatusButton];
 
     /// <summary>
     /// Slides the window to its hidden or its shown position.
