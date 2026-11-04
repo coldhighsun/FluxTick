@@ -211,18 +211,21 @@ public class ProviderSearchAndDetailTests
         attention.IsSelected = true;
         page.FilteredProviders.Should().BeEmpty();
 
-        provider.UpdateStatus(new ProviderStatus(ProviderConnectionState.Failed, "down"));
+        // The status goes through the provider, as the page refreshes it from the service; setting it on the entry
+        // directly could be overwritten by the refresh that the start of the provider causes.
+        await Harness.EventuallyAsync(() => h.CryptoFactory.Last is not null);
+        h.CryptoFactory.Fake.ChangeStatus(ProviderConnectionState.Failed, "down");
+        await Harness.EventuallyAsync(() => provider.NeedsAttention && page.ProvidersSummary.Contains(Loc.Get("Settings_ProvidersAttention", 1)));
 
         page.FilteredProviders.Should().BeEmpty();
-        page.ProvidersSummary.Should().Contain(Loc.Get("Settings_ProvidersAttention", 1));
         page.ProviderStatusFilters.Single(f => f.Filter == ProviderStatusFilter.All).IsSelected = true;
         attention.IsSelected = true;
         page.FilteredProviders.Should().Equal(provider);
 
-        provider.UpdateStatus(new ProviderStatus(ProviderConnectionState.Connected));
+        h.CryptoFactory.Fake.ChangeStatus(ProviderConnectionState.Connected);
+        await Harness.EventuallyAsync(() => !provider.NeedsAttention && !page.ProvidersSummary.Contains(Loc.Get("Settings_ProvidersAttention", 1)));
 
         page.FilteredProviders.Should().Equal(provider);
-        page.ProvidersSummary.Should().NotContain(Loc.Get("Settings_ProvidersAttention", 1));
     }
 
     /// <summary>
@@ -248,10 +251,11 @@ public class ProviderSearchAndDetailTests
             }
         };
 
-        provider.UpdateStatus(new ProviderStatus(ProviderConnectionState.Failed, "down"));
+        await Harness.EventuallyAsync(() => h.CryptoFactory.Last is not null);
+        h.CryptoFactory.Fake.ChangeStatus(ProviderConnectionState.Failed, "down");
+        await Harness.EventuallyAsync(() => provider.NeedsAttention && Volatile.Read(ref summaries) > 0);
 
         moves.Should().Be(0);
-        summaries.Should().BePositive();
     }
 
     /// <summary>
