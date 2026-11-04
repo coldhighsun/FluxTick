@@ -98,6 +98,7 @@
 - **Windows（便携版）：** `FluxTick-<版本>-win-x64-portable.zip` 内只有一个 `FluxTick.exe`，解压到任意位置即可运行，无需安装。
 - **Linux：** `FluxTick-<版本>-linux-x64.zip` 内只有一个 `FluxTick` 可执行文件。
 - **macOS（Apple Silicon）：** `FluxTick-<版本>-osx-arm64.dmg` 内含 `FluxTick.app`，参见下方 [macOS 安装](#macos-安装)。
+- **macOS（Homebrew）：** `brew install --cask coldhighsun/tap/fluxtick`
 
 > **请勿在同一台电脑上同时使用便携版和安装版。** 两者共用 `%APPDATA%\FluxTick` 中的设置，并且各自注册指向自己
 > `FluxTick.exe` 的*开机自启动*项，会互相冲突（登录时可能启动了错误的那一份，或启动项被覆盖）。内置更新功能
@@ -114,6 +115,14 @@ macOS 版本仅做了 ad-hoc 签名：没有 Apple Developer ID 签名，也未�
 2. 从“应用程序”中打开 FluxTick，macOS 会拒绝并弹出提示。
 3. 打开*系统设置 → 隐私与安全性*，滚动到关于 FluxTick 的提示，点击*仍要打开*并确认。（macOS 14 及更早版本也可以
    右键点击应用选择*打开*；macOS 15 起已移除该方式。）
+
+通过 Homebrew 安装会自动移除隔离属性，安装后可直接打开：
+
+```bash
+brew install --cask coldhighsun/tap/fluxtick
+```
+
+之后 `brew upgrade` 即可升级到新的稳定版。
 
 也可以在首次启动前，在终端中移除隔离属性：
 

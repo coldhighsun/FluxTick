@@ -107,6 +107,7 @@ Grab the latest build from the [Releases](https://github.com/coldhighsun/FluxTic
 - **Windows (portable):** `FluxTick-<version>-win-x64-portable.zip` contains a single `FluxTick.exe`; unzip it anywhere and run it, no installation needed.
 - **Linux:** `FluxTick-<version>-linux-x64.zip` contains a single `FluxTick` executable.
 - **macOS (Apple Silicon):** `FluxTick-<version>-osx-arm64.dmg` contains `FluxTick.app`; see [macOS installation](#macos-installation) below.
+- **macOS (Homebrew):** `brew install --cask coldhighsun/tap/fluxtick`
 
 > **Do not mix the portable build and the installed version on the same machine.** Both share the same settings in
 > `%APPDATA%\FluxTick`, and each registers its own *Launch at startup* entry pointing at its own `FluxTick.exe`, so the
