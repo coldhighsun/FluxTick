@@ -181,7 +181,8 @@ public class ViewModelFlowTests
 
         h.CryptoFactory.Fake.Emit(new Quote(Btc.Id, 105m, 100m, h.Time.GetUtcNow()));
 
-        await Harness.EventuallyAsync(() => h.Main.Rows.Single().PriceText == "105.00");
+        // The row sets the price and the change in separate steps, so wait for both.
+        await Harness.EventuallyAsync(() => h.Main.Rows.Single() is { PriceText: "105.00", ChangeText: "+5.00%" });
         h.Main.Rows.Single().ChangeText.Should().Be("+5.00%");
     }
 
