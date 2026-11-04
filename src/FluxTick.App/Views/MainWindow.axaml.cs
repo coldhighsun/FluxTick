@@ -73,6 +73,23 @@ public sealed partial class MainWindow : Window
     private double _cardsWidth = WindowWidthRules.ListWidth;
 
     /// <summary>
+    /// Whether the window is to take the height of the list layout as soon as the rows are laid out, after a change from
+    /// the card layout.
+    /// </summary>
+    private bool _fitListPending;
+
+    /// <summary>
+    /// The number of the latest wait for the rows of the list layout; the timer that ends a wait only counts when it
+    /// still holds the latest number.
+    /// </summary>
+    private int _fitListGeneration;
+
+    /// <summary>
+    /// The top of the window in screen pixels while the width animation runs; the animation keeps it fixed.
+    /// </summary>
+    private int _widthAnimationTop;
+
+    /// <summary>
     /// The resize by the grip that is under way on macOS, or <see langword="null"/> when there is none.
     /// </summary>
     private GripDrag? _gripDrag;
@@ -154,7 +171,11 @@ public sealed partial class MainWindow : Window
         };
         Resized += OnResized;
         Watchlist.SizeChanged += (_, _) => ApplyHeightRule();
-        Watchlist.ListContentHeightChanged += (_, _) => ApplyHeightRule();
+        Watchlist.ListContentHeightChanged += (_, _) =>
+        {
+            ApplyHeightRule();
+            ApplyListFit();
+        };
         if (GroupButton.Flyout is MenuFlyout groupFlyout)
         {
             groupFlyout.Opening += (_, _) =>
@@ -623,7 +644,17 @@ public sealed partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.IsCardLayout))
         {
-            ApplyWidthRule();
+            _fitListPending = false;
+
+            // The sections are rebuilt right after the flag changes, so the fit waits until they are settled.
+            if (IsLoaded && IsVisible)
+            {
+                Dispatcher.UIThread.Post(FitToLayout, DispatcherPriority.Loaded);
+            }
+            else
+            {
+                ApplyWidthRule();
+            }
         }
 
         // What the window needs around the list does not change with these, so the last measure is good enough.
@@ -635,6 +666,115 @@ public sealed partial class MainWindow : Window
         {
             ApplyAutoHide();
         }
+    }
+
+    /// <summary>
+    /// Fits the size of the window to the layout it was switched to: in the card layout the width and height that show
+    /// every card in a shape close to a common screen ratio, in the list layout the height that shows every row. Nothing
+    /// is resized while the window fills the screen.
+    /// </summary>
+    private void FitToLayout()
+    {
+        if (_observed is { } viewModel && WindowState == WindowState.Normal && !FillsScreen && Watchlist.Bounds.Height > 0)
+        {
+            if (viewModel.IsCardLayout)
+            {
+                FitCards(viewModel);
+            }
+            else
+            {
+                _fitListPending = true;
+            }
+        }
+
+        ApplyWidthRule();
+        ApplyListFit();
+
+        // The rows may report their height late or not at all; the window must not be resized by a change much later.
+        if (_fitListPending)
+        {
+            // A later change to the list layout starts its own wait; the timer of this one must not end that.
+            var generation = ++_fitListGeneration;
+            DispatcherTimer.RunOnce(
+                () =>
+                {
+                    if (generation == _fitListGeneration)
+                    {
+                        _fitListPending = false;
+                    }
+                },
+                TimeSpan.FromSeconds(1));
+        }
+    }
+
+    /// <summary>
+    /// Sets the width the card layout will take and the height of the window to what shows every card. The top stays
+    /// unless the window would reach below the work area.
+    /// </summary>
+    /// <param name="viewModel">
+    /// The view model that holds the sections.
+    /// </param>
+    private void FitCards(MainViewModel viewModel)
+    {
+        if (Screens.ScreenFromWindow(this)?.WorkingArea is not { } area)
+        {
+            return;
+        }
+
+        var scale = ScreenUnitScale;
+        var chrome = ClientSize.Height - Watchlist.Bounds.Height;
+        var sections = viewModel.Sections.Select(section => new FitSection(section.Count, section.IsCollapsed)).ToList();
+        var maxHeight = area.Height / scale;
+        var fit = WindowFitRules.CardsSize(sections, viewModel.Grouping != CardGrouping.None, viewModel.CardSize, chrome, area.Width / scale, maxHeight, RenderScaling);
+        var height = Math.Min(WindowHeightRules.RoundUpToPixels(fit.Height, RenderScaling), maxHeight);
+
+        // The width follows from the remembered one; the animation of the width rule takes the window there.
+        _cardsWidth = fit.Width;
+        Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+        Height = height;
+    }
+
+    /// <summary>
+    /// Gives the window the height that shows every row of the list layout once a change to that layout is waiting for it
+    /// and the rows are laid out.
+    /// </summary>
+    private void ApplyListFit()
+    {
+        if (!_fitListPending || _observed is not { IsCardLayout: false } || Watchlist.ListContentHeight is not { } content)
+        {
+            return;
+        }
+
+        // The window may have been maximized or made to fill the screen while the rows were being laid out.
+        if (WindowState != WindowState.Normal || FillsScreen)
+        {
+            _fitListPending = false;
+            return;
+        }
+
+        var area = Screens.ScreenFromWindow(this)?.WorkingArea;
+        var scale = ScreenUnitScale;
+        var limit = area is { } a ? a.Height / scale : double.PositiveInfinity;
+        _fitListPending = false;
+        ApplyHeightRule();
+        var height = WindowHeightRules.ListContentMinHeight(content, ClientSize.Height - Watchlist.Bounds.Height, limit);
+        if (area is { } work)
+        {
+            // A window that grows must not reach below the work area, and the width animation, if it still runs, keeps the top it has.
+            _widthAnimationTop = Position.Y;
+            var top = WindowFitRules.ClampTop(Position.Y, height * scale, work.Y, work.Bottom);
+            if (top != Position.Y)
+            {
+                Position = new PixelPoint(Position.X, top);
+                _widthAnimationTop = top;
+                if (_widthAnimationEnd is { } end)
+                {
+                    _widthAnimationEnd = (end.Width, new PixelPoint(end.Position.X, top));
+                }
+            }
+        }
+
+        Height = height;
     }
 
     /// <summary>
@@ -751,14 +891,14 @@ public sealed partial class MainWindow : Window
             endLeft = WindowWidthRules.ClampLeft(endLeft, to * scale, area.X, area.Right);
         }
 
-        var top = Position.Y;
-        _widthAnimationEnd = (to, new PixelPoint(endLeft, top));
+        _widthAnimationTop = Position.Y;
+        _widthAnimationEnd = (to, new PixelPoint(endLeft, _widthAnimationTop));
         _widthAnimation.Run(
             WindowWidthRules.AnimationDuration,
             progress =>
             {
                 Width = WindowWidthRules.Animate(from, to, progress);
-                Position = new PixelPoint((int)Math.Round(WindowWidthRules.Animate(startLeft, endLeft, progress)), top);
+                Position = new PixelPoint((int)Math.Round(WindowWidthRules.Animate(startLeft, endLeft, progress)), _widthAnimationTop);
             },
             () => FinishWidthChange(rule));
     }
@@ -796,6 +936,11 @@ public sealed partial class MainWindow : Window
         if (e.Reason != WindowResizeReason.Application && WindowState == WindowState.Normal && CurrentLayout() == WatchlistLayout.Cards)
         {
             _cardsWidth = Math.Max(e.ClientSize.Width, WindowWidthRules.CardsMinWidth);
+        }
+
+        if (e.Reason == WindowResizeReason.User)
+        {
+            _fitListPending = false;
         }
 
         // A shown, docked window that the user resized is put flush with its edge once the size stops changing.
