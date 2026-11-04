@@ -20,6 +20,22 @@ internal static class WindowHeightRules
         CardLayout.SectionHeaderHeight + CardLayout.SectionHeaderMargin.Top + CardLayout.SectionHeaderMargin.Bottom;
 
     /// <summary>
+    /// Gets the width of a card.
+    /// </summary>
+    /// <param name="size">
+    /// The card size.
+    /// </param>
+    /// <returns>
+    /// The width in device independent pixels, without the margin.
+    /// </returns>
+    public static double CardWidth(CardSize size) => size switch
+    {
+        CardSize.Small => CardLayout.SmallCardWidth,
+        CardSize.Large => CardLayout.LargeCardWidth,
+        _ => CardLayout.MediumCardWidth,
+    };
+
+    /// <summary>
     /// Gets the height of a card.
     /// </summary>
     /// <param name="size">

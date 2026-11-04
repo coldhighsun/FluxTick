@@ -10,6 +10,16 @@ namespace FluxTick.App.Views;
 internal static class CardLayout
 {
     /// <summary>
+    /// The width of a small card.
+    /// </summary>
+    public const double SmallCardWidth = 128;
+
+    /// <summary>
+    /// The width of a medium card.
+    /// </summary>
+    public const double MediumCardWidth = 176;
+
+    /// <summary>
     /// The width of a large card.
     /// </summary>
     public const double LargeCardWidth = 300;
