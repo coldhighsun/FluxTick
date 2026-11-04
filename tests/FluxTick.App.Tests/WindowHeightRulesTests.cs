@@ -20,6 +20,18 @@ public class WindowHeightRulesTests
     }
 
     /// <summary>
+    /// Verifies the width of a card follows its size.
+    /// </summary>
+    [Theory]
+    [InlineData(CardSize.Small, 128)]
+    [InlineData(CardSize.Medium, 176)]
+    [InlineData(CardSize.Large, CardLayout.LargeCardWidth)]
+    public void CardWidth_Size_ReturnsCardLayoutWidth(CardSize size, double expected)
+    {
+        WindowHeightRules.CardWidth(size).Should().Be(expected);
+    }
+
+    /// <summary>
     /// Verifies the list layout needs the height of all rows and what is around them.
     /// </summary>
     [Fact]
