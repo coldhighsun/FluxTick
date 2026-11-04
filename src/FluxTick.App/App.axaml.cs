@@ -112,6 +112,11 @@ public sealed partial class App : Application
     private MacStatusItem? _macStatusItem;
 
     /// <summary>
+    /// Whether the Dock icon was last asked to show, or <see langword="null"/> before it was asked.
+    /// </summary>
+    private bool? _dockIconVisible;
+
+    /// <summary>
     /// The listener for the boss key, or <see langword="null"/> where the platform has none.
     /// </summary>
     private WindowsGlobalHotkey? _bossHotkey;
@@ -264,6 +269,7 @@ public sealed partial class App : Application
                 ApplyPalette();
                 ApplyTrayAssets();
                 ApplyBossKey();
+                ApplyDockIcon();
             });
             ApplyPalette();
 
@@ -295,6 +301,24 @@ public sealed partial class App : Application
             {
                 instance.Activated += (_, _) => Dispatcher.UIThread.Post(ActivateWindow);
                 instance.StartListening();
+            }
+
+            // Opening the app again from Finder or Spotlight starts no second copy on macOS; the system asks the running one to
+            // reopen, which is the way back to a window that is hidden while the Dock has no icon. The user went looking for
+            // the app, so the Dock icon comes back, and the setting follows it to stay what the Dock shows.
+            if (OperatingSystem.IsMacOS() && TryGetFeature(typeof(IActivatableLifetime)) is IActivatableLifetime activatable)
+            {
+                activatable.Activated += (_, e) =>
+                {
+                    if (e.Kind == ActivationKind.Reopen)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            _ = _settings.UpdateAsync(settings => settings.General.ShowDockIcon = true);
+                            ActivateWindow();
+                        });
+                    }
+                };
             }
 
             _updates = _services.GetRequiredService<UpdateService>();
@@ -464,6 +488,30 @@ public sealed partial class App : Application
         }
 
         _macStatusItem.SetVisible(true);
+
+        ApplyDockIcon();
+    }
+
+    /// <summary>
+    /// Shows or removes the Dock icon as the settings say. It is only removed while the menu bar icon is the app's own,
+    /// as it brings the window back; with Avalonia's icon the Dock stays the way in.
+    /// </summary>
+    private void ApplyDockIcon()
+    {
+        if (_settings is null || _macStatusItem is null)
+        {
+            return;
+        }
+
+        // Settings change for many reasons; the policy is only sent when the answer to this one did.
+        var visible = _settings.Current.General.ShowDockIcon;
+        if (_dockIconVisible == visible)
+        {
+            return;
+        }
+
+        _dockIconVisible = visible;
+        MacDockIcon.SetVisible(visible);
     }
 
     /// <summary>

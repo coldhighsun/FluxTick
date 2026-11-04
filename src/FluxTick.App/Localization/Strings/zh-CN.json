@@ -217,6 +217,8 @@
   "Settings_CardSizeHint": "小：仅名称和价格；大：增加区间和涨跌额",
   "Settings_CloseToTray": "关闭按钮隐藏到托盘",
   "Settings_CloseToTrayHint": "关闭后，点击关闭按钮将退出程序",
+  "Settings_ShowDockIcon": "在 Dock 中显示图标",
+  "Settings_ShowDockIconHint": "关闭后，只在顶部菜单栏显示图标",
   "Settings_TabAlerts": "报警",
   "TrayPopup_Empty": "托盘列表为空",
   "Settings_DeleteGroupTip": "删除分组（其中的资产会移到第一个剩余分组）",

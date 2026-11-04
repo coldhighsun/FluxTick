@@ -1502,6 +1502,17 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool CloseToTray { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the app keeps its icon in the Dock of macOS.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowDockIcon { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this platform has a Dock.
+    /// </summary>
+    public bool IsDockSupported => OperatingSystem.IsMacOS();
+
+    /// <summary>
     /// Gets a value indicating whether this platform has the boss key.
     /// </summary>
     public bool IsBossKeySupported => OperatingSystem.IsWindows();
@@ -1745,6 +1756,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             LaunchAtLogin = IsAutoStartSupported && _autoStart!.IsEnabled();
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
+            ShowDockIcon = current.General.ShowDockIcon;
             BossKey = _settings.Current.General.BossKey;
             IsRecordingBossKey = false;
             BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
@@ -1886,6 +1898,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             SaveSetting(s => s.General.BossKey = value);
         }
     }
+
+    /// <summary>
+    /// Saves the Dock icon flag.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnShowDockIconChanged(bool value) => SaveSetting(s => s.General.ShowDockIcon = value);
 
     /// <summary>
     /// Saves the close-to-tray flag.

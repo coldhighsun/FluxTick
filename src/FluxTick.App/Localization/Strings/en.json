@@ -166,6 +166,8 @@
   "Settings_CardSizeHint": "Small: name and price only; large: adds range and change",
   "Settings_CloseToTray": "Close button hides to tray",
   "Settings_CloseToTrayHint": "When off, closing the window exits the app",
+  "Settings_ShowDockIcon": "Show icon in the Dock",
+  "Settings_ShowDockIconHint": "When off, the icon in the menu bar is the only one",
   "Settings_TabAlerts": "Alerts",
   "TrayPopup_Empty": "The tray list is empty",
   "Settings_DeleteGroupTip": "Delete group (its instruments move to the first remaining group)",

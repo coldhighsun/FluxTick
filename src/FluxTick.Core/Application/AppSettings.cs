@@ -436,6 +436,12 @@ public sealed class GeneralSettings
     public bool CloseToTray { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the app keeps its icon in the Dock of macOS; otherwise the icon in the menu
+    /// bar is the only one. Other platforms ignore it.
+    /// </summary>
+    public bool ShowDockIcon { get; set; }
+
+    /// <summary>
     /// Gets or sets the instruments the tray list shows, as keys made by <see cref="TrayAssetSelection.Key(string, string)"/>
     /// in the order they are listed. It is empty until the user adds instruments.
     /// </summary>

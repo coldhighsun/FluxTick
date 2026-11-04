@@ -720,7 +720,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "settings.json");
-        await File.WriteAllTextAsync(path, """{ "watchlist": null, "appearance": null, "general": { "trayAssets": null, "closeToTray": null }, "window": null }""");
+        await File.WriteAllTextAsync(path, """{ "watchlist": null, "appearance": null, "general": { "trayAssets": null, "closeToTray": null, "showDockIcon": null }, "window": null }""");
         var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
 
         var loaded = await store.LoadAsync();
@@ -729,6 +729,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         loaded.Appearance.AutoHideAtEdge.Should().BeTrue();
         loaded.General.TrayAssets.Should().BeEmpty();
         loaded.General.CloseToTray.Should().BeTrue();
+        loaded.General.ShowDockIcon.Should().BeFalse();
         loaded.Window.Width.Should().Be(new WindowSettings().Width);
         File.Exists($"{path}.bad").Should().BeFalse();
     }
@@ -766,7 +767,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
             CollapsedProviders = ["p"],
             TypeOrder = [AssetClass.Crypto],
         };
-        settings.General = new GeneralSettings { StartMinimized = true, CloseToTray = false, TrayAssets = ["p|S"], BaseCurrency = "EUR" };
+        settings.General = new GeneralSettings { StartMinimized = true, CloseToTray = false, ShowDockIcon = true, TrayAssets = ["p|S"], BaseCurrency = "EUR" };
         settings.Updates.AutoCheck = false;
         settings.Window = new WindowSettings { X = 1, Y = 2, Width = 3, Height = 4, FullScreen = true };
 
