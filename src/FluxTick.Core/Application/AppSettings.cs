@@ -375,6 +375,11 @@ public sealed class AppearanceSettings
     public CardSize CardSize { get; set; } = CardSize.Medium;
 
     /// <summary>
+    /// Gets or sets the time span the charts of the instruments show.
+    /// </summary>
+    public HistoryRange ChartRange { get; set; } = HistoryRange.Hour;
+
+    /// <summary>
     /// Gets or sets how the cards are grouped when <see cref="Layout"/> is <see cref="WatchlistLayout.Cards"/>.
     /// </summary>
     public CardGrouping Grouping { get; set; } = CardGrouping.None;

@@ -572,4 +572,71 @@ public class EulerpoolTests
         new HttpClient(handler ?? new StubHttpHandler(_ => StubHttpHandler.Json("{}"))),
         time ?? TimeProvider.System,
         NullLogger.Instance);
+
+    /// <summary>
+    /// Verifies a day without candles, as for a market shut over a weekend, asks further back for the last session.
+    /// </summary>
+    [Fact]
+    public async Task Provider_DayHistory_WithoutCandles_LooksBackForTheLastSession()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json("{}"));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+
+        await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), HistoryRange.Day);
+
+        handler.Requests.Select(r => r.RequestUri!.PathAndQuery).Should().Equal(
+            $"/api/1/charting/ohlcv/AAPL?resolution=5&from={now - 86400}&to={now}",
+            $"/api/1/charting/ohlcv/AAPL?resolution=5&from={now - 345600}&to={now}");
+    }
+
+    /// <summary>
+    /// Verifies a day whose window cut the session of a market that has shut since asks further back for all of it.
+    /// </summary>
+    [Fact]
+    public async Task Provider_DayHistory_WindowCutTheLastSession_LooksBackForAllOfIt()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json($$"""{"t":[{{now - 86100}},{{now - 85800}}],"c":[5.1,5.2]}"""));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+
+        await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), HistoryRange.Day);
+
+        handler.Requests.Select(r => r.RequestUri!.PathAndQuery).Should().Equal(
+            $"/api/1/charting/ohlcv/AAPL?resolution=5&from={now - 86400}&to={now}",
+            $"/api/1/charting/ohlcv/AAPL?resolution=5&from={now - 345600}&to={now}");
+    }
+
+    /// <summary>
+    /// Verifies a longer range asks for the candle width the service has for it, over the time of the range.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <param name="resolution">
+    /// The expected resolution.
+    /// </param>
+    /// <param name="seconds">
+    /// The expected length of the request in seconds.
+    /// </param>
+    [Theory]
+    [InlineData(HistoryRange.Day, "5", 86400)]
+    [InlineData(HistoryRange.FiveDays, "30", 432000)]
+    [InlineData(HistoryRange.Month, "60", 2592000)]
+    [InlineData(HistoryRange.HalfYear, "D", 15811200)]
+    [InlineData(HistoryRange.Year, "D", 31536000)]
+    public async Task Provider_RangeHistory_AsksForItsResolution(HistoryRange range, string resolution, int seconds)
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json($$"""{"t":[{{now - 3600}},{{now - 300}}],"c":[5.1,5.2]}"""));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+
+        await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), range);
+
+        provider.SupportsRange(range).Should().BeTrue();
+        handler.Requests.Single().RequestUri!.PathAndQuery.Should().Be($"/api/1/charting/ohlcv/AAPL?resolution={resolution}&from={now - seconds}&to={now}");
+    }
 }

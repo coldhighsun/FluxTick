@@ -22,12 +22,12 @@ internal static class CardLayout
     /// <summary>
     /// The height of a medium card.
     /// </summary>
-    public const double MediumCardHeight = 96;
+    public const double MediumCardHeight = 124;
 
     /// <summary>
     /// The height of a large card.
     /// </summary>
-    public const double LargeCardHeight = 176;
+    public const double LargeCardHeight = 226;
 
     /// <summary>
     /// The height of the header of a group.

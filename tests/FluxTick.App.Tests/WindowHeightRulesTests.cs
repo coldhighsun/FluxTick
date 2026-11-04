@@ -52,9 +52,9 @@ public class WindowHeightRulesTests
     [Fact]
     public void MinHeight_CardLayout_FitsOneCard()
     {
-        // 80 around the list + 4 + 6 padding + 2 * 3 margin + 176 for the card.
-        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Large, grouped: false, chrome: 80).Should().Be(272);
-        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Medium, grouped: false, chrome: 80).Should().Be(192);
+        // 80 around the list + 4 + 6 padding + 2 * 3 margin + 226 for the card.
+        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Large, grouped: false, chrome: 80).Should().Be(322);
+        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Medium, grouped: false, chrome: 80).Should().Be(220);
     }
 
     /// <summary>
@@ -73,8 +73,8 @@ public class WindowHeightRulesTests
     [Fact]
     public void MinHeight_CardLayout_Grouped_AddsHeader()
     {
-        // The 272 of an ungrouped large card + 20 for the header + 8 above it and 2 below.
-        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Large, grouped: true, chrome: 80).Should().Be(302);
+        // The 322 of an ungrouped large card + 20 for the header + 8 above it and 2 below.
+        WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Large, grouped: true, chrome: 80).Should().Be(352);
     }
 
     /// <summary>

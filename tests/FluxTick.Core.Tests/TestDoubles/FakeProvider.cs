@@ -13,8 +13,48 @@ namespace FluxTick.Core.Tests.TestDoubles;
 /// The options the provider was created with.
 /// </param>
 public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions options)
-    : MarketDataProviderBase(descriptor, TimeProvider.System), IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCadenceProvider
+    : MarketDataProviderBase(descriptor, TimeProvider.System), IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCadenceProvider
 {
+    /// <summary>
+    /// Gets the ranges other than the last hour that <see cref="SupportsRange"/> says yes to.
+    /// </summary>
+    public HashSet<HistoryRange> SupportedRanges { get; } = [];
+
+    /// <summary>
+    /// Gets or sets the history returned for a range other than the last hour.
+    /// </summary>
+    public IReadOnlyList<PricePoint> RangeHistory { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets what runs when the history of a range other than the last hour is asked for, before it is answered.
+    /// </summary>
+    public Func<Task>? RangeHistoryHook { get; set; }
+
+    /// <summary>
+    /// Gets or sets what is told the cancellation token of each load of a range.
+    /// </summary>
+    public Action<CancellationToken>? RangeHistoryTokenHook { get; set; }
+
+    /// <inheritdoc />
+    public bool SupportsRange(HistoryRange range) => range == HistoryRange.Hour || SupportedRanges.Contains(range);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
+    {
+        if (range == HistoryRange.Hour)
+        {
+            return await GetHistoryAsync(asset, cancellationToken);
+        }
+
+        RangeHistoryTokenHook?.Invoke(cancellationToken);
+        if (RangeHistoryHook is { } hook)
+        {
+            await hook();
+        }
+
+        return RangeHistory;
+    }
+
     /// <summary>
     /// Gets the options the provider was created with.
     /// </summary>

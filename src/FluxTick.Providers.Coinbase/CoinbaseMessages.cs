@@ -103,10 +103,13 @@ internal static class CoinbaseMessages
     /// <param name="json">
     /// The response body: arrays of <c>[time, low, high, open, close, volume]</c>, newest first.
     /// </param>
+    /// <param name="limit">
+    /// The most samples to keep; the last hour needs <see cref="HistoryLength"/>.
+    /// </param>
     /// <returns>
     /// The most recent samples, oldest first.
     /// </returns>
-    public static IReadOnlyList<PricePoint> ParseCandles(string json)
+    public static IReadOnlyList<PricePoint> ParseCandles(string json, int limit = HistoryLength)
     {
         using var document = JsonDocument.Parse(json);
         var points = new List<PricePoint>();
@@ -122,7 +125,7 @@ internal static class CoinbaseMessages
         }
 
         points.Reverse();
-        return points.Count > HistoryLength ? points.GetRange(points.Count - HistoryLength, HistoryLength) : points;
+        return points.Count > limit ? points.GetRange(points.Count - limit, limit) : points;
     }
 
     /// <summary>

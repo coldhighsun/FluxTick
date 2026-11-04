@@ -140,13 +140,16 @@ internal static class KrakenMessages
     /// <param name="json">
     /// The response body.
     /// </param>
+    /// <param name="limit">
+    /// The most samples to keep; the last hour needs <see cref="HistoryLength"/>.
+    /// </param>
     /// <returns>
     /// The most recent samples, oldest first.
     /// </returns>
     /// <exception cref="HttpRequestException">
     /// The response reports errors.
     /// </exception>
-    public static IReadOnlyList<PricePoint> ParseOhlc(string json)
+    public static IReadOnlyList<PricePoint> ParseOhlc(string json, int limit = HistoryLength)
     {
         using var document = JsonDocument.Parse(json);
         var result = EnsureOk(document.RootElement);
@@ -168,7 +171,7 @@ internal static class KrakenMessages
             }
         }
 
-        return points.Count > HistoryLength ? points.GetRange(points.Count - HistoryLength, HistoryLength) : points;
+        return points.Count > limit ? points.GetRange(points.Count - limit, limit) : points;
     }
 
     /// <summary>

@@ -260,6 +260,32 @@ public class YahooTests
     }
 
     /// <summary>
+    /// Verifies a longer range asks for the candle width the service has for it, over the time of the range.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <param name="expected">
+    /// The exact query that must be requested.
+    /// </param>
+    [Theory]
+    [InlineData(HistoryRange.Day, "?interval=5m&period1=1699887600&period2=1699974000")]
+    [InlineData(HistoryRange.FiveDays, "?interval=30m&period1=1699542000&period2=1699974000")]
+    [InlineData(HistoryRange.Month, "?interval=60m&period1=1697382000&period2=1699974000")]
+    [InlineData(HistoryRange.HalfYear, "?interval=1d&period1=1684162800&period2=1699974000")]
+    [InlineData(HistoryRange.Year, "?interval=1d&period1=1668438000&period2=1699974000")]
+    public async Task Provider_RangeHistory_AsksForItsInterval(HistoryRange range, string expected)
+    {
+        var handler = new StubHandler(_ => Json(ChartJson));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(Aapl, range);
+
+        provider.SupportsRange(range).Should().BeTrue();
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal(expected);
+    }
+
+    /// <summary>
     /// Verifies a window without trades, which the service answers with a chart that has no candles, gives an empty
     /// history rather than a failure.
     /// </summary>
@@ -1880,5 +1906,103 @@ public class YahooTests
             Requests.Enqueue(request);
             return Task.FromResult(respond(request));
         }
+    }
+
+    /// <summary>
+    /// Verifies a day without candles, as for a market shut over a weekend, asks further back for the last session.
+    /// </summary>
+    [Fact]
+    public async Task Provider_DayHistory_WithoutCandles_LooksBackForTheLastSession()
+    {
+        const string noCandles = """{"chart":{"result":[{"meta":{"regularMarketPrice":5.2,"chartPreviousClose":5.1,"regularMarketTime":1700000000}}],"error":null}}""";
+        var handler = new StubHandler(_ => Json(noCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(Aapl, HistoryRange.Day);
+
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal(
+            "?interval=5m&period1=1699887600&period2=1699974000",
+            "?interval=5m&period1=1699628400&period2=1699974000");
+    }
+
+    /// <summary>
+    /// Verifies a day whose window cut the session of a market that has shut since asks further back for all of it.
+    /// </summary>
+    [Fact]
+    public async Task Provider_DayHistory_WindowCutTheLastSession_LooksBackForAllOfIt()
+    {
+        const string tail = """{"chart":{"result":[{"meta":{"regularMarketPrice":5.2,"chartPreviousClose":5.1,"regularMarketTime":1700000000},"timestamp":[1699887900,1699888200],"indicators":{"quote":[{"close":[5.1,5.2]}]}}],"error":null}}""";
+        var handler = new StubHandler(_ => Json(tail));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(Aapl, HistoryRange.Day);
+
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal(
+            "?interval=5m&period1=1699887600&period2=1699974000",
+            "?interval=5m&period1=1699628400&period2=1699974000");
+    }
+
+    /// <summary>
+    /// Verifies a daily candle is dated by the trading day of its market: the open in Sydney is still the day before in UTC.
+    /// </summary>
+    [Fact]
+    public void ParseChart_DailyCandleEastOfUtc_IsDatedByItsTradingDay()
+    {
+        // January 6th, 23:00 UTC is January 7th, 10:00 in Sydney.
+        const string json =
+            """{"chart":{"result":[{"meta":{"regularMarketPrice":1,"gmtoffset":39600,"dataGranularity":"1d"},"timestamp":[1767740400],"indicators":{"quote":[{"close":[2.5]}]}}]}}""";
+
+        var data = YahooParser.ParseChart(json, "yahoo", "BHP.AX", DateTimeOffset.UnixEpoch);
+
+        data.History.Single().Timestamp.Should().Be(new DateTimeOffset(2026, 1, 7, 0, 0, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Verifies a candle shorter than a day keeps its time.
+    /// </summary>
+    [Fact]
+    public void ParseChart_IntradayCandle_KeepsItsTime()
+    {
+        const string json =
+            """{"chart":{"result":[{"meta":{"regularMarketPrice":1,"gmtoffset":39600,"dataGranularity":"5m"},"timestamp":[1767740400],"indicators":{"quote":[{"close":[2.5]}]}}]}}""";
+
+        var data = YahooParser.ParseChart(json, "yahoo", "BHP.AX", DateTimeOffset.UnixEpoch);
+
+        data.History.Single().Timestamp.Should().Be(DateTimeOffset.FromUnixTimeSeconds(1767740400));
+    }
+
+    /// <summary>
+    /// Verifies an instrument without daily history, which the service answers with the current price alone (the offshore
+    /// yuan pairs), gets its year from the hourly candles instead.
+    /// </summary>
+    [Fact]
+    public async Task Provider_YearHistory_WithoutDailyCandles_FallsBackToHourly()
+    {
+        const string noCandles = """{"chart":{"result":[{"meta":{"regularMarketPrice":5.2,"chartPreviousClose":5.1,"regularMarketTime":1700000000}}],"error":null}}""";
+        var handler = new StubHandler(_ => Json(noCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(Aapl, HistoryRange.Year);
+
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal(
+            "?interval=1d&period1=1668438000&period2=1699974000",
+            "?interval=60m&period1=1668438000&period2=1699974000");
+    }
+
+    /// <summary>
+    /// Verifies a half year of an instrument without daily history falls back to the hourly candles as well.
+    /// </summary>
+    [Fact]
+    public async Task Provider_HalfYearHistory_WithoutDailyCandles_FallsBackToHourly()
+    {
+        const string noCandles = """{"chart":{"result":[{"meta":{"regularMarketPrice":5.2,"chartPreviousClose":5.1,"regularMarketTime":1700000000}}],"error":null}}""";
+        var handler = new StubHandler(_ => Json(noCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(Aapl, HistoryRange.HalfYear);
+
+        handler.Requests.Select(r => r.RequestUri!.Query).Should().Equal(
+            "?interval=1d&period1=1684162800&period2=1699974000",
+            "?interval=60m&period1=1684162800&period2=1699974000");
     }
 }

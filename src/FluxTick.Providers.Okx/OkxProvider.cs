@@ -51,6 +51,39 @@ public sealed class OkxProvider : CryptoExchangeProvider
         $"/api/v5/market/candles?instId={Uri.EscapeDataString(asset.Symbol)}&bar=1m&limit=60";
 
     /// <inheritdoc />
+    public override bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    protected override string HistoryRequest(Asset asset, HistoryRange range) =>
+        // The candles endpoint answers with 300 candles at most, which leaves a year of days short by two months.
+        $"/api/v5/market/candles?instId={Uri.EscapeDataString(asset.Symbol)}&bar={BarOf(range)}&limit={Math.Min(HistoryRangeSpec.For(range).Capacity, MaxCandles)}";
+
+    /// <summary>
+    /// The most candles the candles endpoint answers with.
+    /// </summary>
+    private const int MaxCandles = 300;
+
+    /// <summary>
+    /// Names the candle width of a range the way the candles endpoint takes it.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <returns>
+    /// The bar, whose width is the bucket of the range.
+    /// </returns>
+    private static string BarOf(HistoryRange range) => range switch
+    {
+        HistoryRange.Day => "5m",
+        HistoryRange.FiveDays => "30m",
+        HistoryRange.Month => "4H",
+
+        // The plain 1D candle starts at midnight in UTC+8, a day before the UTC day the chart dates its points by.
+        HistoryRange.HalfYear or HistoryRange.Year => "1Dutc",
+        _ => "1m",
+    };
+
+    /// <inheritdoc />
     protected override IReadOnlyList<PricePoint> ParseHistory(string json) => OkxMessages.ParseCandles(json);
 
     /// <inheritdoc />

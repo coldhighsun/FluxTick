@@ -56,6 +56,31 @@ public sealed class BinanceProvider : CryptoExchangeProvider
         $"/api/v3/klines?symbol={Uri.EscapeDataString(asset.Symbol)}&interval=1m&limit=60";
 
     /// <inheritdoc />
+    public override bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    protected override string HistoryRequest(Asset asset, HistoryRange range) =>
+        $"/api/v3/klines?symbol={Uri.EscapeDataString(asset.Symbol)}&interval={IntervalOf(range)}&limit={HistoryRangeSpec.For(range).Capacity}";
+
+    /// <summary>
+    /// Names the candle width of a range the way the klines endpoint takes it.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <returns>
+    /// The interval, whose width is the bucket of the range.
+    /// </returns>
+    private static string IntervalOf(HistoryRange range) => range switch
+    {
+        HistoryRange.Day => "5m",
+        HistoryRange.FiveDays => "30m",
+        HistoryRange.Month => "4h",
+        HistoryRange.HalfYear or HistoryRange.Year => "1d",
+        _ => "1m",
+    };
+
+    /// <inheritdoc />
     protected override IReadOnlyList<PricePoint> ParseHistory(string json) => BinanceMessages.ParseKlines(json);
 
     /// <inheritdoc />

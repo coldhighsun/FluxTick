@@ -537,10 +537,10 @@
     <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
   </Style>
   <Style Selector="Border.tile controls|SparklineControl.chart">
-    <Setter Property="MinHeight" Value="16" />
+    <Setter Property="MinHeight" Value="40" />
   </Style>
   <Style Selector="Border.tile.large controls|SparklineControl.chart">
-    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="MinHeight" Value="94" />
   </Style>
   <Style Selector="Border.tile:pointerover">
     <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />

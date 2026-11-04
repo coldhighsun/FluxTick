@@ -11,7 +11,7 @@ namespace FluxTick.Providers.Eulerpool;
 /// Streams prices from the Eulerpool stream. The REST API gives every new instrument its first price and takes over
 /// while the stream is down. A free key receives one-second bars with a delay instead of live trades.
 /// </summary>
-public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider, IMarketHoursProvider, IHistoryProvider
+public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider, IMarketHoursProvider, IRangeHistoryProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -107,9 +107,63 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
     {
         // The one-minute candles of the last hour or so, which is all the sparkline shows.
         var now = TimeProvider.GetUtcNow();
+        return await FetchCandlesAsync(asset, "1", now - HistoryWindow.Span, now, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
+    {
+        if (range == HistoryRange.Hour)
+        {
+            return await GetHistoryAsync(asset, cancellationToken).ConfigureAwait(false);
+        }
+
+        // The candle width the service has nearest to the bucket of the range (it has no four-hour one), over the time of it.
+        var now = TimeProvider.GetUtcNow();
+        var resolution = range switch
+        {
+            HistoryRange.Day => "5",
+            HistoryRange.FiveDays => "30",
+            HistoryRange.Month => "60",
+            _ => "D",
+        };
+        var candles = await FetchCandlesAsync(asset, resolution, now - HistoryRangeSpec.For(range).Window, now, cancellationToken).ConfigureAwait(false);
+
+        // A shut market has few or no candles in the last day; the chart shows its last session once that is older.
+        return range == HistoryRange.Day && HistoryWindow.MissesLastSession(candles, now)
+            ? await FetchCandlesAsync(asset, resolution, now - HistoryWindow.LastSessionSpan, now, cancellationToken).ConfigureAwait(false)
+            : candles;
+    }
+
+    /// <summary>
+    /// Asks for the candles of an instrument over a stretch of time.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <param name="resolution">
+    /// The candle width, the way the service names it.
+    /// </param>
+    /// <param name="from">
+    /// The start of the stretch.
+    /// </param>
+    /// <param name="to">
+    /// The end of the stretch.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token to cancel the request.
+    /// </param>
+    /// <returns>
+    /// The close of each candle.
+    /// </returns>
+    private async Task<IReadOnlyList<PricePoint>> FetchCandlesAsync(Asset asset, string resolution, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    {
         var uri = EndpointOptions.Combine(
             _apiBase,
-            $"/api/1/charting/ohlcv/{Uri.EscapeDataString(asset.Symbol)}?resolution=1&from={(now - HistoryWindow.Span).ToUnixTimeSeconds()}&to={now.ToUnixTimeSeconds()}");
+            $"/api/1/charting/ohlcv/{Uri.EscapeDataString(asset.Symbol)}?resolution={resolution}&from={from.ToUnixTimeSeconds()}&to={to.ToUnixTimeSeconds()}");
         var json = await GetStringAsync(uri, cancellationToken).ConfigureAwait(false);
         return EulerpoolParser.ParseHistory(json);
     }

@@ -347,7 +347,8 @@ internal static class YahooParser
     };
 
     /// <summary>
-    /// Extracts the intraday close series from a chart result.
+    /// Extracts the close series from a chart result. A daily candle is dated at the start of its trading day in UTC: its
+    /// time is the open of the market, which for a market far east of UTC, such as Sydney, is still the day before in UTC.
     /// </summary>
     /// <param name="result">
     /// The first element of <c>chart.result</c>.
@@ -369,6 +370,7 @@ internal static class YahooParser
             return [];
         }
 
+        var marketOffset = DailyMarketOffset(result);
         var points = new List<PricePoint>();
         var count = Math.Min(timestamps.GetArrayLength(), closes.GetArrayLength());
         for (var i = 0; i < count; i++)
@@ -379,12 +381,33 @@ internal static class YahooParser
                 && timestamps[i].TryGetInt64(out var seconds)
                 && TryUnixTime(seconds, out var traded))
             {
-                points.Add(new PricePoint(traded, close));
+                points.Add(new PricePoint(marketOffset is { } offset ? new DateTimeOffset(traded.ToOffset(offset).Date, TimeSpan.Zero) : traded, close));
             }
         }
 
         return points;
     }
+
+    /// <summary>
+    /// Reads the offset from UTC of the market of a chart of daily candles.
+    /// </summary>
+    /// <param name="result">
+    /// The first element of <c>chart.result</c>.
+    /// </param>
+    /// <returns>
+    /// The offset, or <see langword="null"/> when the candles are not daily or the answer does not tell.
+    /// </returns>
+    private static TimeSpan? DailyMarketOffset(JsonElement result) =>
+        result.TryGetProperty("meta", out var meta)
+        && meta.TryGetProperty("dataGranularity", out var granularity)
+        && granularity.ValueKind == JsonValueKind.String
+        && granularity.GetString() == "1d"
+        && meta.TryGetProperty("gmtoffset", out var offset)
+        && offset.ValueKind == JsonValueKind.Number
+        && offset.TryGetInt32(out var seconds)
+        && Math.Abs(seconds) < TimeSpan.FromHours(14).TotalSeconds
+            ? TimeSpan.FromMinutes(seconds / 60)
+            : null;
 
     /// <summary>
     /// Converts seconds since the Unix epoch to a time, unless no date can hold them, which

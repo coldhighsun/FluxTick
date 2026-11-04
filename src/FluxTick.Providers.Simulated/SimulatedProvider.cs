@@ -16,7 +16,7 @@ namespace FluxTick.Providers.Simulated;
 /// The clock and timer source.
 /// </param>
 public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan interval, TimeProvider timeProvider)
-    : MarketDataProviderBase(descriptor, timeProvider), IHistoryProvider, ISymbolSearchProvider
+    : MarketDataProviderBase(descriptor, timeProvider), IRangeHistoryProvider, ISymbolSearchProvider
 {
     /// <summary>
     /// The instruments offered by <see cref="SearchAsync"/>.
@@ -66,7 +66,14 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
     private ITimer? _timer;
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default) =>
+        GetHistoryAsync(asset, HistoryRange.Hour, cancellationToken);
+
+    /// <inheritdoc />
+    public bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
     {
         var now = TimeProvider.GetUtcNow();
         if (asset.Symbol == MarketHoursSymbol)
@@ -75,8 +82,9 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
             return Task.FromResult<IReadOnlyList<PricePoint>>([]);
         }
 
+        var spec = HistoryRangeSpec.For(range);
         var walk = new Walk(asset.Symbol, now);
-        var prices = new decimal[60];
+        var prices = new decimal[spec.Capacity];
         for (var i = prices.Length - 1; i >= 0; i--)
         {
             prices[i] = walk.Price;
@@ -84,7 +92,7 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
         }
 
         IReadOnlyList<PricePoint> points = prices
-            .Select((price, index) => new PricePoint(now.AddMinutes(index - prices.Length), price))
+            .Select((price, index) => new PricePoint(now - (spec.Bucket * (prices.Length - index)), price))
             .ToArray();
         return Task.FromResult(points);
     }

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FluxTick.Abstractions;
+using FluxTick.App.Controls;
 using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.Core.Application;
@@ -98,6 +99,13 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string ChangeText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the percentage change the card shows: over the range of the chart when it has one, else
+    /// <see cref="ChangeText"/>. The list and the tray have no room to name a range, so they keep the latter.
+    /// </summary>
+    [ObservableProperty]
+    public partial string CardChangeText { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the daily change in percent that the list is sorted by, or <see langword="null"/> before the first
     /// quote or when the quote has no reference price.
     /// </summary>
@@ -155,6 +163,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial PriceDirection Direction { get; set; }
+
+    /// <summary>
+    /// Gets or sets the direction of the change the card shows.
+    /// </summary>
+    [ObservableProperty]
+    public partial PriceDirection CardDirection { get; set; }
 
     /// <summary>
     /// Gets or sets the recent prices for the sparkline.
@@ -306,6 +320,114 @@ public sealed partial class AssetRowViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial CardSize CardSize { get; set; } = CardSize.Medium;
+
+    /// <summary>
+    /// Gets or sets the time span the chart shows, which the texts about the chart name.
+    /// </summary>
+    [ObservableProperty]
+    public partial HistoryRange ChartRange { get; set; } = HistoryRange.Hour;
+
+    /// <summary>
+    /// The range the texts about the chart named last, to raise their change only when it moves.
+    /// </summary>
+    private HistoryRange _shownRange = HistoryRange.Hour;
+
+    /// <summary>
+    /// Gets the range the prices of the chart are for: <see cref="ChartRange"/> once its history is there, else the last
+    /// hour that the chart falls back to.
+    /// </summary>
+    private HistoryRange ShownRange => RangeChangeRules.ShownRange(_lastSnapshot?.Timeline, ChartRange);
+
+    /// <summary>
+    /// Gets the tooltip of the chart.
+    /// </summary>
+    public string SparklineTip => Loc.Get("Row_SparklineTip", EnumLabel.Of(ShownRange));
+
+    /// <summary>
+    /// Gets the label of the lowest price of the chart.
+    /// </summary>
+    public string RangeLowLabel => Loc.Get("Row_RangeLow", EnumLabel.Of(ShownRange));
+
+    /// <summary>
+    /// Gets the label of the highest price of the chart.
+    /// </summary>
+    public string RangeHighLabel => Loc.Get("Row_RangeHigh", EnumLabel.Of(ShownRange));
+
+    /// <summary>
+    /// Gets the change over the range of the chart that the card shows instead of the change against the reference price,
+    /// or <see langword="null"/> when it shows the latter.
+    /// </summary>
+    public RangeChange? ChangeOverRange { get; private set; }
+
+    /// <summary>
+    /// Gets the label of the first figure of the large card: the price at the start of the range of the chart, or the
+    /// reference price of the source.
+    /// </summary>
+    public string ReferenceLabel => ChangeOverRange is null ? Loc.Get("Row_Reference") : Loc.Get("Row_RangeStart", EnumLabel.Of(ChangeOverRange.Value.Range));
+
+    /// <summary>
+    /// Gets or sets the index of the price of the chart that the pointer is over, or -1 when it is not over the chart.
+    /// </summary>
+    [ObservableProperty]
+    public partial int ChartHoverIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Gets the tooltip of the chart: the time, price and change from the start of the chart of the price under the
+    /// pointer, or what the chart shows while the pointer is not on a price.
+    /// </summary>
+    public string ChartTip => HoverText() ?? SparklineTip;
+
+    /// <summary>
+    /// Updates the tooltip of the chart when the pointer moves to another price.
+    /// </summary>
+    /// <param name="value">
+    /// The index of the price.
+    /// </param>
+    partial void OnChartHoverIndexChanged(int value) => OnPropertyChanged(nameof(ChartTip));
+
+    /// <summary>
+    /// Describes the price under the pointer.
+    /// </summary>
+    /// <returns>
+    /// The text, or <see langword="null"/> when the pointer is not on a price.
+    /// </returns>
+    private string? HoverText()
+    {
+        if (_lastSnapshot is not { Timeline: { } timeline } snapshot
+            || ChartHoverIndex < 0
+            || ChartHoverIndex >= snapshot.Sparkline.Count
+            || ChartHoverIndex >= timeline.Times.Count)
+        {
+            return null;
+        }
+
+        var price = snapshot.Sparkline[ChartHoverIndex];
+        var first = snapshot.Sparkline[0];
+        var percent = first > 0m ? PriceFormatter.FormatPercent((price - first) / first * 100m) : PriceFormatter.Unavailable;
+        var time = SparklineHover.TimeLabel(timeline.Times[ChartHoverIndex], ShownRange, DateTimeOffset.Now, TimeZoneInfo.Local);
+        return $"{time}\n{PriceFormatter.FormatPrice(price, Asset.AssetClass)}  {percent}";
+    }
+
+    /// <summary>
+    /// Tells the views that the texts about the chart changed with the range.
+    /// </summary>
+    /// <param name="value">
+    /// The new range.
+    /// </param>
+    partial void OnChartRangeChanged(HistoryRange value) => RaiseChartTextsChanged();
+
+    /// <summary>
+    /// Raises the change of the texts that name the range of the chart.
+    /// </summary>
+    private void RaiseChartTextsChanged()
+    {
+        _shownRange = ShownRange;
+        OnPropertyChanged(nameof(SparklineTip));
+        OnPropertyChanged(nameof(RangeLowLabel));
+        OnPropertyChanged(nameof(RangeHighLabel));
+        OnPropertyChanged(nameof(ReferenceLabel));
+        OnPropertyChanged(nameof(ChartTip));
+    }
 
     /// <summary>
     /// Gets or sets the reference price (previous close or 24h open) the change is measured against, for the large card.
@@ -531,6 +653,16 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public bool IsDown => Direction == PriceDirection.Down;
 
     /// <summary>
+    /// Gets a value indicating whether the change the card shows is positive.
+    /// </summary>
+    public bool IsCardUp => CardDirection == PriceDirection.Up;
+
+    /// <summary>
+    /// Gets a value indicating whether the change the card shows is negative.
+    /// </summary>
+    public bool IsCardDown => CardDirection == PriceDirection.Down;
+
+    /// <summary>
     /// Gets a value indicating whether a status note is shown instead of the change.
     /// </summary>
     public bool HasStatus => StatusText.Length > 0;
@@ -585,6 +717,11 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public void Update(AssetSnapshot snapshot)
     {
         _lastSnapshot = snapshot;
+        if (ShownRange != _shownRange)
+        {
+            RaiseChartTextsChanged();
+        }
+
         var shut = IsClosingPrice(snapshot);
         var shutChanged = shut != IsMarketShut;
 
@@ -605,13 +742,34 @@ public sealed partial class AssetRowViewModel : ObservableObject
         {
             var shownBefore = PriceText;
             PriceText = PriceFormatter.FormatPrice(quote.Price, Asset.AssetClass);
+            var sparkline = snapshot.Sparkline;
+
+            // Over a longer range the card tells the change over that range, from the first price of the window, as
+            // the chart does; otherwise the change against the reference price of the source.
+            var rangeBefore = ChangeOverRange?.Range;
+            ChangeOverRange = RangeChangeRules.Compute(sparkline, snapshot.Timeline, ChartRange, quote.Price);
+            var change = ChangeOverRange?.Change ?? quote.Change;
             ChangeText = PriceFormatter.FormatPercent(quote.ChangePercent);
             ChangePercent = quote.ChangePercent;
-            ReferenceText = quote.Reference is { } reference ? PriceFormatter.FormatPrice(reference, Asset.AssetClass) : PriceFormatter.Unavailable;
-            ChangeAmountText = quote.Change is { } amount
+            CardChangeText = PriceFormatter.FormatPercent(ChangeOverRange?.Percent ?? quote.ChangePercent);
+            var reference = ChangeOverRange?.Baseline ?? quote.Reference;
+            ReferenceText = reference is { } shown ? PriceFormatter.FormatPrice(shown, Asset.AssetClass) : PriceFormatter.Unavailable;
+            ChangeAmountText = change is { } amount
                 ? (amount > 0m ? "+" : string.Empty) + PriceFormatter.FormatPrice(amount, Asset.AssetClass)
                 : string.Empty;
-            var sparkline = snapshot.Sparkline;
+
+            // The label names the range of the change, so it moves only when that does; the tip shows a price only while the
+            // pointer is on one.
+            if (ChangeOverRange?.Range != rangeBefore)
+            {
+                OnPropertyChanged(nameof(ReferenceLabel));
+            }
+
+            if (ChartHoverIndex >= 0)
+            {
+                OnPropertyChanged(nameof(ChartTip));
+            }
+
             if (sparkline.Count > 0)
             {
                 // One pass instead of Min() and Max(), which enumerate through an allocated enumerator each.
@@ -632,12 +790,8 @@ public sealed partial class AssetRowViewModel : ObservableObject
                 HighText = PriceFormatter.Unavailable;
             }
 
-            Direction = quote.Change switch
-            {
-                > 0m => PriceDirection.Up,
-                < 0m => PriceDirection.Down,
-                _ => PriceDirection.Flat,
-            };
+            Direction = DirectionOf(quote.Change);
+            CardDirection = DirectionOf(change);
             ApplyHolding(quote.Price);
             RefreshTooltip();
 
@@ -657,6 +811,22 @@ public sealed partial class AssetRowViewModel : ObservableObject
             RefreshTooltip();
         }
     }
+
+    /// <summary>
+    /// Tells the direction of a change.
+    /// </summary>
+    /// <param name="change">
+    /// The change, or <see langword="null"/> when it is not known.
+    /// </param>
+    /// <returns>
+    /// The direction; flat for no change and when it is not known.
+    /// </returns>
+    private static PriceDirection DirectionOf(decimal? change) => change switch
+    {
+        > 0m => PriceDirection.Up,
+        < 0m => PriceDirection.Down,
+        _ => PriceDirection.Flat,
+    };
 
     /// <summary>
     /// Works out the status text and the market chip from the health and the trading state of the market.
@@ -697,6 +867,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         OnPropertyChanged(nameof(ProviderName));
         ClassLabel = LabelOf(Asset.AssetClass);
         OnPropertyChanged(nameof(ClassLabel));
+        RaiseChartTextsChanged();
         if (_lastSnapshot is { } snapshot)
         {
             Update(snapshot);
@@ -713,6 +884,18 @@ public sealed partial class AssetRowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsUp));
         OnPropertyChanged(nameof(IsDown));
+    }
+
+    /// <summary>
+    /// Notifies bindings of derived properties when the direction the card shows changes.
+    /// </summary>
+    /// <param name="value">
+    /// The new direction.
+    /// </param>
+    partial void OnCardDirectionChanged(PriceDirection value)
+    {
+        OnPropertyChanged(nameof(IsCardUp));
+        OnPropertyChanged(nameof(IsCardDown));
     }
 
     /// <summary>
@@ -829,9 +1012,26 @@ public sealed partial class AssetRowViewModel : ObservableObject
                 ? $"{ClassLabel} · {ProviderName} · {quote.Timestamp.ToLocalTime():HH:mm:ss}"
                 : $"{ProviderName} · {quote.Timestamp.ToLocalTime():HH:mm:ss}",
         };
+        if (ChangeOverRange is { } over)
+        {
+            var sign = over.Change > 0m ? "+" : string.Empty;
+            lines.Add(Loc.Get(
+                "Row_RangeChange",
+                EnumLabel.Of(over.Range),
+                sign + PriceFormatter.FormatPrice(over.Change, Asset.AssetClass),
+                PriceFormatter.FormatPercent(over.Percent)));
+            lines.Add(Loc.Get(
+                "Row_RangeStartTip",
+                PriceFormatter.FormatPrice(over.Baseline, Asset.AssetClass),
+                SparklineHover.TimeLabel(over.BaselineTime, over.Range, DateTimeOffset.Now, TimeZoneInfo.Local)));
+        }
+
         if (quote.Change is { } change)
         {
-            lines.Add(Loc.Get("Row_Change", PriceFormatter.FormatPrice(change, Asset.AssetClass), PriceFormatter.FormatPercent(quote.ChangePercent)));
+            lines.Add(Loc.Get(
+                ChangeOverRange is null ? "Row_Change" : "Row_ChangeVsReference",
+                PriceFormatter.FormatPrice(change, Asset.AssetClass),
+                PriceFormatter.FormatPercent(quote.ChangePercent)));
         }
 
         if (HasHolding)

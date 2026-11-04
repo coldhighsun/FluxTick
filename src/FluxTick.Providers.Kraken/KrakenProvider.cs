@@ -46,6 +46,23 @@ public sealed class KrakenProvider : CryptoExchangeProvider
         $"/0/public/OHLC?pair={Uri.EscapeDataString(asset.Symbol)}&interval=1&since={(TimeProvider.GetUtcNow() - HistoryWindow.Span).ToUnixTimeSeconds()}";
 
     /// <inheritdoc />
+    public override bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    protected override string HistoryRequest(Asset asset, HistoryRange range)
+    {
+        // The width of a candle is the bucket of the range; the service answers with 720 candles at most, more than a range
+        // holds.
+        var spec = HistoryRangeSpec.For(range);
+        var since = TimeProvider.GetUtcNow() - spec.Window;
+        return $"/0/public/OHLC?pair={Uri.EscapeDataString(asset.Symbol)}&interval={(int)spec.Bucket.TotalMinutes}&since={since.ToUnixTimeSeconds()}";
+    }
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<PricePoint> ParseHistory(string json, HistoryRange range) =>
+        KrakenMessages.ParseOhlc(json, HistoryRangeSpec.For(range).Capacity);
+
+    /// <inheritdoc />
     protected override IReadOnlyList<PricePoint> ParseHistory(string json) => KrakenMessages.ParseOhlc(json);
 
     /// <inheritdoc />

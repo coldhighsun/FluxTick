@@ -82,4 +82,84 @@ public class SparklineScaleTests
         SparklineScale.TimeX(AsOf.AddMinutes(-90), AsOf, window).Should().Be(0);
         SparklineScale.TimeX(AsOf.AddMinutes(5), AsOf, window).Should().Be(1);
     }
+
+    /// <summary>
+    /// Verifies the ticks are the multiples of 5% inside the chart, placed by their price.
+    /// </summary>
+    [Fact]
+    public void PercentTicks_SmallRange_MarksMultiplesOfFive()
+    {
+        var ticks = SparklineScale.PercentTicks(96, 112, 100);
+
+        ticks.Select(t => t.Percent).Should().Equal(0d, 5d, 10d);
+        ticks[0].Position.Should().BeApproximately(0.25, 1e-9);
+        ticks[1].Position.Should().BeApproximately(0.5625, 1e-9);
+        ticks[2].Position.Should().BeApproximately(0.875, 1e-9);
+    }
+
+    /// <summary>
+    /// Verifies a range narrower than a step has only the 0% tick, as the step is never below 5%.
+    /// </summary>
+    [Fact]
+    public void PercentTicks_RangeInsideOneStep_HasOnlyZero() =>
+        SparklineScale.PercentTicks(99, 101, 100).Select(t => t.Percent).Should().Equal(0d);
+
+    /// <summary>
+    /// Verifies the step grows with the range so that no more than four ticks remain.
+    /// </summary>
+    [Fact]
+    public void PercentTicks_WideRange_GrowsTheStep()
+    {
+        var ticks = SparklineScale.PercentTicks(50, 300, 100);
+
+        ticks.Select(t => t.Percent).Should().Equal(0d, 100d, 200d);
+        SparklineScale.PercentTicks(90, 130, 100).Select(t => t.Percent).Should().Equal(0d, 10d, 20d, 30d);
+    }
+
+    /// <summary>
+    /// Verifies the step between two ticks is at least the minimum.
+    /// </summary>
+    [Fact]
+    public void PercentTicks_AnyRange_StepsAtLeastFive()
+    {
+        var percents = SparklineScale.PercentTicks(80, 125, 100).Select(t => t.Percent).ToArray();
+
+        percents.Zip(percents.Skip(1), (a, b) => b - a).Should().OnlyContain(step => step >= 5);
+    }
+
+    /// <summary>
+    /// Verifies there are no ticks when there is nothing to measure from or no span to put them in.
+    /// </summary>
+    /// <param name="bottom">
+    /// The price at the bottom of the chart.
+    /// </param>
+    /// <param name="top">
+    /// The price at the top of the chart.
+    /// </param>
+    /// <param name="baseline">
+    /// The price of 0%.
+    /// </param>
+    [Theory]
+    [InlineData(90, 110, 0)]
+    [InlineData(90, 110, -5)]
+    [InlineData(100, 100, 100)]
+    public void PercentTicks_NothingToMeasure_IsEmpty(double bottom, double top, double baseline) =>
+        SparklineScale.PercentTicks(bottom, top, baseline).Should().BeEmpty();
+
+    /// <summary>
+    /// Verifies the labels carry a sign for a change and none for zero.
+    /// </summary>
+    /// <param name="percent">
+    /// The change in percent.
+    /// </param>
+    /// <param name="expected">
+    /// The label.
+    /// </param>
+    [Theory]
+    [InlineData(5, "+5%")]
+    [InlineData(0, "0%")]
+    [InlineData(-12.5, "-12.5%")]
+    [InlineData(100, "+100%")]
+    public void PercentLabel_Value_IsSigned(double percent, string expected) =>
+        SparklineScale.PercentLabel(percent).Should().Be(expected);
 }
