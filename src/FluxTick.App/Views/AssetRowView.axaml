@@ -45,7 +45,7 @@
 
       <!-- The chart fills the height of the two lines. -->
       <controls:SparklineControl Grid.Column="1" Width="88" Margin="8,0"
-                                 ToolTip.Tip="{loc:T Row_SparklineTip}"
+                                 ToolTip.Tip="{Binding SparklineTip}"
                                  Points="{Binding Sparkline}"
                                  Timeline="{Binding SparklineTimeline}"
                                  AboveLevel="{Binding AlertAbove}"

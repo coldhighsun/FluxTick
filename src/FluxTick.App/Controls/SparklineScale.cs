@@ -55,6 +55,68 @@ public static class SparklineScale
     }
 
     /// <summary>
+    /// Finds the ticks of the percentage axis: the multiples of a step that lie in the range the chart shows, with the
+    /// change measured from <paramref name="baseline"/>. The step is at least <paramref name="minStep"/> and grows
+    /// (5, 10, 25, 50, 100, 250, ...) until no more than <paramref name="maxTicks"/> ticks are left.
+    /// </summary>
+    /// <param name="bottom">
+    /// The price at the bottom of the chart.
+    /// </param>
+    /// <param name="top">
+    /// The price at the top of the chart.
+    /// </param>
+    /// <param name="baseline">
+    /// The price that stands for 0%, which is the first price of the window.
+    /// </param>
+    /// <param name="minStep">
+    /// The smallest step between two ticks, in percent.
+    /// </param>
+    /// <param name="maxTicks">
+    /// The most ticks to return.
+    /// </param>
+    /// <returns>
+    /// The ticks from the bottom up: the change in percent and where it lies in the chart (0 at the bottom, 1 at the top);
+    /// none when the baseline is not positive or the chart has no span.
+    /// </returns>
+    public static IReadOnlyList<(double Percent, double Position)> PercentTicks(double bottom, double top, double baseline, double minStep = 5, int maxTicks = 4)
+    {
+        if (baseline <= 0 || top <= bottom || minStep <= 0 || maxTicks < 1)
+        {
+            return [];
+        }
+
+        var low = ((bottom / baseline) - 1) * 100;
+        var high = ((top / baseline) - 1) * 100;
+        var step = minStep;
+        var growth = 0;
+        while (Math.Floor(high / step) - Math.Ceiling(low / step) + 1 > maxTicks)
+        {
+            step *= growth++ % 3 == 1 ? 2.5 : 2;
+        }
+
+        List<(double, double)> ticks = [];
+        for (var n = Math.Ceiling(low / step); n * step <= high; n++)
+        {
+            var percent = n * step;
+            ticks.Add((percent, Place(baseline * (1 + (percent / 100)), bottom, top).Position));
+        }
+
+        return ticks;
+    }
+
+    /// <summary>
+    /// Writes a tick of the percentage axis.
+    /// </summary>
+    /// <param name="percent">
+    /// The change in percent.
+    /// </param>
+    /// <returns>
+    /// The label: a sign for a change, none for zero, such as <c>+5%</c>, <c>0%</c> and <c>-12.5%</c>.
+    /// </returns>
+    public static string PercentLabel(double percent) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{percent:+0.#;-0.#;0}%");
+
+    /// <summary>
     /// Computes where a time lies along the width of the chart, which shows the window that ends at <paramref name="asOf"/>.
     /// </summary>
     /// <param name="time">

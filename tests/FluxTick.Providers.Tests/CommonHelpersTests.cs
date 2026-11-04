@@ -12,6 +12,43 @@ namespace FluxTick.Providers.Tests;
 public class CommonHelpersTests
 {
     /// <summary>
+    /// Verifies the candles of a day are asked for again only when the last session is not whole in them.
+    /// </summary>
+    /// <param name="firstHoursAgo">
+    /// How many hours ago the first candle is.
+    /// </param>
+    /// <param name="lastHoursAgo">
+    /// How many hours ago the last candle is.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the last session is missed.
+    /// </param>
+    [Theory]
+    [InlineData(24, 23.5, true)] // The market shut just after the start of the window.
+    [InlineData(23.9, 20, true)] // The same with more of the session left in the window.
+    [InlineData(24, 0.1, false)] // A market that keeps trading.
+    [InlineData(18, 12, false)] // A whole session in the window.
+    public void MissesLastSession_Candles_TellsWhetherTheWindowCutTheSession(double firstHoursAgo, double lastHoursAgo, bool expected)
+    {
+        var now = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
+        PricePoint[] day = [new(now.AddHours(-firstHoursAgo), 1m), new(now.AddHours(-lastHoursAgo), 2m)];
+
+        HistoryWindow.MissesLastSession(day, now).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies a day without at least two candles is asked for again.
+    /// </summary>
+    [Fact]
+    public void MissesLastSession_FewerThanTwoCandles_IsTrue()
+    {
+        var now = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
+
+        HistoryWindow.MissesLastSession([], now).Should().BeTrue();
+        HistoryWindow.MissesLastSession([new PricePoint(now.AddHours(-1), 1m)], now).Should().BeTrue();
+    }
+
+    /// <summary>
     /// A descriptor declaring one WebSocket and one HTTP endpoint option.
     /// </summary>
     private static readonly ProviderDescriptor Descriptor = new(

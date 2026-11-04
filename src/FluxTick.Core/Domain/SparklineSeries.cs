@@ -77,6 +77,11 @@ public sealed class SparklineSeries
     public TimeSpan Bucket => _bucket;
 
     /// <summary>
+    /// Gets the start of the newest bucket, or <see langword="null"/> while the series is empty.
+    /// </summary>
+    public DateTimeOffset? LastBucketStart => _starts.Count > 0 ? new DateTimeOffset(_starts[^1], TimeSpan.Zero) : null;
+
+    /// <summary>
     /// Replaces the content with historical samples, oldest first. Later live ticks continue from the newest sample.
     /// </summary>
     /// <param name="history">

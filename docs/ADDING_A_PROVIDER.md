@@ -120,7 +120,8 @@ gracefully instead of failing.
 
 | Interface | Gives the app |
 | --- | --- |
-| `IHistoryProvider` | Recent prices to seed the sparkline immediately. The sparkline shows the last 60 minutes only, so ask for about the last hour (`HistoryWindow.Span` in `Providers.Common`) and not for a whole day |
+| `IHistoryProvider` | Recent prices to seed the sparkline immediately. By default the sparkline shows the last 60 minutes, so ask for about the last hour (`HistoryWindow.Span` in `Providers.Common`) and not for a whole day |
+| `IRangeHistoryProvider` | Also the longer ranges the user can pick for the sparkline (`HistoryRange`: day, 5 days, month, half year, year). `SupportsRange` says which (override `SupportsRange(asset, range)` when only some instruments have them); ask for `HistoryRangeSpec.For(range)` (about one point per `Bucket`, back over `Window`) and no more, except that a day that misses part of the last session of a shut market (`HistoryWindow.MissesLastSession`) is asked for again over `HistoryWindow.LastSessionSpan`, as the chart then shows the last session. A source without it keeps showing the last hour, placed where it was traded, with a gray dashed line for the time before |
 | `ISymbolSearchProvider` | Symbol search and validation in the *Add instrument* page |
 | `IMarketHoursProvider` | Open / closed / pre-market / break state of the markets of your symbols; for stocks and indices, whose hours depend on your symbol format (use `ExchangeHours` from `Providers.Common`) |
 | `IQuoteCadenceProvider` | How often the source polls (and tops up a quiet stream), so a quiet instrument is shown delayed rather than stale until that time has passed. `PollingProviderBase` and `RestBackedWebSocketProviderBase` implement it; a source on neither base that polls should too |

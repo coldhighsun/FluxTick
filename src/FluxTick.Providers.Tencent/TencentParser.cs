@@ -222,6 +222,104 @@ internal static partial class TencentParser
     }
 
     /// <summary>
+    /// Parses the minute series of the last five trading days, <c>data.{code}.data</c> being an array of days (newest
+    /// first) that each hold their rows as <c>"HHmm price volume turnover"</c> in Beijing or Hong Kong time.
+    /// </summary>
+    /// <param name="json">
+    /// The response body.
+    /// </param>
+    /// <param name="code">
+    /// The code that was requested.
+    /// </param>
+    /// <returns>
+    /// The samples of all the days, oldest first; empty when the service has none for the code.
+    /// </returns>
+    public static IReadOnlyList<PricePoint> ParseFiveDayMinutes(string json, string code)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("data", out var data)
+            || data.ValueKind != JsonValueKind.Object
+            || !data.TryGetProperty(code, out var entry)
+            || !entry.TryGetProperty("data", out var days)
+            || days.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var points = new List<PricePoint>();
+        foreach (var day in days.EnumerateArray())
+        {
+            if (!day.TryGetProperty("date", out var dateElement)
+                || !DateTimeOffset.TryParseExact(dateElement.GetString(), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)
+                || !day.TryGetProperty("data", out var rows)
+                || rows.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var row in rows.EnumerateArray())
+            {
+                var fields = row.GetString()?.Split(' ');
+                if (fields is { Length: > 1 }
+                    && DateTimeOffset.TryParseExact(fields[0], "HHmm", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var clock)
+                    && QuoteText.TryParsePrice(fields[1], out var price)
+                    && price > 0m)
+                {
+                    points.Add(new PricePoint(new DateTimeOffset(date.Ticks + clock.TimeOfDay.Ticks, AsiaOffset), price));
+                }
+            }
+        }
+
+        points.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+        return points;
+    }
+
+    /// <summary>
+    /// Parses the daily candles, <c>data.{code}.qfqday</c> being an array of <c>[date, open, close, high, low, volume]</c>.
+    /// A candle is dated at the close of its market.
+    /// </summary>
+    /// <param name="json">
+    /// The response body.
+    /// </param>
+    /// <param name="code">
+    /// The code that was requested.
+    /// </param>
+    /// <returns>
+    /// The close of each day, oldest first; empty when the service has none for the code.
+    /// </returns>
+    public static IReadOnlyList<PricePoint> ParseDailyCandles(string json, string code)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("data", out var data)
+            || data.ValueKind != JsonValueKind.Object
+            || !data.TryGetProperty(code, out var entry)
+            || !(entry.TryGetProperty("qfqday", out var candles) || entry.TryGetProperty("day", out candles))
+            || candles.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        // Beijing closes at 15:00, Hong Kong at 16:00.
+        var closeOfDay = code.StartsWith("hk", StringComparison.OrdinalIgnoreCase) ? TimeSpan.FromHours(16) : TimeSpan.FromHours(15);
+        var points = new List<PricePoint>();
+        foreach (var candle in candles.EnumerateArray())
+        {
+            if (candle.ValueKind == JsonValueKind.Array
+                && candle.GetArrayLength() > 2
+                && candle[0].GetString() is { } day
+                && DateTimeOffset.TryParseExact(day, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)
+                && candle[2].GetString() is { } text
+                && QuoteText.TryParsePrice(text, out var close)
+                && close > 0m)
+            {
+                points.Add(new PricePoint(new DateTimeOffset(date.Ticks + closeOfDay.Ticks, AsiaOffset), close));
+            }
+        }
+
+        return points;
+    }
+
+    /// <summary>
     /// Drops the exchange suffix of a US code: <c>aapl.oq</c> becomes <c>aapl</c> and <c>brk.b.n</c> becomes
     /// <c>brk.b</c>. Index codes such as <c>.inx</c> are kept.
     /// </summary>

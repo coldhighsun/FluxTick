@@ -438,6 +438,11 @@ internal sealed class AppearanceFile
     public CardSize? CardSize { get; set; }
 
     /// <summary>
+    /// Gets or sets the time span the charts show.
+    /// </summary>
+    public HistoryRange? ChartRange { get; set; }
+
+    /// <summary>
     /// Gets or sets how the cards are grouped.
     /// </summary>
     public CardGrouping? Grouping { get; set; }
@@ -484,6 +489,7 @@ internal sealed class AppearanceFile
             SortKey = SortKey ?? defaults.SortKey,
             SortDescending = SortDescending ?? defaults.SortDescending,
             CardSize = CardSize ?? defaults.CardSize,
+            ChartRange = ChartRange ?? defaults.ChartRange,
             Grouping = Grouping ?? defaults.Grouping,
             CollapsedTypes = SettingsFile.KnownMembers(CollapsedTypes, ref repaired),
             CollapsedProviders = SettingsFile.NotNull(CollapsedProviders, ref repaired),

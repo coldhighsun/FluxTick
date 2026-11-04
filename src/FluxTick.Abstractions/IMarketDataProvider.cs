@@ -69,6 +69,56 @@ public interface IHistoryProvider
 }
 
 /// <summary>
+/// Optional capability of a history source: it can also answer for ranges longer than the last hour.
+/// </summary>
+public interface IRangeHistoryProvider : IHistoryProvider
+{
+    /// <summary>
+    /// Tells whether the provider answers for a range.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <returns>
+    /// <see langword="true" /> when <see cref="GetHistoryAsync(Asset, HistoryRange, CancellationToken)" /> works for it.
+    /// </returns>
+    bool SupportsRange(HistoryRange range);
+
+    /// <summary>
+    /// Tells whether the provider answers for a range for one instrument. A source whose long ranges cover only some of its
+    /// instruments (for example only the exchanges it has candles for) overrides it; by default it is the answer for the
+    /// range.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when <see cref="GetHistoryAsync(Asset, HistoryRange, CancellationToken)" /> has samples for it.
+    /// </returns>
+    bool SupportsRange(Asset asset, HistoryRange range) => SupportsRange(range);
+
+    /// <summary>
+    /// Gets price samples that cover a range, oldest first, about one per <see cref="HistoryRangeSpec.Bucket" />.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument to load history for.
+    /// </param>
+    /// <param name="range">
+    /// The range to cover.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token to cancel the operation.
+    /// </param>
+    /// <returns>
+    /// The samples, possibly empty.
+    /// </returns>
+    Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Optional capability: searches the provider's instrument catalog so users can pick a valid symbol.
 /// </summary>
 public interface ISymbolSearchProvider

@@ -31,6 +31,42 @@ public class RowListDisplayTests
         new(Stock, new Quote(Stock.Id, 110m, 100m, DateTimeOffset.UnixEpoch), [100m, 110m], health, MarketState: market);
 
     /// <summary>
+    /// Verifies only the card follows the range of the chart: the list, the tray and the sort keep the change against the
+    /// reference price, which every source has, so that rows of sources with and without the range stay comparable.
+    /// </summary>
+    [Fact]
+    public void Update_ChartOfARange_OnlyTheCardShowsTheChangeOverIt()
+    {
+        var asOf = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset[] times = [asOf.AddHours(-20), asOf.AddHours(-1)];
+        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), coversRange: true);
+        var row = new AssetRowViewModel(Stock, "p") { ChartRange = HistoryRange.Day };
+
+        // The price is 10% above the reference and 45% below the start of the chart.
+        row.Update(new AssetSnapshot(Stock, new Quote(Stock.Id, 110m, 100m, asOf), [200m, 110m], AssetHealth.Live, Timeline: timeline));
+
+        row.ChangePercent.Should().Be(10m);
+        row.ChangeDisplayText.Should().Be("+10.00%");
+        row.IsUp.Should().BeTrue();
+        row.CardChangeText.Should().Be("-45.00%");
+        row.IsCardDown.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies the card shows the change against the reference price while the chart has no range of its own.
+    /// </summary>
+    [Fact]
+    public void Update_NoRange_CardShowsTheChangeOfTheQuote()
+    {
+        var row = new AssetRowViewModel(Stock, "p");
+
+        row.Update(Snapshot(AssetHealth.Live, MarketState.Open));
+
+        row.CardChangeText.Should().Be("+10.00%");
+        row.IsCardUp.Should().BeTrue();
+    }
+
+    /// <summary>
     /// Verifies a shut market keeps its change in percent, tells the state in the chip and is dimmed.
     /// </summary>
     [Fact]

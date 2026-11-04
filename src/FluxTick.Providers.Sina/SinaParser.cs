@@ -302,6 +302,43 @@ internal static class SinaParser
     public static IReadOnlyList<PricePoint> ParseForexMinutes(string text) => ParseMinutes(text, "d", "c");
 
     /// <summary>
+    /// Parses the daily candles of a currency pair, <c>var("date,open,low,high,close,|date,…");</c>, which hold the whole
+    /// history of the pair.
+    /// </summary>
+    /// <param name="text">
+    /// The response body.
+    /// </param>
+    /// <returns>
+    /// The close of each day at the end of the day in Beijing time, oldest first; empty when the service has none. The
+    /// candle of today is dated ahead of the clock then, like the minute under way of the minute candles, and is left to
+    /// the live price.
+    /// </returns>
+    public static IReadOnlyList<PricePoint> ParseForexDaily(string text)
+    {
+        var start = text.IndexOf('"');
+        var end = text.LastIndexOf('"');
+        if (start < 0 || end <= start)
+        {
+            return [];
+        }
+
+        var points = new List<PricePoint>();
+        foreach (var row in text[(start + 1)..end].Split('|', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = row.Split(',');
+            if (fields.Length > 4
+                && ParseTime(fields[0], "00:00:00") is { } dayStart
+                && QuoteText.TryParsePrice(fields[4], out var close)
+                && close > 0m)
+            {
+                points.Add(new PricePoint(dayStart.AddDays(1), close));
+            }
+        }
+
+        return points;
+    }
+
+    /// <summary>
     /// Reads the array of candles in a body, whatever surrounds it. Candles without a readable time or a positive close are
     /// skipped.
     /// </summary>
@@ -354,8 +391,14 @@ internal static class SinaParser
     /// <returns>
     /// The time, or <see langword="null"/> when it cannot be read.
     /// </returns>
-    private static DateTimeOffset? ParseCandleTime(string? text) =>
-        text?.Split(' ') is [var date, var time] ? ParseTime(date, time) : null;
+    private static DateTimeOffset? ParseCandleTime(string? text) => text?.Split(' ') switch
+    {
+        [var date, var time] => ParseTime(date, time),
+
+        // A daily candle of a stock has a date only; it is dated at the close of the market.
+        [var date] => ParseTime(date, "15:00:00"),
+        _ => null,
+    };
 
     /// <summary>
     /// Parses the quote time of a line, which is Beijing time.

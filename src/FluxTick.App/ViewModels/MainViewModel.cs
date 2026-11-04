@@ -242,6 +242,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         // The window sizes itself after the layout, so the layout must be right before the first rows exist.
         IsCardLayout = settings.Current.Appearance.Layout == WatchlistLayout.Cards;
         CardSize = settings.Current.Appearance.CardSize;
+        ChartRange = settings.Current.Appearance.ChartRange;
         Grouping = settings.Current.Appearance.Grouping;
         SortOptions = [.. Enum.GetValues<WatchlistSortKey>().Select(key => new SortOptionViewModel(key, ChooseSortKeyAsync))];
         SortKey = settings.Current.Appearance.SortKey;
@@ -283,6 +284,48 @@ public sealed partial class MainViewModel : LocalizedViewModel
     [NotifyPropertyChangedFor(nameof(IsCardSizeMedium))]
     [NotifyPropertyChangedFor(nameof(IsCardSizeLarge))]
     public partial CardSize CardSize { get; private set; } = CardSize.Medium;
+
+    /// <summary>
+    /// Gets the time span the charts show.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsChartRangeHour))]
+    [NotifyPropertyChangedFor(nameof(IsChartRangeDay))]
+    [NotifyPropertyChangedFor(nameof(IsChartRangeFiveDays))]
+    [NotifyPropertyChangedFor(nameof(IsChartRangeMonth))]
+    [NotifyPropertyChangedFor(nameof(IsChartRangeHalfYear))]
+    [NotifyPropertyChangedFor(nameof(IsChartRangeYear))]
+    public partial HistoryRange ChartRange { get; private set; } = HistoryRange.Hour;
+
+    /// <summary>
+    /// Gets a value indicating whether the charts show the last hour, for the check mark of the menu.
+    /// </summary>
+    public bool IsChartRangeHour => ChartRange == HistoryRange.Hour;
+
+    /// <summary>
+    /// Gets a value indicating whether the charts show the last day, for the check mark of the menu.
+    /// </summary>
+    public bool IsChartRangeDay => ChartRange == HistoryRange.Day;
+
+    /// <summary>
+    /// Gets a value indicating whether the charts show the last five days, for the check mark of the menu.
+    /// </summary>
+    public bool IsChartRangeFiveDays => ChartRange == HistoryRange.FiveDays;
+
+    /// <summary>
+    /// Gets a value indicating whether the charts show the last month, for the check mark of the menu.
+    /// </summary>
+    public bool IsChartRangeMonth => ChartRange == HistoryRange.Month;
+
+    /// <summary>
+    /// Gets a value indicating whether the charts show the last half year, for the check mark of the menu.
+    /// </summary>
+    public bool IsChartRangeHalfYear => ChartRange == HistoryRange.HalfYear;
+
+    /// <summary>
+    /// Gets a value indicating whether the charts show the last year, for the check mark of the menu.
+    /// </summary>
+    public bool IsChartRangeYear => ChartRange == HistoryRange.Year;
 
     /// <summary>
     /// Gets a value indicating whether the cards are small, for the check mark of the menu.
@@ -1342,6 +1385,23 @@ public sealed partial class MainViewModel : LocalizedViewModel
     }
 
     /// <summary>
+    /// Sets the time span the charts show; the settings change loads the history of it.
+    /// </summary>
+    /// <param name="range">
+    /// The new range.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the setting is saved.
+    /// </returns>
+    [RelayCommand]
+    public Task SetChartRangeAsync(HistoryRange range)
+    {
+        var task = _settings.UpdateAsync(s => s.Appearance.ChartRange = range);
+        ChartRange = range;
+        return task;
+    }
+
+    /// <summary>
     /// Sets how the cards are grouped and shows the result right away.
     /// </summary>
     /// <param name="grouping">
@@ -1567,6 +1627,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
             // as they were; applying those again would route every source and raise every card for nothing.
             var settings = _settings.Current;
             var key = MarketKeyOf(settings);
+            _market.SetChartRange(settings.Appearance.ChartRange);
             if (key != _appliedMarketKey)
             {
                 await _market.ApplyAsync(settings);
@@ -1634,6 +1695,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
                 {
                     RollEnabled = Settings.RollPriceOnUpdate,
                     CardSize = CardSize,
+                    ChartRange = ChartRange,
                 };
                 Rows.Insert(i, row);
             }
@@ -1686,6 +1748,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         ShowChosenSort(!cards);
         IsCardLayout = cards;
         CardSize = appearance.CardSize;
+        ChartRange = appearance.ChartRange;
         Grouping = appearance.Grouping;
 
         _rebuildingSections = true;
@@ -1947,6 +2010,20 @@ public sealed partial class MainViewModel : LocalizedViewModel
         foreach (var row in Rows)
         {
             row.CardSize = value;
+        }
+    }
+
+    /// <summary>
+    /// Tells every row which time span the charts show.
+    /// </summary>
+    /// <param name="value">
+    /// The new range.
+    /// </param>
+    partial void OnChartRangeChanged(HistoryRange value)
+    {
+        foreach (var row in Rows)
+        {
+            row.ChartRange = value;
         }
     }
 

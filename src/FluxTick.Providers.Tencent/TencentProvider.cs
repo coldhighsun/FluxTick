@@ -7,12 +7,27 @@ namespace FluxTick.Providers.Tencent;
 /// <summary>
 /// Polls the Tencent quote service for every subscribed instrument, one request per batch of instruments.
 /// </summary>
-public sealed class TencentProvider : BatchQuotePollingProviderBase, IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class TencentProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The number of search results returned.
     /// </summary>
     private const int SearchLimit = 20;
+
+    /// <summary>
+    /// The number of daily candles that cover a month, with a few days to spare for the days a market is shut.
+    /// </summary>
+    private const int MonthCandles = 32;
+
+    /// <summary>
+    /// The number of daily candles that cover half a year of trading days, with a few to spare.
+    /// </summary>
+    private const int HalfYearCandles = 130;
+
+    /// <summary>
+    /// The number of daily candles that cover a year of trading days, with a few to spare.
+    /// </summary>
+    private const int YearCandles = 260;
 
     /// <summary>
     /// The host of the symbol search service.
@@ -106,6 +121,55 @@ public sealed class TencentProvider : BatchQuotePollingProviderBase, IHistoryPro
 
         // For some markets the service sends only the latest point, which does not make a sparkline.
         return points.Count > 1 ? points : [];
+    }
+
+    /// <inheritdoc />
+    public bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    public bool SupportsRange(Asset asset, HistoryRange range) =>
+        TencentParser.HasMinuteHistory(TencentParser.ToRequestCode(asset.Symbol));
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
+    {
+        if (range == HistoryRange.Hour)
+        {
+            return await GetHistoryAsync(asset, cancellationToken).ConfigureAwait(false);
+        }
+
+        var code = TencentParser.ToRequestCode(asset.Symbol);
+
+        // The services of the longer ranges need the exchange suffix that the US codes of this app do not have.
+        if (!TencentParser.HasMinuteHistory(code))
+        {
+            return [];
+        }
+
+        // A day and five days are told by the minutes of the last five trading days, which one answer holds; the service has
+        // no way to ask for fewer. A month and longer are told by daily candles, counted back from today.
+        if (range is HistoryRange.Day or HistoryRange.FiveDays)
+        {
+            var minutes = await _http.GetStringAsync(EndpointOptions.Combine(HistoryBase, $"/appstock/app/day/query?code={Uri.EscapeDataString(code)}"), cancellationToken).ConfigureAwait(false);
+
+            // All of it, also for a day: the chart keeps to its window, which reaches into the session before while the
+            // market is open, and a market shut for longer than the window ends its chart with the last session.
+            return TencentParser.ParseFiveDayMinutes(minutes, code);
+        }
+
+        var path = code.StartsWith("hk", StringComparison.OrdinalIgnoreCase) ? "hkfqkline" : "fqkline";
+        var count = range switch
+        {
+            HistoryRange.Month => MonthCandles,
+            HistoryRange.HalfYear => HalfYearCandles,
+            _ => YearCandles,
+        };
+        var daily = await _http.GetStringAsync(EndpointOptions.Combine(HistoryBase, $"/appstock/app/{path}/get?param={Uri.EscapeDataString(code)},day,,,{count},qfq"), cancellationToken).ConfigureAwait(false);
+
+        // Today's candle is dated at the close, ahead of the clock during the session; a point ahead of the clock would stop
+        // the series from taking the live prices, which bring the price of today anyway.
+        var now = TimeProvider.GetUtcNow();
+        return [.. TencentParser.ParseDailyCandles(daily, code).Where(p => p.Timestamp <= now)];
     }
 
     /// <inheritdoc />

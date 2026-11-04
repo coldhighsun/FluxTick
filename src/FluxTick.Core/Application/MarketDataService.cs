@@ -78,6 +78,17 @@ public sealed class MarketDataService : IAsyncDisposable
     private const int MaxTimerSeedRetries = 5;
 
     /// <summary>
+    /// How many loads of range history run at once for one source, so that a change of the range does not send a request for
+    /// every instrument of a long watchlist in the same moment. It is per source, so a slow one does not hold up the others.
+    /// </summary>
+    private const int MaxConcurrentRangeLoads = 4;
+
+    /// <summary>
+    /// How long the history loaded for a range is kept for the range to be chosen again.
+    /// </summary>
+    private static readonly TimeSpan RangeCacheLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// The number of quotes in a row, each traded before the one shown, that are ignored as late answers; the next one is
     /// taken as a time that really went back.
     /// </summary>
@@ -143,6 +154,11 @@ public sealed class MarketDataService : IAsyncDisposable
     private readonly SemaphoreSlim _applyLock = new(1, 1);
 
     /// <summary>
+    /// Cancels the loads of range history when the service is disposed.
+    /// </summary>
+    private readonly CancellationTokenSource _rangeLoadsCancellation = new();
+
+    /// <summary>
     /// Per-instrument state keyed by id.
     /// </summary>
     private readonly Dictionary<AssetId, AssetState> _assets = [];
@@ -161,6 +177,11 @@ public sealed class MarketDataService : IAsyncDisposable
     /// Periodically re-evaluates health so staleness is noticed without new quotes.
     /// </summary>
     private readonly ITimer _healthTimer;
+
+    /// <summary>
+    /// The range the sparklines show; guarded by <see cref="_gate"/>.
+    /// </summary>
+    private HistoryRange _range;
 
     /// <summary>
     /// Whether the service was disposed; set once, read under <see cref="_applyLock"/>.
@@ -219,6 +240,7 @@ public sealed class MarketDataService : IAsyncDisposable
                 if (!_disposed)
                 {
                     SeedEmptySeries(failedOnly: true);
+                    SeedRangeSeries(failedOnly: true);
                 }
             },
             null,
@@ -393,6 +415,7 @@ public sealed class MarketDataService : IAsyncDisposable
         // Later applies to do nothing from here on. The providers are disposed first, which also frees an apply that waits
         // on one of them, so a stuck provider cannot block shutdown.
         _disposed = true;
+        await _rangeLoadsCancellation.CancelAsync().ConfigureAwait(false);
         await _healthTimer.DisposeAsync().ConfigureAwait(false);
         await DisposeSlotsAsync().ConfigureAwait(false);
 
@@ -515,6 +538,7 @@ public sealed class MarketDataService : IAsyncDisposable
         }
 
         SeedEmptySeries();
+        SeedRangeSeries();
     }
 
     /// <summary>
@@ -664,6 +688,15 @@ public sealed class MarketDataService : IAsyncDisposable
                         state.SeedFailures = 0;
                         state.NextSeedAttempt = default;
                         state.EmptyHistoryAnswers = 0;
+                        foreach (var seed in state.RangeSeeds.Values)
+                        {
+                            seed.Failures = 0;
+                            seed.NextAttempt = default;
+                            seed.EmptyAnswers = 0;
+
+                            // Loads that gave up on the old provider ask the new one; history that is there stays.
+                            seed.Seeded = seed is { HasHistory: true, HasHole: false };
+                        }
                     }
                 }
             }
@@ -871,10 +904,7 @@ public sealed class MarketDataService : IAsyncDisposable
             lock (_gate)
             {
                 state.SeedFailures++;
-                var wait = TimeSpan.FromTicks(Math.Min(
-                    SeedRetryBase.Ticks << Math.Min(state.SeedFailures - 1, 10),
-                    SeedRetryMax.Ticks));
-                state.NextSeedAttempt = _timeProvider.GetUtcNow() + wait;
+                state.NextSeedAttempt = _timeProvider.GetUtcNow() + SeedRetryWait(state.SeedFailures);
             }
         }
         finally
@@ -890,6 +920,282 @@ public sealed class MarketDataService : IAsyncDisposable
             RaiseSnapshot(snapshot);
         }
     }
+
+    /// <summary>
+    /// Changes the range the sparklines show, loads the history of it from the sources that have it and raises a snapshot
+    /// for every instrument. History loaded for the range a short while ago is kept and shown again at once. A source
+    /// without the range keeps showing the last hour, placed where it was traded.
+    /// </summary>
+    /// <param name="range">
+    /// The new range.
+    /// </param>
+    public void SetChartRange(HistoryRange range)
+    {
+        lock (_gate)
+        {
+            if (_range == range)
+            {
+                return;
+            }
+
+            _range = range;
+            var now = _timeProvider.GetUtcNow();
+            foreach (var state in _assets.Values)
+            {
+                state.Range = range != HistoryRange.Hour && RangeHistoryOf(state, range) is not null ? SeedOf(state, range, now) : null;
+            }
+        }
+
+        SeedRangeSeries();
+        RefreshHealth(forceRaise: true);
+    }
+
+    /// <summary>
+    /// Gets the state of the history of a range for an instrument: the one kept from an earlier load when it holds history
+    /// that is not too old or is being loaded right now, else a new one. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="range">
+    /// The range, which is not <see cref="HistoryRange.Hour"/>.
+    /// </param>
+    /// <param name="now">
+    /// The current time.
+    /// </param>
+    /// <returns>
+    /// The state to show and seed.
+    /// </returns>
+    private static RangeSeed SeedOf(AssetState state, HistoryRange range, DateTimeOffset now)
+    {
+        if (state.RangeSeeds.TryGetValue(range, out var kept) && (kept.Seeding || (kept.HasHistory && now - kept.LoadedAt < RangeCacheLifetime)))
+        {
+            return kept;
+        }
+
+        var seed = new RangeSeed(range);
+        state.RangeSeeds[range] = seed;
+        return seed;
+    }
+
+    /// <summary>
+    /// Starts a background load of the history of the chosen range for every instrument whose source has it and that was
+    /// not loaded yet. The last hour needs none, and a source without the range is left with its hour.
+    /// </summary>
+    /// <param name="failedOnly">
+    /// Whether to start only the loads that failed before, answered without history (fewer than
+    /// <see cref="MaxEmptyHistoryAnswers"/> times in a row) or have a hole to fill, and whose wait is over; none of them
+    /// after <see cref="MaxTimerSeedRetries"/> failures in a row.
+    /// </param>
+    private void SeedRangeSeries(bool failedOnly = false)
+    {
+        List<(AssetState State, RangeSeed Seed, IRangeHistoryProvider History, SemaphoreSlim Gate)> work = [];
+        var now = _timeProvider.GetUtcNow();
+        lock (_gate)
+        {
+            if (_disposed || _range == HistoryRange.Hour)
+            {
+                return;
+            }
+
+            foreach (var state in _assets.Values)
+            {
+                // A source without the range keeps its hour, so nothing is kept for the range of such an instrument.
+                if (RangeHistoryOf(state, _range) is not { } history)
+                {
+                    continue;
+                }
+
+                var seed = state.Range ??= SeedOf(state, _range, now);
+                if (seed is { Seeded: false, Seeding: false }
+                    && (!failedOnly || (seed.Failures < MaxTimerSeedRetries && (seed.Failures > 0 || seed.EmptyAnswers > 0 || seed.HasHole)))
+                    && seed.NextAttempt <= now)
+                {
+                    seed.Seeding = true;
+                    work.Add((state, seed, history, _slots[state.Asset.ProviderId].RangeLoadGate));
+                }
+            }
+        }
+
+        foreach (var (state, seed, history, gate) in work)
+        {
+            _ = Task.Run(() => SeedRangeAsync(state, seed, history, gate));
+        }
+    }
+
+    /// <summary>
+    /// Finds the source that has the history of a range for an instrument. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <returns>
+    /// The source, or <see langword="null"/> when it is not running or does not have the range.
+    /// </returns>
+    private IRangeHistoryProvider? RangeHistoryOf(AssetState state, HistoryRange range) =>
+        _slots.TryGetValue(state.Asset.ProviderId, out var slot) && slot.Provider is IRangeHistoryProvider history && history.SupportsRange(state.Asset, range)
+            ? history
+            : null;
+
+    /// <summary>
+    /// Works out how long to wait before asking for history again: longer after each failure, up to a cap.
+    /// </summary>
+    /// <param name="failures">
+    /// How many loads failed in a row, at least one.
+    /// </param>
+    /// <returns>
+    /// The time to wait.
+    /// </returns>
+    private static TimeSpan SeedRetryWait(int failures) =>
+        TimeSpan.FromTicks(Math.Min(SeedRetryBase.Ticks << Math.Min(failures - 1, 10), SeedRetryMax.Ticks));
+
+    /// <summary>
+    /// Loads the history of a range for one instrument and merges it with the live price.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="seed">
+    /// The state of the history of the range; an answer for one that was replaced meanwhile is dropped.
+    /// </param>
+    /// <param name="history">
+    /// The provider to load from.
+    /// </param>
+    /// <param name="gate">
+    /// Limits the loads of the provider that run at once.
+    /// </param>
+    /// <returns>
+    /// A task that completes when seeding is done.
+    /// </returns>
+    private async Task SeedRangeAsync(AssetState state, RangeSeed seed, IRangeHistoryProvider history, SemaphoreSlim gate)
+    {
+        AssetSnapshot? snapshot = null;
+        var superseded = false;
+        try
+        {
+            IReadOnlyList<PricePoint> points;
+            var cancellationToken = _rangeLoadsCancellation.Token;
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                // The range may have changed while the load waited for its turn; there is nothing to ask for then.
+                lock (_gate)
+                {
+                    if (_range != seed.Range || !ReferenceEquals(state.Range, seed))
+                    {
+                        superseded = true;
+                        return;
+                    }
+                }
+
+                points = await history.GetHistoryAsync(state.Asset, seed.Range, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Release();
+            }
+
+            lock (_gate)
+            {
+                if (_disposed || !IsKept(state, seed))
+                {
+                    return;
+                }
+
+                seed.Failures = 0;
+                seed.NextAttempt = default;
+                if (points.Count < 2 && ++seed.EmptyAnswers >= MaxEmptyHistoryAnswers)
+                {
+                    seed.Seeded = true;
+                    seed.HasHole = false;
+                }
+                else if (points.Count < 2)
+                {
+                    // An empty answer may be a moment of the source (a limit, an hour without data), so the health timer asks
+                    // again after a while, a few times.
+                    seed.NextAttempt = _timeProvider.GetUtcNow() + SeedRetryBase;
+                }
+
+                if (points.Count >= 2 && _assets.ContainsKey(state.Asset.Id))
+                {
+                    var latest = state.Latest;
+                    seed.Seeded = true;
+                    seed.HasHistory = true;
+                    seed.HasHole = false;
+                    seed.EmptyAnswers = 0;
+                    seed.LoadedAt = _timeProvider.GetUtcNow();
+                    seed.Series.Seed(points);
+                    if (latest is not null)
+                    {
+                        seed.Series.Add(latest.Price, latest.Timestamp);
+                    }
+
+                    if (ReferenceEquals(state.Range, seed))
+                    {
+                        snapshot = BuildSnapshot(state);
+                        MarkPublished(state, snapshot);
+                    }
+
+                    _logger.LogInformation(
+                        "Seeded {AssetId} with {Count} history points for {Range}", state.Asset.Id, points.Count, seed.Range);
+                }
+            }
+        }
+        catch (Exception ex) when (_disposed && ex is not OutOfMemoryException)
+        {
+            // The load was cancelled, or its provider disposed, on the way out; nobody is left to ask again.
+            _logger.LogDebug(ex, "Dropped the {Range} history load for {AssetId} on shutdown", seed.Range, state.Asset.Id);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogWarning(ex, "Could not load the {Range} history for {AssetId}", seed.Range, state.Asset.Id);
+            lock (_gate)
+            {
+                if (IsKept(state, seed))
+                {
+                    seed.Failures++;
+                    seed.NextAttempt = _timeProvider.GetUtcNow() + SeedRetryWait(seed.Failures);
+                }
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                seed.Seeding = false;
+            }
+
+            // The range may have been chosen again while this load was giving up; that choice found it loading and started
+            // nothing, so it is started now.
+            if (superseded)
+            {
+                SeedRangeSeries();
+            }
+        }
+
+        if (snapshot is not null)
+        {
+            RaiseSnapshot(snapshot);
+        }
+    }
+
+    /// <summary>
+    /// Tells whether the state of a range is still the one kept for the instrument. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="seed">
+    /// The state of the history of the range.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when it was not replaced by a newer one.
+    /// </returns>
+    private static bool IsKept(AssetState state, RangeSeed seed) =>
+        state.RangeSeeds.TryGetValue(seed.Range, out var kept) && ReferenceEquals(kept, seed);
 
     /// <summary>
     /// Reads a provider's quotes until it is disposed.
@@ -938,6 +1244,14 @@ public sealed class MarketDataService : IAsyncDisposable
             }
 
             var received = _timeProvider.GetUtcNow();
+            if (state.LastReceivedAt is { } lastReceived)
+            {
+                foreach (var kept in state.RangeSeeds.Values)
+                {
+                    kept.NoteSilence(lastReceived, received);
+                }
+            }
+
             if (state.Latest is { TimeIsEstimated: false } previous && !quote.TimeIsEstimated)
             {
                 if (quote.Timestamp < previous.Timestamp && state.OlderQuotesInARow < MaxOlderQuotesInARow)
@@ -975,6 +1289,11 @@ public sealed class MarketDataService : IAsyncDisposable
             state.Latest = quote;
             state.LastReceivedAt = received;
             state.Series.Add(quote.Price, quote.Timestamp);
+            foreach (var seed in state.RangeSeeds.Values)
+            {
+                seed.Series.Add(quote.Price, quote.Timestamp);
+            }
+
             snapshot = BuildSnapshot(state);
             MarkPublished(state, snapshot);
         }
@@ -1014,7 +1333,7 @@ public sealed class MarketDataService : IAsyncDisposable
 
                 // A new bucket moves the window on, which changes the chart only when it has points to move or just lost
                 // its last ones; an empty one stays as it is.
-                var slid = bucket != state.LastSparklineBucket && (state.LastSparklineCount > 0 || state.Series.AnyWithin(now));
+                var slid = bucket != state.LastSparklineBucket && (state.LastSparklineCount > 0 || state.SeriesToShow.AnyWithin(now));
                 state.LastSparklineBucket = bucket;
                 var market = MarketStateOf(state, now);
                 if (health != state.LastHealth || market != state.LastMarketState)
@@ -1085,9 +1404,81 @@ public sealed class MarketDataService : IAsyncDisposable
     {
         var (health, detail) = ComputeHealth(state);
         var now = _timeProvider.GetUtcNow();
-        var sparkline = state.Series.Snapshot(now);
-        var timeline = new SparklineTimeline(state.Series.Times(now), now, state.Series.Window);
+        var isShut = state.Asset.AssetClass == AssetClass.Crypto ? null : state.IsShut ??= time => IsShutAt(state, time);
+        var series = state.SeriesToShow;
+        var coversRange = _range != HistoryRange.Hour && ReferenceEquals(series, state.Range?.Series);
+
+        // A source without the range keeps the points of the last hour; they stay where they were traded in the window of
+        // the range, and the chart carries the first price back to the edge.
+        var window = _range == HistoryRange.Hour ? series.Window : HistoryRangeSpec.For(_range).Window;
+        var asOf = coversRange ? ChartEndOf(series, window, now, isShut) : now;
+        var sparkline = series.Snapshot(asOf);
+
+        // Without its source the hours are not known, which says nothing about the market, so that answer is not remembered.
+        var timeline = new SparklineTimeline(
+            series.Times(asOf), asOf, window, series.Bucket, coversRange, isShut,
+            shutGapMemo: _slots.ContainsKey(state.Asset.ProviderId) ? state.ShutGaps : null);
         return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline, MarketStateOf(state, now));
+    }
+
+    /// <summary>
+    /// Works out where the chart of a range ends. A market shut for longer than the window (a weekend on a chart of a day)
+    /// has no price in it, and one whose window starts inside the last session would lose that session bit by bit, so such a
+    /// chart ends with the last price rather than shrinking and staying empty until the next session. The window of a
+    /// night starts at the same hour the day before, when the market was shut as well, and keeps moving with the clock.
+    /// When the hours do not say the market is shut (a holiday, which they do not know, or a source that stopped) the window
+    /// stays where it is and the chart of the range may be empty.
+    /// </summary>
+    /// <param name="series">
+    /// The prices of the range.
+    /// </param>
+    /// <param name="window">
+    /// The length of the window.
+    /// </param>
+    /// <param name="now">
+    /// The current time.
+    /// </param>
+    /// <param name="isShut">
+    /// Tells whether the market is shut at a time, or <see langword="null"/> for a market that is always open.
+    /// </param>
+    /// <returns>
+    /// The end of the chart, which is never after <paramref name="now"/>.
+    /// </returns>
+    private static DateTimeOffset ChartEndOf(SparklineSeries series, TimeSpan window, DateTimeOffset now, Func<DateTimeOffset, bool>? isShut)
+    {
+        if (isShut is null || !isShut(now) || series.LastBucketStart is not { } last || (series.AnyWithin(now) && isShut(now - window)))
+        {
+            return now;
+        }
+
+        var end = last + series.Bucket;
+        return end < now ? end : now;
+    }
+
+    /// <summary>
+    /// Tells whether the market of an instrument was shut at a time, by the regular hours alone: closed, in its midday break,
+    /// or outside the regular session. Most sources give candles of the regular session only, so the hours before and after
+    /// it are part of the night of the chart. A market whose hours are not known, and one that is always open such as crypto,
+    /// is never shut. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="time">
+    /// The time.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the hours say the market is shut at that time.
+    /// </returns>
+    private bool IsShutAt(AssetState state, DateTimeOffset time)
+    {
+        var hours = MarketCalendar.GetState(state.Asset, time);
+        if (hours == MarketState.Unknown && _slots.TryGetValue(state.Asset.ProviderId, out var slot) && slot.Provider is IMarketHoursProvider source)
+        {
+            hours = source.GetMarketState(state.Asset, time);
+        }
+
+        return hours is MarketState.Closed or MarketState.Break or MarketState.PreMarket or MarketState.AfterHours;
     }
 
     /// <summary>
@@ -1155,15 +1546,14 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <param name="snapshot">
     /// The snapshot that is raised.
     /// </param>
-    private static void MarkPublished(AssetState state, AssetSnapshot snapshot)
+    private void MarkPublished(AssetState state, AssetSnapshot snapshot)
     {
         state.LastHealth = snapshot.Health;
         state.LastMarketState = snapshot.MarketState;
         state.LastSparklineCount = snapshot.Sparkline.Count;
-        if (snapshot.Timeline is { } timeline)
-        {
-            state.LastSparklineBucket = BucketOf(state, timeline.AsOf);
-        }
+
+        // The clock and not the end of the chart, which stays behind it for a market shut for longer than the window.
+        state.LastSparklineBucket = BucketOf(state, _timeProvider.GetUtcNow());
     }
 
     /// <summary>
@@ -1179,7 +1569,7 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <returns>
     /// The number of the bucket.
     /// </returns>
-    private static long BucketOf(AssetState state, DateTimeOffset time) => time.UtcTicks / state.Series.Bucket.Ticks;
+    private static long BucketOf(AssetState state, DateTimeOffset time) => time.UtcTicks / state.SeriesToShow.Bucket.Ticks;
 
     /// <summary>
     /// Derives the health of an instrument. Must be called while holding the lock.
@@ -1445,6 +1835,142 @@ public sealed class MarketDataService : IAsyncDisposable
         /// Gets or sets the time before which the history is not asked for again after a failure.
         /// </summary>
         public DateTimeOffset NextSeedAttempt { get; set; }
+
+        /// <summary>
+        /// Gets or sets the state of the history of the chosen range, or <see langword="null"/> while the range is the last
+        /// hour.
+        /// </summary>
+        public RangeSeed? Range { get; set; }
+
+        /// <summary>
+        /// Gets the state of the history of each range loaded for the instrument, so that a range chosen again soon is shown
+        /// without loading it anew.
+        /// </summary>
+        public Dictionary<HistoryRange, RangeSeed> RangeSeeds { get; } = [];
+
+        /// <summary>
+        /// Gets what the last snapshots found about the shut stretches between the prices, so that a quote that leaves the
+        /// times of the prices as they were does not sample the hours of the market again.
+        /// </summary>
+        public ShutGapMemo ShutGaps { get; } = new();
+
+        /// <summary>
+        /// Gets or sets the check of whether the market of the instrument is shut at a time, made once so that a snapshot
+        /// does not allocate it again.
+        /// </summary>
+        public Func<DateTimeOffset, bool>? IsShut { get; set; }
+
+        /// <summary>
+        /// Gets the series the snapshot is made from: the one of the range once it holds history, even when no price of it
+        /// is in the window, so that the chart and the texts around it stay with the range; else the last hour.
+        /// </summary>
+        public SparklineSeries SeriesToShow => Range is { HasHistory: true } seed ? seed.Series : Series;
+    }
+
+    /// <summary>
+    /// The history of one range for one instrument: its series and how far the loading of it has come. Guarded by the lock
+    /// of the service.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    private sealed class RangeSeed(HistoryRange range)
+    {
+        /// <summary>
+        /// Gets the range.
+        /// </summary>
+        public HistoryRange Range { get; } = range;
+
+        /// <summary>
+        /// Gets the series of the range.
+        /// </summary>
+        public SparklineSeries Series { get; } = CreateSeries(range);
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the loading is over: the history arrived, or the loads gave up after
+        /// empty answers.
+        /// </summary>
+        public bool Seeded { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether <see cref="Series"/> holds loaded history. Unlike
+        /// <see cref="Seeded"/>, it stays <see langword="false"/> when the loads gave up after empty answers, so the last
+        /// hour keeps showing instead of a series that has only the live prices since then.
+        /// </summary>
+        public bool HasHistory { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether a load is in flight.
+        /// </summary>
+        public bool Seeding { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether <see cref="Series"/> lacks the prices of a time nothing was received, which
+        /// the source still has. The history stays on show while it is loaded again.
+        /// </summary>
+        public bool HasHole { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many loads ended without a single point.
+        /// </summary>
+        public int EmptyAnswers { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many loads failed in a row.
+        /// </summary>
+        public int Failures { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time before which the history is not asked for again after a failure.
+        /// </summary>
+        public DateTimeOffset NextAttempt { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the history arrived.
+        /// </summary>
+        public DateTimeOffset LoadedAt { get; set; }
+
+        /// <summary>
+        /// Marks the history to be loaded again when nothing was received since it was loaded for long enough to lose a
+        /// point of it, as over an outage or while the computer slept. Live prices cannot fill that in. A source that is
+        /// merely quiet asks again no more often than <see cref="RangeCacheLifetime"/>.
+        /// </summary>
+        /// <param name="lastReceived">
+        /// When the source last sent a quote.
+        /// </param>
+        /// <param name="received">
+        /// When the source sent the quote now.
+        /// </param>
+        public void NoteSilence(DateTimeOffset lastReceived, DateTimeOffset received)
+        {
+            if (!Seeded || !HasHistory)
+            {
+                return;
+            }
+
+            var silentSince = lastReceived > LoadedAt ? lastReceived : LoadedAt;
+            var twoBuckets = Series.Bucket * 2;
+            if (received - silentSince > (twoBuckets > RangeCacheLifetime ? twoBuckets : RangeCacheLifetime))
+            {
+                HasHole = true;
+                Seeded = false;
+            }
+        }
+
+        /// <summary>
+        /// Creates the empty series of a range.
+        /// </summary>
+        /// <param name="range">
+        /// The range.
+        /// </param>
+        /// <returns>
+        /// The series.
+        /// </returns>
+        private static SparklineSeries CreateSeries(HistoryRange range)
+        {
+            var spec = HistoryRangeSpec.For(range);
+            return new SparklineSeries(spec.Capacity, spec.Bucket);
+        }
     }
 
     /// <summary>
@@ -1480,6 +2006,11 @@ public sealed class MarketDataService : IAsyncDisposable
         /// Gets the cancellation source that stops the pump.
         /// </summary>
         public CancellationTokenSource Cts { get; } = new();
+
+        /// <summary>
+        /// Gets the gate that limits the loads of range history of the provider to <see cref="MaxConcurrentRangeLoads"/>.
+        /// </summary>
+        public SemaphoreSlim RangeLoadGate { get; } = new(MaxConcurrentRangeLoads, MaxConcurrentRangeLoads);
 
         /// <summary>
         /// Gets or sets the pump task.

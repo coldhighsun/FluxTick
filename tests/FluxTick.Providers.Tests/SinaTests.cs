@@ -941,4 +941,121 @@ public class SinaTests
 
         return time.GetUtcNow() - start;
     }
+
+    /// <summary>
+    /// Verifies a stock asks for the candle width and count of each range.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <param name="query">
+    /// The exact query that must be requested.
+    /// </param>
+    [Theory]
+    [InlineData(HistoryRange.Day, "?symbol=sh600000&scale=5&ma=no&datalen=48")]
+    [InlineData(HistoryRange.FiveDays, "?symbol=sh600000&scale=30&ma=no&datalen=40")]
+    [InlineData(HistoryRange.Month, "?symbol=sh600000&scale=60&ma=no&datalen=84")]
+    [InlineData(HistoryRange.HalfYear, "?symbol=sh600000&scale=240&ma=no&datalen=130")]
+    [InlineData(HistoryRange.Year, "?symbol=sh600000&scale=240&ma=no&datalen=260")]
+    public async Task Provider_StockRangeHistory_AsksForItsCandles(HistoryRange range, string query)
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(StockCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(new Asset("sina", "sh600000", "x", AssetClass.Equity), range);
+
+        provider.SupportsRange(range).Should().BeTrue();
+        handler.Requests.Single().RequestUri!.Query.Should().Be(query);
+    }
+
+    /// <summary>
+    /// Verifies a currency pair asks for the candle width and count of each range up to a month.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <param name="query">
+    /// The exact query that must be requested.
+    /// </param>
+    [Theory]
+    [InlineData(HistoryRange.Day, "?symbol=fx_ssgdcny&scale=5&datalen=288")]
+    [InlineData(HistoryRange.FiveDays, "?symbol=fx_ssgdcny&scale=30&datalen=240")]
+    [InlineData(HistoryRange.Month, "?symbol=fx_ssgdcny&scale=60&datalen=720")]
+    public async Task Provider_ForexRangeHistory_AsksForItsCandles(HistoryRange range, string query)
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(ForexCandles));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(new Asset("sina", "fx_ssgdcny", "x", AssetClass.Forex), range);
+
+        handler.Requests.Single().RequestUri!.Query.Should().Be(query);
+    }
+
+    /// <summary>
+    /// Verifies the year of a currency pair comes from its daily candles, dated at the start of the day in Beijing time.
+    /// </summary>
+    [Fact]
+    public async Task Provider_ForexYearHistory_UsesTheDailyCandles()
+    {
+        // The candle of today is dated at the end of the day, ahead of the clock, and is left to the live price.
+        const string daily = """var("2026-10-25,5.1,5.0,5.3,5.2,|2026-10-26,5.2,5.1,5.4,5.3,|2026-10-27,5.3,5.2,5.5,5.4,");""";
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(daily));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var history = await provider.GetHistoryAsync(new Asset("sina", "fx_ssgdcny", "x", AssetClass.Forex), HistoryRange.Year);
+
+        history.Select(p => p.Price).Should().Equal(5.2m, 5.3m);
+        history[0].Timestamp.Should().Be(new DateTimeOffset(2026, 10, 26, 0, 0, 0, TimeSpan.FromHours(8)));
+        handler.Requests.Single().RequestUri!.PathAndQuery.Should().EndWith("getDayKLine?symbol=fx_ssgdcny");
+    }
+
+    /// <summary>
+    /// Verifies a half year of a pair keeps only its days of the whole history the service answers with.
+    /// </summary>
+    [Fact]
+    public async Task Provider_ForexHalfYearHistory_KeepsItsDays()
+    {
+        var firstDay = new DateOnly(2025, 1, 1);
+        var rows = Enumerable.Range(0, 300).Select(i => $"{firstDay.AddDays(i):yyyy-MM-dd},5.1,5.0,5.3,5.2,");
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json($"var(\"{string.Join('|', rows)}\");"));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var history = await provider.GetHistoryAsync(new Asset("sina", "fx_ssgdcny", "x", AssetClass.Forex), HistoryRange.HalfYear);
+
+        history.Should().HaveCount(HistoryRangeSpec.For(HistoryRange.HalfYear).Capacity);
+        handler.Requests.Single().RequestUri!.PathAndQuery.Should().EndWith("getDayKLine?symbol=fx_ssgdcny");
+    }
+
+    /// <summary>
+    /// Verifies the longer ranges are answered for the codes that have candles, and for no others.
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the range is supported.
+    /// </param>
+    [Theory]
+    [InlineData("sh600000", true)]
+    [InlineData("fx_ssgdcny", true)]
+    [InlineData("sh000001", false)]
+    public async Task SupportsRange_Asset_FollowsTheCodeHavingCandles(string symbol, bool expected)
+    {
+        await using var provider = CreateProvider(new StubHttpHandler(_ => StubHttpHandler.Json("[]")), new FakeTimeProvider(TradingHoursStart));
+        IRangeHistoryProvider history = provider;
+
+        history.SupportsRange(new Asset("sina", symbol, "x", AssetClass.Equity), HistoryRange.Year).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the daily candle of a stock, which has a date only, is dated at the close of the market.
+    /// </summary>
+    [Fact]
+    public void ParseStockMinutes_DailyCandle_IsDatedAtTheClose()
+    {
+        var points = SinaParser.ParseStockMinutes("""[{"day":"2026-10-26","close":"10.060"},{"day":"2026-10-27","close":"10.090"}]""");
+
+        points.Select(p => p.Price).Should().Equal(10.06m, 10.09m);
+        points[0].Timestamp.Should().Be(new DateTimeOffset(2026, 10, 26, 15, 0, 0, TimeSpan.FromHours(8)));
+    }
 }

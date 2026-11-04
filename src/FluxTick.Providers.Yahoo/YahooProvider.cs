@@ -12,7 +12,7 @@ namespace FluxTick.Providers.Yahoo;
 /// API gives every new instrument its first price (and the market state, which the stream does not carry for a closed
 /// market) and takes over while the stream is down.
 /// </summary>
-public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class YahooProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The US indices, which trade in New York hours.
@@ -149,7 +149,31 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
     /// <inheritdoc />
     public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
     {
-        var data = await FetchChartAsync(asset.Symbol, intraday: true, cancellationToken).ConfigureAwait(false);
+        var (interval, span) = CandlesOf(HistoryRange.Hour);
+        var data = await FetchChartAsync(asset.Symbol, RecentQuery(interval, span), cancellationToken).ConfigureAwait(false);
+        return data.History;
+    }
+
+    /// <inheritdoc />
+    public bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
+    {
+        var (interval, span) = CandlesOf(range);
+        var data = await FetchChartAsync(asset.Symbol, RecentQuery(interval, span), cancellationToken).ConfigureAwait(false);
+        if (range is HistoryRange.HalfYear or HistoryRange.Year && data.History.Count < 2)
+        {
+            // Some instruments, such as the offshore yuan pairs (SGDCNH=X), have no daily history and answer with the
+            // current price alone; their hourly candles reach back over the range.
+            data = await FetchChartAsync(asset.Symbol, RecentQuery("60m", span), cancellationToken).ConfigureAwait(false);
+        }
+        else if (range == HistoryRange.Day && HistoryWindow.MissesLastSession(data.History, TimeProvider.GetUtcNow()))
+        {
+            // A shut market has few or no candles in the last day; the chart shows its last session once that is older.
+            data = await FetchChartAsync(asset.Symbol, RecentQuery(interval, HistoryWindow.LastSessionSpan), cancellationToken).ConfigureAwait(false);
+        }
+
         return data.History;
     }
 
@@ -304,7 +328,8 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
                 {
                     try
                     {
-                        var data = await FetchChartAsync(asset.Symbol, intraday: false, token).ConfigureAwait(false);
+                        // A poll only needs the quote in the metadata, which a single daily candle carries as well.
+                        var data = await FetchChartAsync(asset.Symbol, "interval=1d&range=1d", token).ConfigureAwait(false);
 
                         // The chart is parsed under the provider id and the symbol that was asked for, which is the one
                         // that was subscribed. The chart reports the regular session only, so when it comes after a pushed
@@ -401,14 +426,53 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
     }
 
     /// <summary>
+    /// Picks the candles of a range: the nearest width the service has for it, over the time of the range.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <returns>
+    /// The width of a candle, the way the service names it, and how far back to ask.
+    /// </returns>
+    private static (string Interval, TimeSpan Span) CandlesOf(HistoryRange range) => range switch
+    {
+        HistoryRange.Day => ("5m", HistoryRangeSpec.For(range).Window),
+        HistoryRange.FiveDays => ("30m", HistoryRangeSpec.For(range).Window),
+
+        // The service has no four-hour candle; the hours of a month are as many as its market trades.
+        HistoryRange.Month => ("60m", HistoryRangeSpec.For(range).Window),
+        HistoryRange.HalfYear or HistoryRange.Year => ("1d", HistoryRangeSpec.For(range).Window),
+        _ => ("1m", HistoryWindow.Span),
+    };
+
+    /// <summary>
+    /// Writes the query for the candles up to now. The minutes of the sparkline are asked for by time, not as a whole day:
+    /// that is about 390 candles, and a market that is shut answers with the day before although nothing of it would show.
+    /// A window without trades has no candles.
+    /// </summary>
+    /// <param name="interval">
+    /// The width of a candle, the way the service names it.
+    /// </param>
+    /// <param name="span">
+    /// How far back to ask.
+    /// </param>
+    /// <returns>
+    /// The query.
+    /// </returns>
+    private string RecentQuery(string interval, TimeSpan span)
+    {
+        var now = TimeProvider.GetUtcNow();
+        return $"interval={interval}&period1={(now - span).ToUnixTimeSeconds()}&period2={now.ToUnixTimeSeconds()}";
+    }
+
+    /// <summary>
     /// Downloads and parses the chart of a symbol.
     /// </summary>
     /// <param name="symbol">
     /// The Yahoo symbol.
     /// </param>
-    /// <param name="intraday">
-    /// Whether to request the 1-minute series of the day; a poll only needs the quote in the metadata, which a single
-    /// daily candle carries as well.
+    /// <param name="query">
+    /// The query that says which candles to answer with.
     /// </param>
     /// <param name="cancellationToken">
     /// A token to cancel the request.
@@ -416,14 +480,8 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IHistoryPro
     /// <returns>
     /// The parsed chart.
     /// </returns>
-    private async Task<YahooChartData> FetchChartAsync(string symbol, bool intraday, CancellationToken cancellationToken)
+    private async Task<YahooChartData> FetchChartAsync(string symbol, string query, CancellationToken cancellationToken)
     {
-        // The minutes of the sparkline are asked for by time, not as a whole day: that is about 390 candles, and a market that
-        // is shut answers with the day before although nothing of it would show. A window without trades has no candles.
-        var now = TimeProvider.GetUtcNow();
-        var query = intraday
-            ? $"interval=1m&period1={(now - HistoryWindow.Span).ToUnixTimeSeconds()}&period2={now.ToUnixTimeSeconds()}"
-            : "interval=1d&range=1d";
         var uri = EndpointOptions.Combine(_baseUri, $"/v8/finance/chart/{Uri.EscapeDataString(symbol)}?{query}");
         using var response = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)

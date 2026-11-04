@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Input;
 using Avalonia.Media;
 using FluxTick.Core.Application;
 
@@ -71,6 +73,39 @@ public sealed class SparklineControl : Control
         AvaloniaProperty.Register<SparklineControl, IBrush?>(nameof(BelowStroke), Brushes.Gray);
 
     /// <summary>
+    /// Identifies the <see cref="ShowPercentAxis"/> property.
+    /// </summary>
+    public static readonly StyledProperty<bool> ShowPercentAxisProperty =
+        AvaloniaProperty.Register<SparklineControl, bool>(nameof(ShowPercentAxis));
+
+    /// <summary>
+    /// Identifies the <see cref="IsHoverEnabled"/> property.
+    /// </summary>
+    public static readonly StyledProperty<bool> IsHoverEnabledProperty =
+        AvaloniaProperty.Register<SparklineControl, bool>(nameof(IsHoverEnabled));
+
+    /// <summary>
+    /// Identifies the <see cref="HoverIndex"/> property.
+    /// </summary>
+    public static readonly StyledProperty<int> HoverIndexProperty =
+        AvaloniaProperty.Register<SparklineControl, int>(nameof(HoverIndex), -1, defaultBindingMode: BindingMode.TwoWay);
+
+    /// <summary>
+    /// The space kept free around the chart.
+    /// </summary>
+    private const double ChartPad = 3;
+
+    /// <summary>
+    /// The least height of the control that has room for the labels of the percentage axis.
+    /// </summary>
+    private const double MinAxisHeight = 40;
+
+    /// <summary>
+    /// The font size of the labels of the percentage axis.
+    /// </summary>
+    private const double AxisFontSize = 9;
+
+    /// <summary>
     /// The dash pattern of the stretches without prices.
     /// </summary>
     private static readonly DashStyle GapDash = new([2, 2], 0);
@@ -89,6 +124,17 @@ public sealed class SparklineControl : Control
     /// The gradient under the line, kept while the color of <see cref="_fillColor"/> stays the same.
     /// </summary>
     private LinearGradientBrush? _fill;
+
+    /// <summary>
+    /// The laid out labels of the percentage axis by their text, kept so that a redraw (the pointer moving over the chart
+    /// draws it again) does not lay them out again.
+    /// </summary>
+    private readonly Dictionary<string, FormattedText> _axisLabels = [];
+
+    /// <summary>
+    /// The brush the labels in <see cref="_axisLabels"/> were made with.
+    /// </summary>
+    private IBrush? _axisLabelBrush;
 
     /// <summary>
     /// The color the gradient was made for.
@@ -110,7 +156,36 @@ public sealed class SparklineControl : Control
     /// </summary>
     static SparklineControl()
     {
-        AffectsRender<SparklineControl>(PointsProperty, TimelineProperty, IsStoppedProperty, StoppedStrokeProperty, StrokeProperty, AboveLevelProperty, BelowLevelProperty, AboveStrokeProperty, BelowStrokeProperty);
+        AffectsRender<SparklineControl>(PointsProperty, TimelineProperty, IsStoppedProperty, StoppedStrokeProperty, StrokeProperty, AboveLevelProperty, BelowLevelProperty, AboveStrokeProperty, BelowStrokeProperty, ShowPercentAxisProperty, IsHoverEnabledProperty, HoverIndexProperty);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the chart follows the pointer: it marks the price nearest to it and reports
+    /// it in <see cref="HoverIndex"/>.
+    /// </summary>
+    public bool IsHoverEnabled
+    {
+        get => GetValue(IsHoverEnabledProperty);
+        set => SetValue(IsHoverEnabledProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the index of the price that the pointer is nearest to, or -1 while it is not over the chart.
+    /// </summary>
+    public int HoverIndex
+    {
+        get => GetValue(HoverIndexProperty);
+        set => SetValue(HoverIndexProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the chart marks the change from the first price in steps of at least 5%,
+    /// when it is tall enough.
+    /// </summary>
+    public bool ShowPercentAxis
+    {
+        get => GetValue(ShowPercentAxisProperty);
+        set => SetValue(ShowPercentAxisProperty, value);
     }
 
     /// <summary>
@@ -213,6 +288,24 @@ public sealed class SparklineControl : Control
     }
 
     /// <inheritdoc />
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        if (IsHoverEnabled && Timeline is { } timeline && (Points?.Count ?? 0) == timeline.Times.Count)
+        {
+            var width = Bounds.Width - (ChartPad * 2);
+            HoverIndex = SparklineHover.IndexAt(e.GetPosition(this).X, width, ChartPad, timeline.Times, timeline.AsOf, timeline.Window);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        HoverIndex = -1;
+    }
+
+    /// <inheritdoc />
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -230,13 +323,20 @@ public sealed class SparklineControl : Control
     {
         base.Render(context);
         var bounds = Bounds;
+
+        // Only what is drawn takes the pointer, so without a fill the empty part above the line would end the hover.
+        if (IsHoverEnabled)
+        {
+            context.FillRectangle(Brushes.Transparent, new Rect(bounds.Size));
+        }
+
         var stroke = Stroke;
         if (stroke is null || bounds.Width < 8 || bounds.Height < 8)
         {
             return;
         }
 
-        const double pad = 3;
+        const double pad = ChartPad;
         var width = bounds.Width - pad * 2;
         var height = bounds.Height - pad * 2;
         var points = Points ?? [];
@@ -250,6 +350,12 @@ public sealed class SparklineControl : Control
         // Most rows have no alert; they then allocate nothing for the levels.
         var levelPrices = LevelPrices(AboveLevel, BelowLevel);
         var hasAbove = AboveLevel is not null;
+
+        // A range with no price in its window has nothing to show.
+        if (points.Count == 0 && timeline is { CoversRange: true })
+        {
+            return;
+        }
 
         if (!timed && points.Count < 2)
         {
@@ -293,9 +399,15 @@ public sealed class SparklineControl : Control
         // The alert levels go under the prices.
         DrawLevels(context, levelPrices, hasAbove, AboveStroke, BelowStroke, min, max, bounds.Width, pad, height);
 
+        // The axis goes under the prices too; the first price of the window is the 0% it measures from.
+        if (ShowPercentAxis && bounds.Height >= MinAxisHeight)
+        {
+            DrawPercentAxis(context, (double)points[0], min, max, gapBrush, bounds.Width, pad, height);
+        }
+
         // After the last price of a source that stopped, however it shows (stale, reconnecting, failed), the last price is
-        // carried on to the edge; the same when the last price is simply long ago.
-        var trailing = timed && (IsStopped || timeline!.IsGap(times![^1], timeline.AsOf));
+        // carried on to the edge; the same when the last price is simply long ago, unless the market was shut since.
+        var trailing = timed && (IsStopped || timeline!.HasTrailingGap);
         if (timed)
         {
             // Before the first price nothing is known, so the first price is carried back to the edge.
@@ -314,7 +426,7 @@ public sealed class SparklineControl : Control
         var runStart = 0;
         for (var i = 1; i <= coordinates.Length; i++)
         {
-            var endsRun = i == coordinates.Length || (timed && timeline!.IsGap(times![i - 1], times[i]));
+            var endsRun = i == coordinates.Length || (timed && timeline!.IsGapAt(i));
             if (!endsRun)
             {
                 continue;
@@ -330,6 +442,18 @@ public sealed class SparklineControl : Control
         }
 
         context.DrawEllipse(trailing ? gapBrush : stroke, null, coordinates[^1], 2.2, 2.2);
+
+        // The price under the pointer: a vertical line through it, and a dot on the line of prices.
+        if (IsHoverEnabled && HoverIndex >= 0 && HoverIndex < coordinates.Length)
+        {
+            var hovered = coordinates[HoverIndex];
+            using (context.PushOpacity(0.5))
+            {
+                context.DrawLine(new Pen(gapBrush, 1), new Point(hovered.X, pad), new Point(hovered.X, pad + height));
+            }
+
+            context.DrawEllipse(stroke, null, hovered, 3, 3);
+        }
     }
 
     /// <summary>
@@ -450,6 +574,84 @@ public sealed class SparklineControl : Control
         }
 
         return prices;
+    }
+
+    /// <summary>
+    /// Draws the percentage axis: a faint line and a label for each tick of <see cref="SparklineScale.PercentTicks"/>.
+    /// </summary>
+    /// <param name="context">
+    /// The drawing context.
+    /// </param>
+    /// <param name="baseline">
+    /// The price that stands for 0%.
+    /// </param>
+    /// <param name="bottom">
+    /// The price at the bottom of the chart.
+    /// </param>
+    /// <param name="top">
+    /// The price at the top of the chart.
+    /// </param>
+    /// <param name="brush">
+    /// The brush of the lines and labels.
+    /// </param>
+    /// <param name="totalWidth">
+    /// The width of the control.
+    /// </param>
+    /// <param name="pad">
+    /// The space kept free around the chart.
+    /// </param>
+    /// <param name="height">
+    /// The height of the chart without the space around it.
+    /// </param>
+    private void DrawPercentAxis(DrawingContext context, double baseline, double bottom, double top, IBrush brush, double totalWidth, double pad, double height)
+    {
+        var pen = new Pen(brush, 0.5);
+        foreach (var (percent, position) in SparklineScale.PercentTicks(bottom, top, baseline))
+        {
+            var y = pad + (height * (1 - position));
+            using (context.PushOpacity(0.35))
+            {
+                context.DrawLine(pen, new Point(pad, y), new Point(totalWidth - pad, y));
+            }
+
+            var text = AxisLabel(SparklineScale.PercentLabel(percent), brush);
+
+            // The label sits on its line, and is moved inside the chart when the line is at an edge.
+            var top0 = Math.Clamp(y - text.Height, 0, Math.Max(0, pad + height - text.Height));
+            using (context.PushOpacity(0.7))
+            {
+                context.DrawText(text, new Point(pad + 1, top0));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the laid out label of a tick of the percentage axis, made once per text and brush.
+    /// </summary>
+    /// <param name="label">
+    /// The text of the label.
+    /// </param>
+    /// <param name="brush">
+    /// The brush of the label.
+    /// </param>
+    /// <returns>
+    /// The formatted text.
+    /// </returns>
+    private FormattedText AxisLabel(string label, IBrush brush)
+    {
+        if (!ReferenceEquals(_axisLabelBrush, brush))
+        {
+            _axisLabels.Clear();
+            _axisLabelBrush = brush;
+        }
+
+        if (!_axisLabels.TryGetValue(label, out var text))
+        {
+            text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, AxisFontSize, brush);
+            _axisLabels[label] = text;
+        }
+
+        return text;
     }
 
     /// <summary>

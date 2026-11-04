@@ -5,6 +5,7 @@
         xmlns:views="using:FluxTick.App.Views"
         xmlns:controls="using:FluxTick.App.Controls"
         xmlns:core="using:FluxTick.Core.Application"
+        xmlns:abs="using:FluxTick.Abstractions"
         x:Class="FluxTick.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="FluxTick"
@@ -85,6 +86,33 @@
                   <MenuItem Header="{loc:T CardSize_Large}" ToggleType="Radio"
                             IsChecked="{Binding IsCardSizeLarge, Mode=OneWay}"
                             Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Large}" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+            <!-- A line rising and falling reads as "chart"; a drop down picks the time span every chart shows. -->
+            <Button Name="ChartRangeButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Settings_ChartRange}"
+                    AutomationProperties.Name="{loc:T Settings_ChartRange}">
+              <Path Data="M1.5 10l3-4 2.5 2 3-5 2.5 3" />
+              <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                  <MenuItem Header="{loc:T HistoryRange_Hour}" ToggleType="Radio"
+                            IsChecked="{Binding IsChartRangeHour, Mode=OneWay}"
+                            Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.Hour}" />
+                  <MenuItem Header="{loc:T HistoryRange_Day}" ToggleType="Radio"
+                            IsChecked="{Binding IsChartRangeDay, Mode=OneWay}"
+                            Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.Day}" />
+                  <MenuItem Header="{loc:T HistoryRange_FiveDays}" ToggleType="Radio"
+                            IsChecked="{Binding IsChartRangeFiveDays, Mode=OneWay}"
+                            Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.FiveDays}" />
+                  <MenuItem Header="{loc:T HistoryRange_Month}" ToggleType="Radio"
+                            IsChecked="{Binding IsChartRangeMonth, Mode=OneWay}"
+                            Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.Month}" />
+                  <MenuItem Header="{loc:T HistoryRange_HalfYear}" ToggleType="Radio"
+                            IsChecked="{Binding IsChartRangeHalfYear, Mode=OneWay}"
+                            Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.HalfYear}" />
+                  <MenuItem Header="{loc:T HistoryRange_Year}" ToggleType="Radio"
+                            IsChecked="{Binding IsChartRangeYear, Mode=OneWay}"
+                            Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.Year}" />
                 </MenuFlyout>
               </Button.Flyout>
             </Button>

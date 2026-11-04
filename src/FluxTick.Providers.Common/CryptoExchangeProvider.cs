@@ -7,7 +7,7 @@ namespace FluxTick.Providers.Common;
 /// Base class for crypto exchange sources that stream tickers over a WebSocket and use REST for one-minute history
 /// and for the list of tradable pairs behind symbol search. Derived classes describe the exchange's wire formats.
 /// </summary>
-public abstract class CryptoExchangeProvider : WebSocketProviderBase, IHistoryProvider, ISymbolSearchProvider
+public abstract class CryptoExchangeProvider : WebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider
 {
     /// <summary>
     /// How long a downloaded pair list stays valid.
@@ -96,7 +96,7 @@ public abstract class CryptoExchangeProvider : WebSocketProviderBase, IHistoryPr
     protected abstract string SymbolsRequest { get; }
 
     /// <summary>
-    /// Parses the response to <see cref="HistoryRequest"/>.
+    /// Parses the response to <see cref="HistoryRequest(Asset)"/>.
     /// </summary>
     /// <param name="json">
     /// The response body.
@@ -117,6 +117,40 @@ public abstract class CryptoExchangeProvider : WebSocketProviderBase, IHistoryPr
     /// </returns>
     protected abstract IReadOnlyList<ListedSymbol> ParseSymbols(string json);
 
+    /// <summary>
+    /// Gets the path and query, relative to the REST endpoint, of the request for the candles of a range longer than the
+    /// last hour. The candles are about <see cref="HistoryRangeSpec.Bucket"/> apart and reach back over
+    /// <see cref="HistoryRangeSpec.Window"/>, as far as the exchange allows in one answer. Only asked for when
+    /// <see cref="SupportsRange"/> says yes.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <param name="range">
+    /// The range, which is not <see cref="HistoryRange.Hour"/>.
+    /// </param>
+    /// <returns>
+    /// The request, starting with <c>/</c>.
+    /// </returns>
+    protected virtual string HistoryRequest(Asset asset, HistoryRange range) => HistoryRequest(asset);
+
+    /// <summary>
+    /// Parses the response to <see cref="HistoryRequest(Asset, HistoryRange)"/>.
+    /// </summary>
+    /// <param name="json">
+    /// The response body.
+    /// </param>
+    /// <param name="range">
+    /// The range that was asked for.
+    /// </param>
+    /// <returns>
+    /// The close prices, oldest first.
+    /// </returns>
+    protected virtual IReadOnlyList<PricePoint> ParseHistory(string json, HistoryRange range) => ParseHistory(json);
+
+    /// <inheritdoc />
+    public virtual bool SupportsRange(HistoryRange range) => range == HistoryRange.Hour;
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
     {
@@ -124,6 +158,24 @@ public abstract class CryptoExchangeProvider : WebSocketProviderBase, IHistoryPr
 
         var json = await _http.GetStringAsync(EndpointOptions.Combine(_restBase, HistoryRequest(asset)), cancellationToken).ConfigureAwait(false);
         return ParseHistory(json);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        if (range == HistoryRange.Hour)
+        {
+            return await GetHistoryAsync(asset, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!SupportsRange(range))
+        {
+            return [];
+        }
+
+        var json = await _http.GetStringAsync(EndpointOptions.Combine(_restBase, HistoryRequest(asset, range)), cancellationToken).ConfigureAwait(false);
+        return ParseHistory(json, range);
     }
 
     /// <inheritdoc />

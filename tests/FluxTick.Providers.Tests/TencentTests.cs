@@ -527,4 +527,176 @@ public class TencentTests
             time.Advance(step);
             return false;
         });
+
+    /// <summary>
+    /// Verifies the minutes of the last five days, which the service sends newest first, come out oldest first with the
+    /// real times.
+    /// </summary>
+    [Fact]
+    public void ParseFiveDayMinutes_Days_AreOrderedOldestFirst()
+    {
+        const string json =
+            """{"code":0,"data":{"sh600000":{"data":[{"date":"20261022","data":["0930 9.66 1 1","0931 9.65 2 2"]},{"date":"20261021","data":["0930 9.50 1 1"]}]}}}""";
+
+        var points = TencentParser.ParseFiveDayMinutes(json, "sh600000");
+
+        points.Select(p => p.Price).Should().Equal(9.50m, 9.66m, 9.65m);
+        points[0].Timestamp.Should().Be(new DateTimeOffset(2026, 10, 21, 9, 30, 0, TimeSpan.FromHours(8)));
+    }
+
+    /// <summary>
+    /// Verifies a daily candle is dated at the close of its market and its close price is taken.
+    /// </summary>
+    /// <param name="code">
+    /// The code.
+    /// </param>
+    /// <param name="hour">
+    /// The expected hour of the close.
+    /// </param>
+    [Theory]
+    [InlineData("sh600000", 15)]
+    [InlineData("hk00700", 16)]
+    public void ParseDailyCandles_Candle_IsDatedAtTheClose(string code, int hour)
+    {
+        var json = """{"code":0,"data":{"CODE":{"qfqday":[["2026-10-21","9.8","9.9","10","9.7","1"],["2026-10-22","9.9","10.2","10.3","9.8","1"]]}}}""".Replace("CODE", code, StringComparison.Ordinal);
+
+        var points = TencentParser.ParseDailyCandles(json, code);
+
+        points.Select(p => p.Price).Should().Equal(9.9m, 10.2m);
+        points[0].Timestamp.Should().Be(new DateTimeOffset(2026, 10, 21, hour, 0, 0, TimeSpan.FromHours(8)));
+    }
+
+    /// <summary>
+    /// Verifies each range asks the service that has its candles.
+    /// </summary>
+    /// <param name="code">
+    /// The code.
+    /// </param>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <param name="expected">
+    /// The exact path and query that must be requested.
+    /// </param>
+    [Theory]
+    [InlineData("sh600000", HistoryRange.Day, "/appstock/app/day/query?code=sh600000")]
+    [InlineData("sh600000", HistoryRange.FiveDays, "/appstock/app/day/query?code=sh600000")]
+    [InlineData("sh600000", HistoryRange.Month, "/appstock/app/fqkline/get?param=sh600000,day,,,32,qfq")]
+    [InlineData("sh600000", HistoryRange.HalfYear, "/appstock/app/fqkline/get?param=sh600000,day,,,130,qfq")]
+    [InlineData("sh600000", HistoryRange.Year, "/appstock/app/fqkline/get?param=sh600000,day,,,260,qfq")]
+    [InlineData("hk00700", HistoryRange.Year, "/appstock/app/hkfqkline/get?param=hk00700,day,,,260,qfq")]
+    public async Task GetHistoryAsync_Range_AsksTheServiceForIt(string code, HistoryRange range, string expected)
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json("""{"code":0,"data":{}}"""));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        await provider.GetHistoryAsync(new Asset("tencent", code, "x", AssetClass.Equity), range);
+
+        handler.Requests.Single().RequestUri!.PathAndQuery.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the candle of today, dated at the close, is left out until the close has passed, so that no point lies ahead
+    /// of the clock.
+    /// </summary>
+    /// <param name="utcHour">
+    /// The hour of the clock on the day of the last candle, in UTC (the close is at 07:00).
+    /// </param>
+    /// <param name="expected">
+    /// The number of candles expected.
+    /// </param>
+    [Theory]
+    [InlineData(2, 1)]
+    [InlineData(8, 2)]
+    public async Task GetHistoryAsync_CandleOfToday_IsKeptOnlyAfterTheClose(int utcHour, int expected)
+    {
+        const string json = """{"code":0,"data":{"sh600000":{"qfqday":[["2026-10-27","9.8","9.9","10","9.7","1"],["2026-10-28","9.9","10.2","10.3","9.8","1"]]}}}""";
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(json));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, utcHour, 0, 0, TimeSpan.Zero));
+        await using var provider = CreateProvider(handler, time);
+
+        var points = await provider.GetHistoryAsync(new Asset("tencent", "sh600000", "x", AssetClass.Equity), HistoryRange.Month);
+
+        points.Should().HaveCount(expected);
+    }
+
+    /// <summary>
+    /// Verifies a day keeps the earlier sessions of the answer, as its window reaches into them while the market is open.
+    /// </summary>
+    [Fact]
+    public async Task GetHistoryAsync_Day_KeepsEarlierSessionsForTheWindow()
+    {
+        const string json =
+            """{"code":0,"data":{"sh600000":{"data":[{"date":"20261022","data":["0930 9.66 1 1","0931 9.65 2 2"]},{"date":"20261021","data":["0930 9.50 1 1"]}]}}}""";
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json(json));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var points = await provider.GetHistoryAsync(new Asset("tencent", "sh600000", "x", AssetClass.Equity), HistoryRange.Day);
+
+        points.Select(p => p.Price).Should().Equal(9.50m, 9.66m, 9.65m);
+    }
+
+    /// <summary>
+    /// Verifies a row of the minutes without a positive price is left out.
+    /// </summary>
+    [Fact]
+    public void ParseFiveDayMinutes_ZeroPrice_IsLeftOut()
+    {
+        const string json =
+            """{"code":0,"data":{"sh600000":{"data":[{"date":"20261022","data":["0930 0.00 1 1","0931 9.65 2 2"]}]}}}""";
+
+        var points = TencentParser.ParseFiveDayMinutes(json, "sh600000");
+
+        points.Select(p => p.Price).Should().Equal(9.65m);
+    }
+
+    /// <summary>
+    /// Verifies a daily candle without a positive close is left out.
+    /// </summary>
+    [Fact]
+    public void ParseDailyCandles_ZeroClose_IsLeftOut()
+    {
+        const string json =
+            """{"code":0,"data":{"sh600000":{"qfqday":[["2026-10-21","9.50","0.000","9.60","9.40","1"],["2026-10-22","9.50","9.65","9.70","9.40","1"]]}}}""";
+
+        var points = TencentParser.ParseDailyCandles(json, "sh600000");
+
+        points.Select(p => p.Price).Should().Equal(9.65m);
+    }
+
+    /// <summary>
+    /// Verifies only the codes the longer services have candles for are said to be supported.
+    /// </summary>
+    /// <param name="code">
+    /// The symbol.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the range is supported.
+    /// </param>
+    [Theory]
+    [InlineData("sh600000", true)]
+    [InlineData("hk00700", true)]
+    [InlineData("usAAPL", false)]
+    public async Task SupportsRange_Asset_FollowsTheCodeHavingCandles(string code, bool expected)
+    {
+        await using var provider = CreateProvider(new StubHttpHandler(_ => StubHttpHandler.Json("{}")), new FakeTimeProvider(TradingHoursStart));
+        IRangeHistoryProvider history = provider;
+
+        history.SupportsRange(new Asset("tencent", code, "x", AssetClass.Equity), HistoryRange.Year).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies a US instrument gets no longer history and costs no request.
+    /// </summary>
+    [Fact]
+    public async Task GetHistoryAsync_UsInstrumentRange_ReturnsEmptyWithoutRequest()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json("{}"));
+        await using var provider = CreateProvider(handler, new FakeTimeProvider(TradingHoursStart));
+
+        var points = await provider.GetHistoryAsync(new Asset("tencent", "usAAPL", "Apple", AssetClass.Equity), HistoryRange.Year);
+
+        points.Should().BeEmpty();
+        handler.Requests.Should().BeEmpty();
+    }
 }

@@ -11,7 +11,7 @@ namespace FluxTick.Providers.Sina;
 /// are part of the address of the stream, so a change of the watchlist connects again. The quote service gives every new
 /// instrument its first price and takes over while the stream is down.
 /// </summary>
-public sealed class SinaProvider : RestBackedWebSocketProviderBase, IHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class SinaProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -125,7 +125,17 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, IHistoryProv
             : null;
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default) =>
+        GetHistoryAsync(asset, HistoryRange.Hour, cancellationToken);
+
+    /// <inheritdoc />
+    public bool SupportsRange(HistoryRange range) => true;
+
+    /// <inheritdoc />
+    public bool SupportsRange(Asset asset, HistoryRange range) => SinaParser.HasMinuteHistory(SinaParser.ToRequestCode(asset.Symbol));
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
     {
         var code = SinaParser.ToRequestCode(asset.Symbol);
         if (!SinaParser.HasMinuteHistory(code))
@@ -134,17 +144,59 @@ public sealed class SinaProvider : RestBackedWebSocketProviderBase, IHistoryProv
         }
 
         var forex = SinaParser.IsForex(code);
-        var uri = forex
-            ? EndpointOptions.Combine(ForexHistoryBase, $"/forex/api/jsonp.php/var/NewForexService.getMinKline?symbol={Uri.EscapeDataString(code)}&scale=1&datalen={HistoryCandles}")
-            : EndpointOptions.Combine(StockHistoryBase, $"/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol={Uri.EscapeDataString(code)}&scale=1&ma=no&datalen={HistoryCandles}");
-        var text = Encoding.UTF8.GetString(await GetBytesAsync(uri, cancellationToken).ConfigureAwait(false));
-        var candles = forex ? SinaParser.ParseForexMinutes(text) : SinaParser.ParseStockMinutes(text);
+        IReadOnlyList<PricePoint> candles;
+        if (forex && range is HistoryRange.HalfYear or HistoryRange.Year)
+        {
+            // The daily candles of a pair come as the whole history since 2014, and the service has no way to ask for fewer.
+            var daily = Encoding.UTF8.GetString(await GetBytesAsync(
+                EndpointOptions.Combine(ForexHistoryBase, $"/forex/api/jsonp.php/var/NewForexService.getDayKLine?symbol={Uri.EscapeDataString(code)}"),
+                cancellationToken).ConfigureAwait(false));
+            var all = SinaParser.ParseForexDaily(daily);
+            var days = HistoryRangeSpec.For(range).Capacity;
+            candles = all.Count > days ? [.. all.Skip(all.Count - days)] : all;
+        }
+        else
+        {
+            // The services take the width of a candle in minutes (240 is a day) and a count of candles, not a time range.
+            var (scale, count) = CandlesOf(range, forex);
+            var uri = forex
+                ? EndpointOptions.Combine(ForexHistoryBase, $"/forex/api/jsonp.php/var/NewForexService.getMinKline?symbol={Uri.EscapeDataString(code)}&scale={(int)scale.TotalMinutes}&datalen={count}")
+                : EndpointOptions.Combine(StockHistoryBase, $"/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol={Uri.EscapeDataString(code)}&scale={(int)scale.TotalMinutes}&ma=no&datalen={count}");
+            var text = Encoding.UTF8.GetString(await GetBytesAsync(uri, cancellationToken).ConfigureAwait(false));
+            candles = forex ? SinaParser.ParseForexMinutes(text) : SinaParser.ParseStockMinutes(text);
+        }
 
         // A candle is labelled with the end of its minute, so the one under way is dated in the future; its price is the
         // live price, which the quotes bring, and a point ahead of the clock would sit beyond the end of the sparkline.
         var now = TimeProvider.GetUtcNow();
         return [.. candles.Where(p => p.Timestamp <= now)];
     }
+
+    /// <summary>
+    /// Works out the candles to ask for to cover a range. A stock trades four hours a day (48 candles of 5 minutes, 8 of
+    /// 30 minutes, 4 of an hour), so a count that covers the range of a pair, which trades all day, would reach back
+    /// further than the range for a stock: one session for a day, five for five days, about 21 for a month.
+    /// </summary>
+    /// <param name="range">
+    /// The range.
+    /// </param>
+    /// <param name="forex">
+    /// Whether the code is a currency pair.
+    /// </param>
+    /// <returns>
+    /// The width of a candle and the number of candles. A month of a pair is asked for in hours, finer than the bucket of
+    /// the range: the 4-hour candle of the service reaches back only about two weeks for some pairs (the yuan pairs), less
+    /// than the month, while the hourly ones reach back a month.
+    /// </returns>
+    private static (TimeSpan Scale, int Count) CandlesOf(HistoryRange range, bool forex) => range switch
+    {
+        HistoryRange.Day => forex ? (TimeSpan.FromMinutes(5), 288) : (TimeSpan.FromMinutes(5), 48),
+        HistoryRange.FiveDays => forex ? (TimeSpan.FromMinutes(30), 240) : (TimeSpan.FromMinutes(30), 40),
+        HistoryRange.Month => forex ? (TimeSpan.FromHours(1), 720) : (TimeSpan.FromHours(1), 84),
+        HistoryRange.HalfYear => (TimeSpan.FromHours(4), 130),
+        HistoryRange.Year => (TimeSpan.FromHours(4), 260),
+        _ => (TimeSpan.FromMinutes(1), HistoryCandles),
+    };
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default)
