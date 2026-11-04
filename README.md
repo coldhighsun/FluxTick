@@ -127,6 +127,14 @@ does not run by double-click right away; approve it once:
 3. Open *System Settings → Privacy & Security*, scroll to the message about FluxTick and click *Open Anyway*, then
    confirm. (On macOS 14 and older, right-click the app and choose *Open* instead; macOS 15 removed that shortcut.)
 
+With Homebrew the quarantine flag is removed for you, so the app opens right away:
+
+```bash
+brew install --cask coldhighsun/tap/fluxtick
+```
+
+`brew upgrade` then installs new stable releases.
+
 Alternatively, remove the quarantine flag in a terminal before the first launch:
 
 ```bash

@@ -110,3 +110,71 @@ jobs:
             SHA256SUMS.txt
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+  # Updates the Homebrew cask in coldhighsun/homebrew-tap. Pre-releases are skipped, like the in-app updater does.
+  # HOMEBREW_TAP_TOKEN is a PAT with write access to contents of the tap repository.
+  homebrew:
+    name: Homebrew cask
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: package-osx-arm64
+
+      - uses: actions/checkout@v7
+        with:
+          repository: coldhighsun/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Write cask
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sha=$(sha256sum "FluxTick-${GITHUB_REF_NAME}-osx-arm64.dmg" | cut -d' ' -f1)
+          mkdir -p tap/Casks
+          cat > tap/Casks/fluxtick.rb <<EOF
+          cask "fluxtick" do
+            version "${version}"
+            sha256 "${sha}"
+
+            url "https://github.com/coldhighsun/FluxTick/releases/download/v#{version}/FluxTick-v#{version}-osx-arm64.dmg"
+            name "FluxTick"
+            desc "Floating widget for tracking multiple financial markets"
+            homepage "https://github.com/coldhighsun/FluxTick"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on arch: :arm64
+            depends_on macos: ">= :monterey"
+
+            app "FluxTick.app"
+
+            # The app is only signed ad hoc, so drop the quarantine flag that would make Gatekeeper block it.
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/FluxTick.app"]
+            end
+
+            zap trash: "~/.config/FluxTick"
+          end
+          EOF
+
+      - name: Commit and push
+        shell: bash
+        working-directory: tap
+        run: |
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "Cask is already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/fluxtick.rb
+          git commit -m "fluxtick ${GITHUB_REF_NAME#v}"
+          git push
