@@ -113,6 +113,11 @@ internal sealed class ListDragController
     private double _spacing;
 
     /// <summary>
+    /// Tells the window while a drag lasts, or <see langword="null"/> when nobody listens.
+    /// </summary>
+    private readonly DragActivity? _activity;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ListDragController"/> class and starts listening to the host.
     /// </summary>
     /// <param name="host">
@@ -130,8 +135,12 @@ internal sealed class ListDragController
     /// <param name="isEnabled">
     /// Optional check that turns dragging off; see the field of the same name.
     /// </param>
-    public ListDragController(ItemsControl host, ScrollViewer scroller, Func<int, int, Task> move, Action<Control, bool>? lift = null, Func<bool>? isEnabled = null)
+    /// <param name="activity">
+    /// Optional; told when a drag starts and when it ends.
+    /// </param>
+    public ListDragController(ItemsControl host, ScrollViewer scroller, Func<int, int, Task> move, Action<Control, bool>? lift = null, Func<bool>? isEnabled = null, DragActivity? activity = null)
     {
+        _activity = activity;
         _host = host;
         _scroller = scroller;
         _move = move;
@@ -297,6 +306,7 @@ internal sealed class ListDragController
         }
 
         _dragging = true;
+        _activity?.Begin();
         _slots = [.. _panel.Children.Select(c => (c.Bounds.Top, c.Bounds.Height))];
         _spacing = Math.Max(0, _slots[1].Top - (_slots[0].Top + _slots[0].Height));
         _transforms = [.. _panel.Children.Select(_ => new TranslateTransform())];
@@ -459,6 +469,8 @@ internal sealed class ListDragController
         {
             pointer.Capture(null);
         }
+
+        _activity?.End();
     }
 
     /// <summary>

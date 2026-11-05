@@ -177,6 +177,11 @@ internal sealed class CardDragController
     private List<(Control Control, int ZIndex)> _raised = [];
 
     /// <summary>
+    /// Tells the window while a drag lasts, or <see langword="null"/> when nobody listens.
+    /// </summary>
+    private readonly DragActivity? _activity;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="CardDragController"/> class and starts listening to the host.
     /// </summary>
     /// <param name="host">
@@ -194,8 +199,12 @@ internal sealed class CardDragController
     /// <param name="viewModel">
     /// Supplies the main view model.
     /// </param>
-    public CardDragController(ItemsControl host, ScrollViewer scroller, Border indicator, Control owner, Func<MainViewModel?> viewModel)
+    /// <param name="activity">
+    /// Optional; told when a drag starts and when it ends.
+    /// </param>
+    public CardDragController(ItemsControl host, ScrollViewer scroller, Border indicator, Control owner, Func<MainViewModel?> viewModel, DragActivity? activity = null)
     {
+        _activity = activity;
         _host = host;
         _scroller = scroller;
         _indicator = indicator;
@@ -390,6 +399,7 @@ internal sealed class CardDragController
         }
 
         _dragging = true;
+        _activity?.Begin();
         pointer.Capture(_host);
 
         _card.Classes.Set("dragging", true);
@@ -676,6 +686,8 @@ internal sealed class CardDragController
         {
             pointer.Capture(null);
         }
+
+        _activity?.End();
     }
 
     /// <summary>

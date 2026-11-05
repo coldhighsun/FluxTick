@@ -144,6 +144,38 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
+    /// While a card, a group or a list row is dragged the window stays out even when the pointer is away, and hides
+    /// again once the drag is over.
+    /// </summary>
+    [Fact]
+    public void Leave_WhileContentDragging_WaitsInsteadOfHiding()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+
+        model.SetContentDragging(true);
+        model.Leave(pointerOver: false, canHide: true).Should().Be(DockLeave.Wait);
+
+        model.SetContentDragging(false);
+        model.Leave(pointerOver: false, canHide: true).Should().Be(DockLeave.Hide);
+    }
+
+    /// <summary>
+    /// A slide to the edge that was held back is dropped when a drag inside the window started meanwhile, but a slide
+    /// the user asked for directly is not.
+    /// </summary>
+    [Fact]
+    public void StillWanted_HideWhileContentDragging_IsFalseUnlessExplicit()
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.SetContentDragging(true);
+
+        model.StillWanted(hide: true, explicitRequest: false, pointerOver: false, canHide: true).Should().BeFalse();
+        model.StillWanted(hide: true, explicitRequest: true, pointerOver: false, canHide: true).Should().BeTrue();
+    }
+
+    /// <summary>
     /// A window that is not docked, or is hidden already, has nothing to leave.
     /// </summary>
     [Fact]

@@ -120,6 +120,12 @@ internal sealed class EdgeDockModel
     public bool Dragging { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether the user is dragging a card, a group or a list row inside the window. The window
+    /// stays out until the drop, even when the pointer leaves it on the way.
+    /// </summary>
+    public bool ContentDragging { get; private set; }
+
+    /// <summary>
     /// Gets the position the window was last sent to. A move that ends there is the window's own, even when the
     /// system reports it after the slide is over.
     /// </summary>
@@ -161,6 +167,14 @@ internal sealed class EdgeDockModel
     /// <see langword="true"/> while the drag lasts.
     /// </param>
     public void SetDragging(bool dragging) => Dragging = dragging;
+
+    /// <summary>
+    /// Records that the user started or stopped dragging a card, a group or a list row inside the window.
+    /// </summary>
+    /// <param name="dragging">
+    /// <see langword="true"/> while the drag lasts.
+    /// </param>
+    public void SetContentDragging(bool dragging) => ContentDragging = dragging;
 
     /// <summary>
     /// Records that the window starts moving by itself to a position.
@@ -237,14 +251,15 @@ internal sealed class EdgeDockModel
     /// Whether the pointer is on the window now.
     /// </param>
     /// <param name="canHide">
-    /// Whether nothing needs the window to stay out.
+    /// Whether nothing outside the model needs the window to stay out. A drag inside the window is tracked by the model
+    /// itself (<see cref="ContentDragging"/>) and is not part of this.
     /// </param>
     /// <returns>
     /// <see langword="true"/> for a docked window when the request was direct, or when the pointer is still where it
     /// was when it caused the slide.
     /// </returns>
     public bool StillWanted(bool hide, bool explicitRequest, bool pointerOver, bool canHide) =>
-        IsDocked && (explicitRequest || (hide ? !pointerOver && canHide : pointerOver));
+        IsDocked && (explicitRequest || (hide ? !pointerOver && canHide && !ContentDragging : pointerOver));
 
     /// <summary>
     /// Decides what a click on the tray icon does.
@@ -457,7 +472,8 @@ internal sealed class EdgeDockModel
     /// Whether the pointer is on the window.
     /// </param>
     /// <param name="canHide">
-    /// Whether nothing needs the window to stay out.
+    /// Whether nothing outside the model needs the window to stay out. A drag inside the window is tracked by the model
+    /// itself (<see cref="ContentDragging"/>) and is not part of this.
     /// </param>
     /// <returns>
     /// The decision.
@@ -469,7 +485,7 @@ internal sealed class EdgeDockModel
             return DockLeave.Stop;
         }
 
-        return canHide ? DockLeave.Hide : DockLeave.Wait;
+        return canHide && !ContentDragging ? DockLeave.Hide : DockLeave.Wait;
     }
 
     /// <summary>
