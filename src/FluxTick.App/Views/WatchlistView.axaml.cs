@@ -39,6 +39,26 @@ public sealed partial class WatchlistView : UserControl
     private readonly GroupDragController _groupDrag;
 
     /// <summary>
+    /// Follows the drags of cards, groups and list rows.
+    /// </summary>
+    private readonly DragActivity _dragActivity = new();
+
+    /// <summary>
+    /// Ends the reporting of drags, for when the window is hidden mid-drag and the controllers may never report the end.
+    /// </summary>
+    public void CancelContentDrags() => _dragActivity.Cancel();
+
+    /// <summary>
+    /// Raised with <see langword="true"/> when the user starts dragging a card, a group or a list row, and with
+    /// <see langword="false"/> when the drag has ended.
+    /// </summary>
+    public event Action<bool>? ContentDragChanged
+    {
+        add => _dragActivity.Changed += value;
+        remove => _dragActivity.Changed -= value;
+    }
+
+    /// <summary>
     /// The group whose title is being edited in place, or <see langword="null"/> when none is.
     /// </summary>
     private WatchSectionViewModel? _renaming;
@@ -104,11 +124,11 @@ public sealed partial class WatchlistView : UserControl
             _clickScope = null;
         };
         SectionsHost.AddHandler(PointerPressedEvent, OnSectionsPointerPressedTunnel, RoutingStrategies.Tunnel);
-        _cardDrag = new CardDragController(SectionsHost, CardsScroller, DropIndicator, this, () => DataContext as MainViewModel);
-        _groupDrag = new GroupDragController(SectionsHost, CardsScroller, this, () => DataContext as MainViewModel);
+        _cardDrag = new CardDragController(SectionsHost, CardsScroller, DropIndicator, this, () => DataContext as MainViewModel, _dragActivity);
+        _groupDrag = new GroupDragController(SectionsHost, CardsScroller, this, () => DataContext as MainViewModel, _dragActivity);
         SectionsHost.AddHandler(ContextRequestedEvent, OnSectionsContextRequested, RoutingStrategies.Tunnel);
         Root.AddHandler(ContextRequestedEvent, OnRootContextRequested, RoutingStrategies.Tunnel);
-        _ = new ListDragController(RowsHost, Scroller, MoveRowAsync, LiftRow, () => DataContext is MainViewModel { IsListSorted: false });
+        _ = new ListDragController(RowsHost, Scroller, MoveRowAsync, LiftRow, () => DataContext is MainViewModel { IsListSorted: false }, _dragActivity);
     }
 
     /// <summary>

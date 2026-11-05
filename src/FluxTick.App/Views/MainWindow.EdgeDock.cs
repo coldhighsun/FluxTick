@@ -321,6 +321,25 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
+    /// Keeps a docked window out while a card, a group or a list row is dragged, and starts the wait to hide it again
+    /// once the drag is over.
+    /// </summary>
+    /// <param name="dragging">
+    /// <see langword="true"/> when a drag started, <see langword="false"/> when it ended.
+    /// </param>
+    private void OnContentDragChanged(bool dragging)
+    {
+        _dock.SetContentDragging(dragging);
+        if (dragging)
+        {
+            CancelDockLeave();
+            return;
+        }
+
+        ResumeDockLeave();
+    }
+
+    /// <summary>
     /// Restarts the wait for the position to stop changing.
     /// </summary>
     /// <param name="realign">
@@ -442,8 +461,9 @@ public sealed partial class MainWindow
                 break;
             case DockLeave.Wait:
                 // A menu or pop-up holds the window open, so look again once it may be gone. A tool window or a window
-                // sent to the tray does not need watching: closing the tool window starts the wait again.
-                if (IsVisible && _toolWindow is null)
+                // sent to the tray does not need watching: closing the tool window starts the wait again. The same holds
+                // for a drag inside the window, whose end starts the wait again.
+                if (IsVisible && _toolWindow is null && !_dock.ContentDragging)
                 {
                     ScheduleDockLeave();
                 }

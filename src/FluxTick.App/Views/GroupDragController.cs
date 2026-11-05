@@ -116,6 +116,11 @@ internal sealed class GroupDragController
     private int _savedZIndex;
 
     /// <summary>
+    /// Tells the window while a drag lasts, or <see langword="null"/> when nobody listens.
+    /// </summary>
+    private readonly DragActivity? _activity;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GroupDragController"/> class and starts listening to the host.
     /// </summary>
     /// <param name="host">
@@ -130,8 +135,12 @@ internal sealed class GroupDragController
     /// <param name="viewModel">
     /// Supplies the main view model.
     /// </param>
-    public GroupDragController(ItemsControl host, ScrollViewer scroller, Control owner, Func<MainViewModel?> viewModel)
+    /// <param name="activity">
+    /// Optional; told when a drag starts and when it ends.
+    /// </param>
+    public GroupDragController(ItemsControl host, ScrollViewer scroller, Control owner, Func<MainViewModel?> viewModel, DragActivity? activity = null)
     {
+        _activity = activity;
         _host = host;
         _scroller = scroller;
         _owner = owner;
@@ -325,6 +334,7 @@ internal sealed class GroupDragController
         }
 
         _dragging = true;
+        _activity?.Begin();
         pointer.Capture(_host);
         _keyHost = TopLevel.GetTopLevel(_owner);
         _keyHost?.AddHandler(InputElement.KeyDownEvent, OnTopLevelKeyDown, RoutingStrategies.Tunnel);
@@ -436,6 +446,8 @@ internal sealed class GroupDragController
         {
             pointer.Capture(null);
         }
+
+        _activity?.End();
     }
 
     /// <summary>

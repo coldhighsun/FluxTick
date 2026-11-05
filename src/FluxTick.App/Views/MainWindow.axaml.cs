@@ -171,6 +171,15 @@ public sealed partial class MainWindow : Window
         };
         Resized += OnResized;
         Watchlist.SizeChanged += (_, _) => ApplyHeightRule();
+        Watchlist.ContentDragChanged += OnContentDragChanged;
+        PropertyChanged += (_, e) =>
+        {
+            // A window hidden mid-drag may never report the end of the drag, which would keep the dock from hiding.
+            if (e.Property == IsVisibleProperty && !IsVisible)
+            {
+                Watchlist.CancelContentDrags();
+            }
+        };
         Watchlist.ListContentHeightChanged += (_, _) =>
         {
             ApplyHeightRule();
