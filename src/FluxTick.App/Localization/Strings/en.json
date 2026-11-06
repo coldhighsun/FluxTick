@@ -198,7 +198,7 @@
   "Settings_FontSystem": "System default",
   "Settings_LanguageHint": "Auto: follow the system language",
   "Settings_LaunchAtLogin": "Launch at startup",
-  "Settings_LaunchAtLoginHint": "Start automatically when you sign in to Windows",
+  "Settings_LaunchAtLoginHint": "Start automatically when you sign in",
   "Settings_Layout": "Layout",
   "Settings_LayoutHint": "Cards wrap to fill the window width",
   "Settings_LockPosition": "Lock position",
