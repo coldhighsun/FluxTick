@@ -249,7 +249,7 @@
   "Settings_FontSystem": "系统默认",
   "Settings_LanguageHint": "自动：跟随系统语言",
   "Settings_LaunchAtLogin": "开机自启动",
-  "Settings_LaunchAtLoginHint": "登录 Windows 时自动启动",
+  "Settings_LaunchAtLoginHint": "登录系统时自动启动",
   "Settings_Layout": "布局",
   "Settings_LayoutHint": "卡片自动换行以填满窗口宽度",
   "Settings_LockPosition": "锁定位置",

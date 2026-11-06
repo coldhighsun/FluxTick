@@ -183,6 +183,11 @@ public static class AppHost
         {
             services.AddSingleton<IAutoStartService, WindowsAutoStartService>();
         }
+        else if (OperatingSystem.IsMacOS() && !demo)
+        {
+            // A launch agent in the user's Library folder, which the isolated demo mode must not touch either.
+            services.AddSingleton<IAutoStartService, MacAutoStartService>();
+        }
         else
         {
             services.AddSingleton<IAutoStartService, NullAutoStartService>();
