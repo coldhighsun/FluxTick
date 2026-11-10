@@ -1029,7 +1029,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         if (quote.Change is { } change)
         {
             lines.Add(Loc.Get(
-                ChangeOverRange is null ? "Row_Change" : "Row_ChangeVsReference",
+                quote.Basis == ReferenceBasis.Rolling24Hours ? "Row_ChangeVs24h" : "Row_ChangeVsPrevClose",
                 PriceFormatter.FormatPrice(change, Asset.AssetClass),
                 PriceFormatter.FormatPercent(quote.ChangePercent)));
         }
