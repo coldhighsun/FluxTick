@@ -83,7 +83,7 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
         }
 
         var spec = HistoryRangeSpec.For(range);
-        var walk = new Walk(asset.Symbol, now);
+        var walk = new Walk(asset.Symbol, asset.AssetClass, now);
         var prices = new decimal[spec.Capacity];
         for (var i = prices.Length - 1; i >= 0; i--)
         {
@@ -125,7 +125,7 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
             var now = TimeProvider.GetUtcNow();
             foreach (var asset in added)
             {
-                _walks[asset.Id] = new Walk(asset.Symbol, now);
+                _walks[asset.Id] = new Walk(asset.Symbol, asset.AssetClass, now);
             }
 
             if (_walks.Count == 0)
@@ -170,7 +170,7 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
                 {
                     if (walk.LastTradedAt is { } tradedAt)
                     {
-                        Publish(new Quote(id, walk.Price, walk.Reference, tradedAt));
+                        Publish(new Quote(id, walk.Price, walk.Reference, tradedAt) { Basis = walk.Basis });
                     }
 
                     continue;
@@ -178,7 +178,7 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
 
                 walk.Step();
                 walk.LastTradedAt = now;
-                Publish(new Quote(id, walk.Price, walk.Reference, now));
+                Publish(new Quote(id, walk.Price, walk.Reference, now) { Basis = walk.Basis });
             }
         }
     }
@@ -209,14 +209,18 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
         /// <param name="symbol">
         /// The symbol that seeds the walk.
         /// </param>
+        /// <param name="assetClass">
+        /// The class of the instrument, which decides what its reference price stands for.
+        /// </param>
         /// <param name="startedAt">
         /// When the walk starts.
         /// </param>
-        public Walk(string symbol, DateTimeOffset startedAt)
+        public Walk(string symbol, AssetClass assetClass, DateTimeOffset startedAt)
         {
             var seed = StableHash(symbol);
             _random = new Random(seed);
             _hasTradingHours = symbol == MarketHoursSymbol;
+            Basis = assetClass == AssetClass.Crypto ? ReferenceBasis.Rolling24Hours : ReferenceBasis.PreviousClose;
             _startedAt = startedAt;
             Reference = Round(10m + (seed & 0xFFFF) / 10m);
             Price = Reference;
@@ -247,6 +251,12 @@ public sealed class SimulatedProvider(ProviderDescriptor descriptor, TimeSpan in
             var elapsed = now - _startedAt;
             return TimeSpan.FromTicks(elapsed.Ticks % cycle.Ticks) >= OpenFor;
         }
+
+        /// <summary>
+        /// Gets what <see cref="Reference"/> stands for: the price 24 hours ago for crypto, which never closes, and the
+        /// previous close for everything else.
+        /// </summary>
+        public ReferenceBasis Basis { get; }
 
         /// <summary>
         /// Gets the starting price, used as the change reference.

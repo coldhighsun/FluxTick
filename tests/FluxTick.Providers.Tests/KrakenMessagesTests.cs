@@ -30,8 +30,36 @@ public class KrakenMessagesTests
         quote.AssetId.Should().Be(new AssetId("kraken", "BTC/USD"));
         quote.Price.Should().Be(81418.9m);
         quote.Reference.Should().Be(84559.1m);
+        quote.Basis.Should().Be(ReferenceBasis.Rolling24Hours);
         quote.Timestamp.Should().Be(new DateTimeOffset(2026, 10, 22, 15, 34, 43, TimeSpan.Zero).AddTicks(2297050));
         quote.TimeIsEstimated.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the percent derived from the reference agrees with the <c>change_pct</c> Kraken sends. This only shows
+    /// that the reference is consistent with the two fields of the message; that the window slides was checked by hand
+    /// against live data (see <see cref="KrakenMessages.Parse"/>), not by this test.
+    /// </summary>
+    [Fact]
+    public void ParseTickers_Snapshot_DerivedPercentMatchesChangePct()
+    {
+        var quote = KrakenMessages.Parse(Ticker, "kraken", Fallback).Quotes.Should().ContainSingle().Subject;
+
+        quote.ChangePercent.Should().BeApproximately(-3.71m, 0.01m);
+    }
+
+    /// <summary>
+    /// Verifies a change that would put the reference at or below zero is not trusted.
+    /// </summary>
+    [Fact]
+    public void ParseTickers_ChangeLargerThanPrice_LeavesReferenceEmpty()
+    {
+        const string json = """{"channel":"ticker","type":"update","data":[{"symbol":"X/USD","last":1.5,"change":1.5}]}""";
+
+        var quote = KrakenMessages.Parse(json, "kraken", Fallback).Quotes.Should().ContainSingle().Subject;
+
+        quote.Reference.Should().BeNull();
+        quote.ChangePercent.Should().BeNull();
     }
 
     /// <summary>

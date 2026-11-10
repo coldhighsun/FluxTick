@@ -1,3 +1,4 @@
+using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
 
 namespace FluxTick.Providers.Tests;
@@ -25,6 +26,7 @@ public class BinanceMessagesTests
         quote.AssetId.Should().Be(new FluxTick.Abstractions.AssetId("binance", "BTCUSDT"));
         quote.Price.Should().Be(67000.10m);
         quote.Reference.Should().Be(66000m);
+        quote.Basis.Should().Be(ReferenceBasis.Rolling24Hours);
         quote.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000));
     }
 

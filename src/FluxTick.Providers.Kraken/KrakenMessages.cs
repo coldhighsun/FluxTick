@@ -39,7 +39,9 @@ internal static class KrakenMessages
     /// <summary>
     /// Parses a received message with a single parse: the tickers of a <c>ticker</c> snapshot or update, or the
     /// error of a failed control reply. Kraken sends no 24h open, so the reference price is the last price minus
-    /// the 24h change.
+    /// the 24h change. Kraken's documentation calls <c>change</c> the "24-hour price change" without saying whether
+    /// that window slides. A live check (2026-11-10 09:25 UTC, BTC/USD) found the derived reference within 0.1% of the
+    /// price 24 hours earlier and about 1.6% away from the UTC midnight open, so the window slides.
     /// </summary>
     /// <param name="json">
     /// The received text.
@@ -107,7 +109,7 @@ internal static class KrakenMessages
                 ? price - change
                 : null;
             DateTimeOffset? traded = JsonValues.TryGetIsoTime(item, "timestamp", out var parsed) ? parsed : null;
-            quotes.Add(new Quote(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime) { TimeIsEstimated = traded is null });
+            quotes.Add(CryptoQuote.Create(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime, traded is null));
         }
 
         return quotes;

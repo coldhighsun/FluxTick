@@ -30,6 +30,12 @@ public sealed record Quote(AssetId AssetId, decimal Price, decimal? Reference, D
     public MarketState? Market { get; init; }
 
     /// <summary>
+    /// Gets what <see cref="Reference"/> is the price of. A source that measures the change over a sliding 24 hours, as the
+    /// crypto exchanges do, sets <see cref="ReferenceBasis.Rolling24Hours"/>; the default is the previous close.
+    /// </summary>
+    public ReferenceBasis Basis { get; init; } = ReferenceBasis.PreviousClose;
+
+    /// <summary>
     /// Gets the absolute change versus <see cref="Reference"/>, or <see langword="null"/> when no reference is known.
     /// </summary>
     public decimal? Change => Reference is null ? null : Price - Reference.Value;

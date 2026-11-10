@@ -31,6 +31,7 @@ public class BybitMessagesTests
         quote.AssetId.Should().Be(new AssetId("bybit", "BTCUSDT"));
         quote.Price.Should().Be(81513.7m);
         quote.Reference.Should().Be(84625.6m);
+        quote.Basis.Should().Be(ReferenceBasis.Rolling24Hours);
         quote.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1792683284127));
         quote.TimeIsEstimated.Should().BeFalse();
     }
