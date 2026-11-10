@@ -30,6 +30,7 @@ public class CoinbaseMessagesTests
         quote.AssetId.Should().Be(new AssetId("coinbase", "BTC-USD"));
         quote.Price.Should().Be(81421.96m);
         quote.Reference.Should().Be(84474.36m);
+        quote.Basis.Should().Be(ReferenceBasis.Rolling24Hours);
         quote.Timestamp.Should().Be(new DateTimeOffset(2026, 10, 22, 15, 34, 42, TimeSpan.Zero).AddTicks(4132980));
         quote.TimeIsEstimated.Should().BeFalse();
     }

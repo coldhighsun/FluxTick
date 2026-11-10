@@ -83,7 +83,7 @@ internal static class BinanceMessages
         }
 
         decimal? reference = JsonValues.TryGetPositiveDecimal(root, "o", out var openPrice) ? openPrice : null;
-        quote = new Quote(
+        quote = CryptoQuote.Create(
             new AssetId(providerId, symbol.GetString()!),
             price,
             reference,

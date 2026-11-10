@@ -32,6 +32,7 @@ public class OkxMessagesTests
         quote.AssetId.Should().Be(new AssetId("okx", "BTC-USDT"));
         quote.Price.Should().Be(81519.3m);
         quote.Reference.Should().Be(84593.9m);
+        quote.Basis.Should().Be(ReferenceBasis.Rolling24Hours);
         quote.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1792683280970));
         quote.TimeIsEstimated.Should().BeFalse();
     }

@@ -85,6 +85,26 @@ public class SimulatedProviderTests
     }
 
     /// <summary>
+    /// Verifies the reference of a crypto instrument is read as a rolling 24h price and that of any other class as a
+    /// previous close.
+    /// </summary>
+    [Theory]
+    [InlineData(AssetClass.Crypto, ReferenceBasis.Rolling24Hours)]
+    [InlineData(AssetClass.Equity, ReferenceBasis.PreviousClose)]
+    [InlineData(AssetClass.Forex, ReferenceBasis.PreviousClose)]
+    public async Task Stream_ByAssetClass_SetsTheReferenceBasis(AssetClass assetClass, ReferenceBasis expected)
+    {
+        var time = new FakeTimeProvider();
+        var asset = new Asset(SimulatedProviderFactory.ProviderId, "SIM-BASIS", "Basis", assetClass);
+        await using var provider = Create(time);
+        await provider.SetSubscriptionsAsync([asset]);
+
+        var quotes = await CollectAsync(provider, time, 2);
+
+        quotes.Should().OnlyContain(q => q.Basis == expected);
+    }
+
+    /// <summary>
     /// Verifies the market hours symbol trades for its open time, then repeats its last price with the old trade time
     /// for its closed time, and trades again after that.
     /// </summary>

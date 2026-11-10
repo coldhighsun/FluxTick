@@ -78,7 +78,7 @@ internal static class BybitMessages
         DateTimeOffset? traded = root.TryGetProperty("ts", out var ts) && JsonValues.TryGetUnixMilliseconds(ts, out var parsed)
             ? parsed
             : null;
-        quote = new Quote(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime) { TimeIsEstimated = traded is null };
+        quote = CryptoQuote.Create(new AssetId(providerId, symbol), price, reference, traded ?? fallbackTime, traded is null);
         return true;
     }
 
