@@ -185,6 +185,25 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies the Traditional Chinese language choice is written under its own name and read back.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTripsTraditionalChinese()
+    {
+        var path = Path.Combine(_directory, "settings.json");
+        var store = new JsonSettingsStore(path, NullLogger<JsonSettingsStore>.Instance);
+        var settings = new AppSettings();
+        settings.Appearance.Language = LanguageMode.ZhTW;
+
+        await store.SaveAsync(settings);
+        var loaded = await store.LoadAsync();
+
+        (await File.ReadAllTextAsync(path)).Should().Contain("\"ZhTW\"");
+        loaded.Should().NotBeNull();
+        loaded!.Appearance.Language.Should().Be(LanguageMode.ZhTW);
+    }
+
+    /// <summary>
     /// Verifies the list layout without grouping is used, including for a settings file written before cards existed.
     /// </summary>
     [Fact]

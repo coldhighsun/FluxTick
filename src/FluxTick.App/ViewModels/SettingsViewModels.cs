@@ -1759,7 +1759,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             ShowDockIcon = current.General.ShowDockIcon;
             BossKey = _settings.Current.General.BossKey;
             IsRecordingBossKey = false;
-            BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
+            BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.IsChinese(Loc.Instance.Language));
             Opacity = current.Appearance.Opacity;
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Locked = current.Appearance.Locked;

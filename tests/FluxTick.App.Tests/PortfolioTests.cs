@@ -156,7 +156,7 @@ public class PortfolioTests
     {
         await using var h = new Harness(Harness.WatchlistOf(Btc));
         h.SettingsPage.Reload();
-        h.SettingsPage.BaseCurrency.Should().Be(CurrencyCodes.DefaultBase(Loc.Instance.Language == Loc.SimplifiedChinese));
+        h.SettingsPage.BaseCurrency.Should().Be(CurrencyCodes.DefaultBase(Loc.IsChinese(Loc.Instance.Language)));
         h.Store.Stored!.General.BaseCurrency.Should().BeNull("loading the page is not a choice");
 
         h.SettingsPage.BaseCurrency = "HKD";
@@ -164,6 +164,29 @@ public class PortfolioTests
         await Harness.EventuallyAsync(() => h.Store.Stored!.General.BaseCurrency == "HKD");
         h.SettingsPage.Reload();
         h.SettingsPage.BaseCurrency.Should().Be("HKD");
+    }
+
+    /// <summary>
+    /// Verifies that both Chinese languages start the base currency at CNY, and English at USD.
+    /// </summary>
+    [Theory]
+    [InlineData(Loc.SimplifiedChinese, "CNY")]
+    [InlineData(Loc.TraditionalChinese, "CNY")]
+    [InlineData(Loc.English, "USD")]
+    public async Task BaseCurrency_NotChosen_StartsFromTheLanguage(string language, string expected)
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        Loc.Instance.Select(language);
+        try
+        {
+            h.SettingsPage.Reload();
+
+            h.SettingsPage.BaseCurrency.Should().Be(expected);
+        }
+        finally
+        {
+            Loc.Instance.Select(Loc.English);
+        }
     }
 
     /// <summary>

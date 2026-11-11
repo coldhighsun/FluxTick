@@ -53,7 +53,8 @@ public enum ThemeMode
 public enum LanguageMode
 {
     /// <summary>
-    /// Follow the system language: Chinese systems get Simplified Chinese, everything else English.
+    /// Follow the system language: Traditional Chinese systems get Traditional Chinese, other Chinese systems get
+    /// Simplified Chinese, everything else English.
     /// </summary>
     Auto,
 
@@ -66,6 +67,11 @@ public enum LanguageMode
     /// Always English.
     /// </summary>
     En,
+
+    /// <summary>
+    /// Always Traditional Chinese.
+    /// </summary>
+    ZhTW,
 }
 
 /// <summary>
