@@ -159,4 +159,23 @@ internal static class EdgeDockRules
     public static bool StaysOffOtherScreens(PixelRect hidden, IEnumerable<PixelRect> otherScreens) =>
         !otherScreens.Any(screen => screen.Intersects(hidden));
 
+    /// <summary>
+    /// Determines whether the pointer is on the window, judged by where the system says the pointer is rather than by
+    /// the pointer events the window received, which stop being reliable after a pop-up or a drag took the pointer.
+    /// </summary>
+    /// <param name="window">
+    /// The window bounds in screen pixels.
+    /// </param>
+    /// <param name="pointer">
+    /// The pointer position in screen pixels.
+    /// </param>
+    /// <param name="margin">
+    /// How far outside the window the pointer still counts, in screen pixels, because a window flush with a screen edge
+    /// has the pointer resting on the edge pixel.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the pointer is inside the window or within the margin around it.
+    /// </returns>
+    public static bool ContainsPointer(PixelRect window, PixelPoint pointer, int margin) =>
+        new PixelRect(window.X - margin, window.Y - margin, window.Width + (2 * margin), window.Height + (2 * margin)).Contains(pointer);
 }

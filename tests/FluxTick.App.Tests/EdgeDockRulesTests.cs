@@ -102,4 +102,64 @@ public sealed class EdgeDockRulesTests
         EdgeDockRules.StaysOffOtherScreens(new PixelRect(1916, 300, 340, 420), [neighbor]).Should().BeTrue();
         EdgeDockRules.StaysOffOtherScreens(new PixelRect(-336, 300, 340, 420), []).Should().BeTrue();
     }
+
+    /// <summary>
+    /// A pointer inside the window, or within the margin around it, is on the window; one further out is not.
+    /// </summary>
+    /// <param name="x">
+    /// The horizontal position of the pointer.
+    /// </param>
+    /// <param name="y">
+    /// The vertical position of the pointer.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the pointer counts as on the window.
+    /// </param>
+    [Theory]
+    [InlineData(1600, 500, true)]
+    [InlineData(1580, 300, true)]
+    [InlineData(1919, 719, true)]
+    [InlineData(1579, 500, true)]
+    [InlineData(1920, 500, true)]
+    [InlineData(1578, 500, false)]
+    [InlineData(1921, 500, true)]
+    [InlineData(1922, 500, false)]
+    [InlineData(1600, 299, true)]
+    [InlineData(1600, 720, true)]
+    [InlineData(1600, 298, false)]
+    [InlineData(1600, 721, true)]
+    [InlineData(1600, 722, false)]
+    public void ContainsPointer_Position_DependsOnBoundsAndMargin(int x, int y, bool expected)
+    {
+        var window = new PixelRect(1580, 300, 340, 420);
+
+        EdgeDockRules.ContainsPointer(window, new PixelPoint(x, y), margin: 1).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// A window on a screen left of the primary one has negative coordinates, and the margin works there as well.
+    /// </summary>
+    /// <param name="x">
+    /// The horizontal position of the pointer.
+    /// </param>
+    /// <param name="y">
+    /// The vertical position of the pointer.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the pointer counts as on the window.
+    /// </param>
+    [Theory]
+    [InlineData(-1000, 200, true)]
+    [InlineData(-1281, 200, true)]
+    [InlineData(-1282, 200, false)]
+    [InlineData(-939, 200, true)]
+    [InlineData(-938, 200, false)]
+    [InlineData(-1000, -1, true)]
+    [InlineData(-1000, -2, false)]
+    public void ContainsPointer_NegativeCoordinates_DependsOnBoundsAndMargin(int x, int y, bool expected)
+    {
+        var window = new PixelRect(-1280, 0, 340, 420);
+
+        EdgeDockRules.ContainsPointer(window, new PixelPoint(x, y), margin: 1).Should().Be(expected);
+    }
 }

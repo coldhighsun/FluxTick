@@ -283,7 +283,7 @@ public sealed partial class MainWindow
                 var slide = _dockSlideAfterScreens;
                 _dockSlideAfterScreens = null;
                 if (EnsureDockArea() && slide is { } held
-                    && _dock.StillWanted(held.Hide, held.Explicit, IsPointerOver, CanAutoHide()))
+                    && _dock.StillWanted(held.Hide, held.Explicit, IsPointerOnWindow(), CanAutoHide()))
                 {
                     SlideDock(held.Hide, held.Explicit);
                 }
@@ -314,7 +314,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void ResumeDockLeave()
     {
-        if (_dock.ShouldResumeLeave(IsVisible, IsPointerOver))
+        if (_dock.ShouldResumeLeave(IsVisible, IsPointerOnWindow()))
         {
             ScheduleDockLeave();
         }
@@ -442,7 +442,7 @@ public sealed partial class MainWindow
 
         MoveDock(shown.Value);
         RaiseGeometryChanged();
-        if (!IsPointerOver)
+        if (!IsPointerOnWindow())
         {
             ScheduleDockLeave();
         }
@@ -454,7 +454,7 @@ public sealed partial class MainWindow
     private void OnDockLeave()
     {
         _dockLeave = null;
-        switch (_dock.Leave(IsPointerOver, CanAutoHide()))
+        switch (_dock.Leave(IsPointerOnWindow(), CanAutoHide()))
         {
             case DockLeave.Hide:
                 SlideDock(hide: true);
@@ -471,6 +471,19 @@ public sealed partial class MainWindow
                 break;
         }
     }
+
+    /// <summary>
+    /// Determines whether the pointer is on the window. The pointer events alone are not enough: after a menu, a pop-up
+    /// or a drag took the pointer the window may be told the pointer left and never be told it is back, although it has
+    /// not moved. Where the system tells the position of the pointer, that settles it.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the window has the pointer, or the pointer is within the window's bounds.
+    /// </returns>
+    private bool IsPointerOnWindow() =>
+        IsPointerOver
+        || (TrayCursor.TryGetPosition(Screens, out var pointer)
+            && EdgeDockRules.ContainsPointer(CurrentPixelBounds(), pointer, ScaledPixels(1)));
 
     /// <summary>
     /// Determines whether nothing needs the window to stay out: no tool window, no menu or pop-up, no drag going on.
