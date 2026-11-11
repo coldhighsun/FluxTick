@@ -59,6 +59,11 @@ public sealed partial class App : Application
     private string? _fontSetting;
 
     /// <summary>
+    /// Whether the interface text was last set up with the Traditional Chinese fallback font.
+    /// </summary>
+    private bool _fontTraditional;
+
+    /// <summary>
     /// The tray menu entry that shows or hides the window.
     /// </summary>
     private NativeMenuItem? _trayToggle;
@@ -1066,14 +1071,20 @@ public sealed partial class App : Application
 
         // A font that was removed from the computer since it was chosen gives way to the font of the system.
         var chosen = _settings.Current.Appearance.Font;
-        if (string.Equals(_fontSetting, chosen, StringComparison.Ordinal))
+        var traditional = Loc.IsTraditionalChinese(Loc.Instance.Language);
+        if (string.Equals(_fontSetting, chosen, StringComparison.Ordinal) && _fontTraditional == traditional)
         {
             return;
         }
 
-        var family = FontResolver.Resolve(chosen.Length > 0 && FontCatalog.IsInstalled(chosen) ? chosen : string.Empty);
+        var family = FontResolver.Resolve(
+            chosen.Length > 0 && FontCatalog.IsInstalled(chosen) ? chosen : string.Empty,
+            OperatingSystem.IsWindows(),
+            OperatingSystem.IsMacOS(),
+            traditional);
         Resources["UiFont"] = FontFamily.Parse(family);
         _fontSetting = chosen;
+        _fontTraditional = traditional;
     }
 
     /// <summary>

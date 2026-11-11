@@ -19,28 +19,20 @@ public static class FontResolver
     /// <param name="isMacOs">
     /// Whether the app runs on macOS. When neither this nor <paramref name="isWindows"/> is set, Linux is assumed.
     /// </param>
+    /// <param name="traditional">
+    /// Whether the Chinese fallback font should be one for Traditional Chinese.
+    /// </param>
     /// <returns>
     /// The font families, the first one that has a character wins.
     /// </returns>
-    public static string Resolve(string? family, bool isWindows, bool isMacOs)
+    public static string Resolve(string? family, bool isWindows, bool isMacOs, bool traditional)
     {
         // A comma would split the name into two families.
         var chosen = family?.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
         return string.IsNullOrEmpty(chosen)
-            ? $"{Latin(isWindows, isMacOs)}, {Chinese(isWindows, isMacOs)}"
-            : $"{chosen}, {Chinese(isWindows, isMacOs)}";
+            ? $"{Latin(isWindows, isMacOs)}, {Chinese(isWindows, isMacOs, traditional)}"
+            : $"{chosen}, {Chinese(isWindows, isMacOs, traditional)}";
     }
-
-    /// <summary>
-    /// Gets the font family of a setting on the system the app runs on.
-    /// </summary>
-    /// <param name="family">
-    /// The chosen family name, or an empty text for the font of the system.
-    /// </param>
-    /// <returns>
-    /// The font families.
-    /// </returns>
-    public static string Resolve(string? family) => Resolve(family, OperatingSystem.IsWindows(), OperatingSystem.IsMacOS());
 
     /// <summary>
     /// Gets the Chinese font of a system, for the characters the other font does not have.
@@ -51,11 +43,15 @@ public static class FontResolver
     /// <param name="isMacOs">
     /// Whether the app runs on macOS.
     /// </param>
+    /// <param name="traditional">
+    /// Whether to pick a font for Traditional Chinese instead of Simplified Chinese.
+    /// </param>
     /// <returns>
     /// The font family.
     /// </returns>
-    private static string Chinese(bool isWindows, bool isMacOs) =>
-        isWindows ? "Microsoft YaHei UI" : isMacOs ? "PingFang SC" : "Noto Sans CJK SC";
+    private static string Chinese(bool isWindows, bool isMacOs, bool traditional) => traditional
+        ? isWindows ? "Microsoft JhengHei UI" : isMacOs ? "PingFang TC" : "Noto Sans CJK TC"
+        : isWindows ? "Microsoft YaHei UI" : isMacOs ? "PingFang SC" : "Noto Sans CJK SC";
 
     /// <summary>
     /// Gets the default Latin font of a system.

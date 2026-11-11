@@ -22,12 +22,23 @@ public sealed class Loc : INotifyPropertyChanged
     public const string SimplifiedChinese = "zh-CN";
 
     /// <summary>
+    /// The culture name of Traditional Chinese.
+    /// </summary>
+    public const string TraditionalChinese = "zh-TW";
+
+    /// <summary>
+    /// The culture names of the Chinese languages, so that a new variant is added in one place.
+    /// </summary>
+    private static readonly string[] ChineseLanguages = [SimplifiedChinese, TraditionalChinese];
+
+    /// <summary>
     /// The tables of all languages, loaded once.
     /// </summary>
     private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> Tables = new(StringComparer.OrdinalIgnoreCase)
     {
         [English] = Load("en"),
         [SimplifiedChinese] = Load("zh-CN"),
+        [TraditionalChinese] = Load("zh-TW"),
     };
 
     /// <summary>
@@ -132,9 +143,66 @@ public sealed class Loc : INotifyPropertyChanged
     public static string Resolve(LanguageMode mode, CultureInfo systemCulture) => mode switch
     {
         LanguageMode.ZhCN => SimplifiedChinese,
+        LanguageMode.ZhTW => TraditionalChinese,
         LanguageMode.En => English,
-        _ => systemCulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase) ? SimplifiedChinese : English,
+        _ => ResolveSystem(systemCulture),
     };
+
+    /// <summary>
+    /// Tells whether a language is a Chinese one, Simplified or Traditional.
+    /// </summary>
+    /// <param name="language">
+    /// The culture name of the language.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> for Simplified and Traditional Chinese.
+    /// </returns>
+    public static bool IsChinese(string language) =>
+        ChineseLanguages.Contains(language, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Tells whether the language shown is Traditional Chinese.
+    /// </summary>
+    /// <param name="language">
+    /// The culture name of the language.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> for Traditional Chinese.
+    /// </returns>
+    public static bool IsTraditionalChinese(string language) =>
+        language.Equals(TraditionalChinese, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Picks the language that fits the culture of the system.
+    /// </summary>
+    /// <param name="systemCulture">
+    /// The culture of the system.
+    /// </param>
+    /// <returns>
+    /// The culture name of the language to show.
+    /// </returns>
+    private static string ResolveSystem(CultureInfo systemCulture)
+    {
+        if (!systemCulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase))
+        {
+            return English;
+        }
+
+        // An explicit script tag wins over the region: zh-Hans-HK is Simplified, zh-Hant-CN is Traditional. Without a
+        // script, Taiwan, Hong Kong and Macao write Traditional Chinese.
+        var name = systemCulture.Name;
+        if (name.Contains("Hans", StringComparison.OrdinalIgnoreCase))
+        {
+            return SimplifiedChinese;
+        }
+
+        var traditional = name.Contains("Hant", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("-TW", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("-HK", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("-MO", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("zh-CHT", StringComparison.OrdinalIgnoreCase);
+        return traditional ? TraditionalChinese : SimplifiedChinese;
+    }
 
     /// <summary>
     /// Switches to the language a setting stands for, and sets the UI culture to match.

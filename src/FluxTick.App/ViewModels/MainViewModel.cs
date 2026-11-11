@@ -865,7 +865,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         var staleNote = stale > 0 ? Loc.Get("Portfolio_Stale", stale) : null;
         var ageNote = _rates.Age is { } age && age > OldRatesAfter ? Loc.Get("Portfolio_RatesOld", (int)age.TotalDays) : null;
         var notes = staleNote is null ? ageNote : Append(staleNote, ageNote);
-        var baseCurrency = CurrencyCodes.EffectiveBase(_settings.Current.General.BaseCurrency, Loc.Instance.Language == Loc.SimplifiedChinese);
+        var baseCurrency = CurrencyCodes.EffectiveBase(_settings.Current.General.BaseCurrency, Loc.IsChinese(Loc.Instance.Language));
         if (PortfolioPnl.Sum(_holdings, baseCurrency, _convert) is not { } total)
         {
             PortfolioText = staleNote ?? string.Empty;

@@ -12,12 +12,21 @@ namespace FluxTick.App.Tests;
 public class LocalizationTests
 {
     /// <summary>
-    /// Verifies the automatic setting follows the system: any Chinese culture gets Simplified Chinese, the rest English.
+    /// Verifies the automatic setting follows the system: Traditional Chinese cultures get Traditional Chinese, other
+    /// Chinese cultures Simplified Chinese, the rest English.
     /// </summary>
     [Theory]
     [InlineData("zh-CN", Loc.SimplifiedChinese)]
-    [InlineData("zh-TW", Loc.SimplifiedChinese)]
+    [InlineData("zh-SG", Loc.SimplifiedChinese)]
     [InlineData("zh-Hans", Loc.SimplifiedChinese)]
+    [InlineData("zh-Hans-HK", Loc.SimplifiedChinese)]
+    [InlineData("zh-Hans-MO", Loc.SimplifiedChinese)]
+    [InlineData("zh-Hant-CN", Loc.TraditionalChinese)]
+    [InlineData("zh-TW", Loc.TraditionalChinese)]
+    [InlineData("zh-HK", Loc.TraditionalChinese)]
+    [InlineData("zh-MO", Loc.TraditionalChinese)]
+    [InlineData("zh-Hant", Loc.TraditionalChinese)]
+    [InlineData("zh-Hant-TW", Loc.TraditionalChinese)]
     [InlineData("en-US", Loc.English)]
     [InlineData("fr-FR", Loc.English)]
     [InlineData("", Loc.English)]
@@ -34,41 +43,106 @@ public class LocalizationTests
     {
         Loc.Resolve(LanguageMode.En, CultureInfo.GetCultureInfo("zh-CN")).Should().Be(Loc.English);
         Loc.Resolve(LanguageMode.ZhCN, CultureInfo.GetCultureInfo("en-US")).Should().Be(Loc.SimplifiedChinese);
+        Loc.Resolve(LanguageMode.ZhTW, CultureInfo.GetCultureInfo("en-US")).Should().Be(Loc.TraditionalChinese);
+        Loc.Resolve(LanguageMode.ZhTW, CultureInfo.GetCultureInfo("zh-CN")).Should().Be(Loc.TraditionalChinese);
+    }
+
+    /// <summary>
+    /// Verifies both Chinese languages count as Chinese, and only Traditional Chinese counts as Traditional.
+    /// </summary>
+    [Fact]
+    public void IsChinese_ChineseLanguages_AreRecognised()
+    {
+        Loc.IsChinese(Loc.SimplifiedChinese).Should().BeTrue();
+        Loc.IsChinese(Loc.TraditionalChinese).Should().BeTrue();
+        Loc.IsChinese(Loc.English).Should().BeFalse();
+        Loc.IsTraditionalChinese(Loc.TraditionalChinese).Should().BeTrue();
+        Loc.IsTraditionalChinese(Loc.SimplifiedChinese).Should().BeFalse();
     }
 
     /// <summary>
     /// Verifies every English text has a Chinese one, so a new string cannot ship untranslated.
     /// </summary>
-    [Fact]
-    public void Tables_EveryEnglishKey_HasAChineseText()
+    [Theory]
+    [InlineData(Loc.SimplifiedChinese)]
+    [InlineData(Loc.TraditionalChinese)]
+    public void Tables_EveryEnglishKey_HasAChineseText(string language)
     {
-        Loc.KeysOf(Loc.English).Except(Loc.KeysOf(Loc.SimplifiedChinese)).Should().BeEmpty();
+        Loc.KeysOf(Loc.English).Except(Loc.KeysOf(language)).Should().BeEmpty();
     }
 
     /// <summary>
-    /// Verifies the Chinese table only has extra keys for the data sources, whose English comes from the providers.
+    /// Verifies the Chinese tables only have extra keys for the data sources, whose English comes from the providers.
     /// </summary>
-    [Fact]
-    public void Tables_ExtraChineseKeys_AreDataSourceTexts()
+    [Theory]
+    [InlineData(Loc.SimplifiedChinese)]
+    [InlineData(Loc.TraditionalChinese)]
+    public void Tables_ExtraChineseKeys_AreDataSourceTexts(string language)
     {
-        Loc.KeysOf(Loc.SimplifiedChinese).Except(Loc.KeysOf(Loc.English))
+        Loc.KeysOf(language).Except(Loc.KeysOf(Loc.English))
             .Should().OnlyContain(key => key.StartsWith("Provider_") || key.StartsWith("Option_"));
     }
 
     /// <summary>
-    /// Verifies the placeholders of a text are the same in both languages.
+    /// Verifies Traditional Chinese has the same data source texts as Simplified Chinese, since a missing one would fall
+    /// back to English.
     /// </summary>
     [Fact]
-    public void Tables_Placeholders_MatchBetweenLanguages()
+    public void Tables_TraditionalChinese_HasTheSameKeysAsSimplified()
+    {
+        Loc.KeysOf(Loc.TraditionalChinese).Should().BeEquivalentTo(Loc.KeysOf(Loc.SimplifiedChinese));
+    }
+
+    /// <summary>
+    /// Verifies the placeholders of a text are the same in all languages.
+    /// </summary>
+    [Theory]
+    [InlineData(Loc.SimplifiedChinese)]
+    [InlineData(Loc.TraditionalChinese)]
+    public void Tables_Placeholders_MatchBetweenLanguages(string language)
     {
         var english = new Loc();
         var chinese = new Loc();
-        chinese.Select(Loc.SimplifiedChinese);
+        chinese.Select(language);
 
         foreach (var key in Loc.KeysOf(Loc.English))
         {
             Placeholders(chinese[key]).Should().BeEquivalentTo(Placeholders(english[key]), key);
         }
+    }
+
+    /// <summary>
+    /// Verifies the Traditional Chinese table is not a copy of the Simplified one: most of its texts differ.
+    /// </summary>
+    [Fact]
+    public void Tables_TraditionalChinese_IsNotACopyOfSimplified()
+    {
+        var simplified = new Loc();
+        simplified.Select(Loc.SimplifiedChinese);
+        var traditional = new Loc();
+        traditional.Select(Loc.TraditionalChinese);
+        var keys = Loc.KeysOf(Loc.TraditionalChinese);
+
+        var same = keys.Where(key => traditional[key] == simplified[key]).ToList();
+
+        // Texts without a character that differs between the scripts (placeholders, brand names, "{0}：{1}") may match.
+        same.Count.Should().BeLessThan(keys.Count / 5, $"these keys are identical: {string.Join(", ", same)}");
+    }
+
+    /// <summary>
+    /// Verifies switching to Traditional Chinese changes the texts and the language name.
+    /// </summary>
+    [Fact]
+    public void Select_TraditionalChinese_ChangesText()
+    {
+        var loc = new Loc();
+
+        loc.Select(Loc.TraditionalChinese).Should().BeTrue();
+
+        loc["Status_Stale"].Should().Be("資料過期");
+        loc["Status_Delayed"].Should().Be("報價延遲");
+        loc["LanguageMode_ZhTW"].Should().Be("繁體中文");
+        loc.Language.Should().Be(Loc.TraditionalChinese);
     }
 
     /// <summary>
@@ -107,6 +181,10 @@ public class LocalizationTests
             new Loc().Apply(LanguageMode.ZhCN, CultureInfo.GetCultureInfo("en-US"));
 
             CultureInfo.CurrentUICulture.Name.Should().Be(Loc.SimplifiedChinese);
+
+            new Loc().Apply(LanguageMode.ZhTW, CultureInfo.GetCultureInfo("en-US"));
+
+            CultureInfo.CurrentUICulture.Name.Should().Be(Loc.TraditionalChinese);
         }
         finally
         {
@@ -168,7 +246,7 @@ public class LocalizationTests
     }
 
     /// <summary>
-    /// Verifies that for every enum that has at least one label, all of its values have a label in both languages.
+    /// Verifies that for every enum that has at least one label, all of its values have a label in every language.
     /// </summary>
     [Fact]
     public void EnumLabel_LabelledEnums_HaveEveryValueInBothLanguages()
@@ -181,6 +259,7 @@ public class LocalizationTests
             .ToLookup(t => t.Name);
         var english = Loc.KeysOf(Loc.English).ToHashSet();
         var chinese = Loc.KeysOf(Loc.SimplifiedChinese).ToHashSet();
+        var traditional = Loc.KeysOf(Loc.TraditionalChinese).ToHashSet();
         var labelled = english
             .Select(key => key[..Math.Max(key.IndexOf('_'), 0)])
             .Distinct()
@@ -194,6 +273,7 @@ public class LocalizationTests
             {
                 english.Should().Contain($"{type.Name}_{name}");
                 chinese.Should().Contain($"{type.Name}_{name}");
+                traditional.Should().Contain($"{type.Name}_{name}");
             }
         }
     }
@@ -290,6 +370,7 @@ public class LocalizationTests
     {
         EnumLabel.Of(ThemeMode.Dark).Should().Be("Dark");
         EnumLabel.Of(LanguageMode.ZhCN).Should().Be("简体中文");
+        EnumLabel.Of(LanguageMode.ZhTW).Should().Be("繁體中文");
         EnumLabel.Of(CardGrouping.ByProvider).Should().Be("By data source");
     }
 

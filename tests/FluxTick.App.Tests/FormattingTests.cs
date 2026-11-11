@@ -74,7 +74,7 @@ public class FormattingTests
     [InlineData("Arial", false, false, "Arial, Noto Sans CJK SC")]
     public void FontResolver_ChosenFamily_IsFollowedByAChineseFont(string family, bool isWindows, bool isMacOs, string expected)
     {
-        FontResolver.Resolve(family, isWindows, isMacOs).Should().Be(expected);
+        FontResolver.Resolve(family, isWindows, isMacOs, traditional: false).Should().Be(expected);
     }
 
     /// <summary>
@@ -86,7 +86,19 @@ public class FormattingTests
     [InlineData("  ", false, false, "Noto Sans, Noto Sans CJK SC")]
     public void FontResolver_NoFamily_IsTheFontOfTheSystem(string? family, bool isWindows, bool isMacOs, string expected)
     {
-        FontResolver.Resolve(family, isWindows, isMacOs).Should().Be(expected);
+        FontResolver.Resolve(family, isWindows, isMacOs, traditional: false).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies Traditional Chinese gets the Traditional Chinese font of the system as its fallback.
+    /// </summary>
+    [Theory]
+    [InlineData("Arial", true, false, "Arial, Microsoft JhengHei UI")]
+    [InlineData("Arial", false, true, "Arial, PingFang TC")]
+    [InlineData("", false, false, "Noto Sans, Noto Sans CJK TC")]
+    public void FontResolver_Traditional_UsesATraditionalChineseFont(string family, bool isWindows, bool isMacOs, string expected)
+    {
+        FontResolver.Resolve(family, isWindows, isMacOs, traditional: true).Should().Be(expected);
     }
 
     /// <summary>
@@ -95,7 +107,7 @@ public class FormattingTests
     [Fact]
     public void FontResolver_NameWithAComma_StaysOneFamily()
     {
-        FontResolver.Resolve("Foo, Bar", true, false).Should().Be("Foo Bar, Microsoft YaHei UI");
+        FontResolver.Resolve("Foo, Bar", true, false, traditional: false).Should().Be("Foo Bar, Microsoft YaHei UI");
     }
 
     /// <summary>
