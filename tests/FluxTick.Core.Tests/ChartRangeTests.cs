@@ -163,7 +163,7 @@ public class ChartRangeTests
         var asOf = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset[] times = [asOf.AddHours(-20), asOf.AddHours(-19), asOf.AddHours(-18)];
 
-        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), coversRange, _ => shut);
+        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), coversRange ? HistoryRange.Day : null, _ => shut);
 
         timeline.HasTrailingGap.Should().Be(expected);
     }
@@ -177,7 +177,7 @@ public class ChartRangeTests
         var asOf = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset[] times = [asOf.AddMinutes(-10), asOf.AddMinutes(-5)];
 
-        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), true, _ => false);
+        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), HistoryRange.Day, _ => false);
 
         timeline.HasTrailingGap.Should().BeFalse();
     }
@@ -582,6 +582,495 @@ public class ChartRangeTests
         var back = service.GetSnapshots().Single();
         back.Sparkline.Should().Equal(1m, 2m);
         back.Timeline!.Window.Should().Be(TimeSpan.FromHours(1));
+    }
+
+    /// <summary>
+    /// Verifies the chart stays as it was, with its own window, while the history of the newly chosen range loads, and
+    /// changes once instead of falling back to the last hour in between.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_HistoryLoading_KeepsTheChartAsItWas()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: async () =>
+        {
+            Interlocked.Increment(ref loads);
+            await release.Task;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+
+        var loading = service.GetSnapshots().Single();
+        loading.Sparkline.Should().Equal(1m, 2m);
+        loading.Timeline!.Window.Should().Be(TimeSpan.FromHours(1));
+        loading.Timeline.Range.Should().BeNull();
+
+        release.SetResult();
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 3);
+        var loaded = service.GetSnapshots().Single();
+        loaded.Timeline!.Window.Should().Be(TimeSpan.FromHours(24));
+        loaded.Timeline.Range.Should().Be(HistoryRange.Day);
+    }
+
+    /// <summary>
+    /// Verifies a chart of a range, not only the last hour, stays as it was while the next range loads, and that choosing the
+    /// range that is on show again, or the last hour, takes effect at once.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_FromALoadedRange_KeepsItWhileTheNextLoads()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, alsoSupports: HistoryRange.Month, rangeHook: async () =>
+        {
+            // The first load (the day) answers at once; the second (the month) waits.
+            if (Interlocked.Increment(ref loads) > 1)
+            {
+                await release.Task;
+            }
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 3);
+
+        service.SetChartRange(HistoryRange.Month);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 2);
+        var loading = service.GetSnapshots().Single();
+        loading.Sparkline.Should().Equal(10m, 20m, 30m);
+        loading.Timeline!.Window.Should().Be(TimeSpan.FromHours(24));
+        loading.Timeline.Range.Should().Be(HistoryRange.Day, "the chart of the day stays while the month loads");
+
+        service.SetChartRange(HistoryRange.Day);
+        var back = service.GetSnapshots().Single();
+        back.Timeline!.Window.Should().Be(TimeSpan.FromHours(24));
+        back.Timeline.CoversRange.Should().BeTrue();
+
+        service.SetChartRange(HistoryRange.Hour);
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1));
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies a chart held for history that no load will bring, because the source was disabled, stops waiting and shows
+    /// the last hour in the window of the range.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_SourceLostWhileHolding_ReleasesTheChart()
+    {
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () => release.Task);
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        var settings = SettingsFor(Btc);
+        await service.ApplyAsync(settings);
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+        service.SetChartRange(HistoryRange.Day);
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1));
+
+        settings.Providers["crypto"] = new ProviderSettings { Enabled = false };
+        await service.ApplyAsync(settings);
+
+        var released = service.GetSnapshots().Single();
+        released.Timeline!.Window.Should().Be(TimeSpan.FromHours(24));
+        released.Timeline.CoversRange.Should().BeFalse();
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies the chart stays as it was while an empty answer is still asked again, and stops waiting, showing the last
+    /// hour in the window of the range, once the empty answers are taken as the answer.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_AnswerWithoutHistory_ReleasesTheChartOnlyAfterTheRetries()
+    {
+        var loads = 0;
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, onlyOneRangePoint: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return Task.CompletedTask;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+
+        // A retry starts only after the answer before it was dealt with, so each new load tells that the earlier one is over;
+        // this needs no pause to wait out the processing of an answer.
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+        _time.Advance(TimeSpan.FromSeconds(31));
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 2);
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "an empty answer is asked again");
+
+        // The third empty answer is the answer, so the chart is released as it is dealt with.
+        _time.Advance(TimeSpan.FromSeconds(31));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Timeline!.Window == TimeSpan.FromHours(24));
+        service.GetSnapshots().Single().Timeline!.CoversRange.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a chart whose load is still running at the deadline waits one more time, so that the history that arrives
+    /// then changes it once, and that the history lands in the chart of the range.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_SlowLoadPastTheDeadline_KeepsTheChartUntilTheHistoryArrives()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return release.Task;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+
+        // Past the two minutes of the hold, but not past the extra wait of a load that is running.
+        _time.Advance(TimeSpan.FromSeconds(150));
+
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "the load is still running");
+
+        release.SetResult();
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Timeline!.CoversRange);
+        service.GetSnapshots().Single().Timeline!.Range.Should().Be(HistoryRange.Day);
+    }
+
+    /// <summary>
+    /// Verifies a chart held for a load that never answers stops waiting after a while, so that it does not stay as it was
+    /// for ever.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_LoadNeverAnswers_ReleasesTheChartAfterTheDeadline()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return release.Task;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "the load is still waited for");
+
+        await WaitUntilAsync(() =>
+        {
+            _time.Advance(TimeSpan.FromMinutes(1));
+            return service.GetSnapshots().Single().Timeline!.Window == TimeSpan.FromHours(24);
+        });
+        service.GetSnapshots().Single().Timeline!.CoversRange.Should().BeFalse();
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies choosing a range again after the deadline of its hanging load has passed starts a new wait, instead of
+    /// dropping the chart at once on the old deadline.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_ChosenAgainAfterTheDeadline_WaitsAgain()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return release.Task;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+        await WaitUntilAsync(() =>
+        {
+            _time.Advance(TimeSpan.FromMinutes(1));
+            return service.GetSnapshots().Single().Timeline!.Window == TimeSpan.FromHours(24);
+        });
+
+        service.SetChartRange(HistoryRange.Hour);
+        service.SetChartRange(HistoryRange.Day);
+
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "the wait starts over");
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies a hold ends at its deadline, or one wait later while the load it waits for is still to bring the history,
+    /// whether or not that load happens to be running right now.
+    /// </summary>
+    [Fact]
+    public void HoldExpired_PendingLoadOrNot_GivesOnlyAPendingLoadTheExtraWait()
+    {
+        var until = _time.GetUtcNow();
+        var wait = TimeSpan.FromMinutes(2);
+
+        MarketDataService.HoldExpired(until, loadPending: false, until - TimeSpan.FromSeconds(1)).Should().BeFalse();
+        MarketDataService.HoldExpired(until, loadPending: false, until).Should().BeTrue();
+        MarketDataService.HoldExpired(until, loadPending: true, until).Should().BeFalse("a queued or retrying load is waited for");
+        MarketDataService.HoldExpired(until, loadPending: true, until + wait).Should().BeTrue("a hanging load is dropped at the end");
+    }
+
+    /// <summary>
+    /// Verifies a timeline cannot name a range with a window that is not the one of that range.
+    /// </summary>
+    [Fact]
+    public void Constructor_RangeWithAnotherWindow_Throws()
+    {
+        var asOf = _time.GetUtcNow();
+
+        var act = () => new SparklineTimeline([asOf], asOf, TimeSpan.FromHours(1), range: HistoryRange.Day);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    /// <summary>
+    /// Verifies a timeline of the last hour does not count as covering a range.
+    /// </summary>
+    [Fact]
+    public void CoversRange_HourRange_IsFalse()
+    {
+        var asOf = _time.GetUtcNow();
+
+        new SparklineTimeline([asOf], asOf, TimeSpan.FromHours(1), range: HistoryRange.Hour).CoversRange.Should().BeFalse();
+        new SparklineTimeline([asOf], asOf, TimeSpan.FromHours(24), range: HistoryRange.Day).CoversRange.Should().BeTrue();
+        new SparklineTimeline([asOf], asOf, TimeSpan.FromHours(1)).CoversRange.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies going through the last hour and back to a range whose load hangs does not give the held chart a new
+    /// deadline, so that toggling the range cannot keep the chart as it was for ever.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_ChosenAgainWhileHolding_KeepsTheLoadsDeadline()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return release.Task;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+        _time.Advance(TimeSpan.FromSeconds(90));
+        service.SetChartRange(HistoryRange.Hour);
+        service.SetChartRange(HistoryRange.Day);
+
+        // The load is running, so the chart waits two minutes and then two more, counted from the first choice: 150 s from now.
+        // A fresh deadline from the second choice would be 240 s away. The chart must be released well before that.
+        var elapsed = TimeSpan.Zero;
+        await WaitUntilAsync(() =>
+        {
+            var step = TimeSpan.FromSeconds(10);
+            _time.Advance(step);
+            elapsed += step;
+            return service.GetSnapshots().Single().Timeline!.Window == HistoryRangeSpec.For(HistoryRange.Day).Window;
+        });
+        elapsed.Should().BeLessThan(TimeSpan.FromSeconds(200));
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies a load that was only just started for another range is not cut short by the deadline of the load of the
+    /// range chosen before it: it gets its own wait.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_OtherRangeChosenWhileHolding_GetsItsOwnDeadline()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, alsoSupports: HistoryRange.Month, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return release.Task;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+        _time.Advance(TimeSpan.FromSeconds(90));
+        service.SetChartRange(HistoryRange.Month);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 2);
+
+        // The deadline of the day is 30 s away; the month was chosen just now and still has most of its two minutes.
+        for (var i = 0; i < 6; i++)
+        {
+            _time.Advance(TimeSpan.FromSeconds(10));
+            await Task.Delay(20);
+        }
+
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "the month is still waited for");
+
+        var elapsed = TimeSpan.FromSeconds(60);
+        await WaitUntilAsync(() =>
+        {
+            var step = TimeSpan.FromSeconds(10);
+            _time.Advance(step);
+            elapsed += step;
+            return service.GetSnapshots().Single().Timeline!.Window == HistoryRangeSpec.For(HistoryRange.Month).Window;
+        });
+        elapsed.Should().BeGreaterThan(TimeSpan.FromSeconds(100), "the wait of the month began when it was chosen");
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies the hold of a load that gave up after empty answers ends when it does, not only at the deadline of the hold.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_AnswersWithoutHistory_ReleaseTheChartBeforeTheDeadline()
+    {
+        var loads = 0;
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, onlyOneRangePoint: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return Task.CompletedTask;
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+
+        var elapsed = TimeSpan.Zero;
+        await WaitUntilAsync(() =>
+        {
+            var step = TimeSpan.FromSeconds(10);
+            _time.Advance(step);
+            elapsed += step;
+            return service.GetSnapshots().Single().Timeline!.Window == TimeSpan.FromHours(24);
+        });
+        elapsed.Should().BeLessThan(TimeSpan.FromMinutes(2), "the third empty answer is the answer");
+        service.GetSnapshots().Single().Timeline!.CoversRange.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a timeline that names a range always has the window of that range, held or loaded, as the rows trust it.
+    /// </summary>
+    [Fact]
+    public async Task GetSnapshots_TimelineNamingARange_HasTheWindowOfThatRange()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, alsoSupports: HistoryRange.Month, rangeHook: async () =>
+        {
+            if (Interlocked.Increment(ref loads) > 1)
+            {
+                await release.Task;
+            }
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 3);
+
+        service.SetChartRange(HistoryRange.Month);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 2);
+
+        var held = service.GetSnapshots().Single().Timeline!;
+        held.Range.Should().Be(HistoryRange.Day);
+        held.Window.Should().Be(HistoryRangeSpec.For(HistoryRange.Day).Window);
+        release.SetResult();
+    }
+
+    /// <summary>
+    /// Verifies the deadline the load was given is kept while it is still ahead, and one that has passed starts a new wait.
+    /// </summary>
+    [Fact]
+    public void HoldDeadline_AheadOrExpired_KeepsOnlyADeadlineAhead()
+    {
+        var now = _time.GetUtcNow();
+        var ahead = now.AddSeconds(30);
+        var passed = now.AddSeconds(-5);
+
+        MarketDataService.HoldDeadline(ahead, now).Should().Be(ahead);
+        MarketDataService.HoldDeadline(passed, now).Should().Be(now + TimeSpan.FromMinutes(2));
+        MarketDataService.HoldDeadline(default, now).Should().Be(now + TimeSpan.FromMinutes(2));
+    }
+
+    /// <summary>
+    /// Verifies the chart stays as it was while a failed load is still asked again, and stops waiting once the retries are
+    /// used up.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_LoadFails_ReleasesTheChartOnlyAfterTheRetries()
+    {
+        var loads = 0;
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, rangeHook: () =>
+        {
+            Interlocked.Increment(ref loads);
+            return Task.FromException(new HttpRequestException("Too many requests"));
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 2);
+
+        service.SetChartRange(HistoryRange.Day);
+
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 1);
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "the first failure is asked again");
+
+        await WaitUntilAsync(() =>
+        {
+            _time.Advance(TimeSpan.FromMinutes(1));
+            return service.GetSnapshots().Single().Timeline!.Window == TimeSpan.FromHours(24);
+        });
+        service.GetSnapshots().Single().Timeline!.CoversRange.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the held chart keeps receiving live prices when the load of its range was replaced meanwhile, so that its
+    /// series is no longer among the kept ones.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_HeldSeriesReplacedWhileLoading_StillReceivesLivePrices()
+    {
+        var loads = 0;
+        var release = new TaskCompletionSource();
+        var factory = new RangeFactory(_time.GetUtcNow(), supportsDay: true, alsoSupports: HistoryRange.Month, rangeHook: async () =>
+        {
+            // The first load (the day) answers at once; the others wait.
+            if (Interlocked.Increment(ref loads) > 1)
+            {
+                await release.Task;
+            }
+        });
+        await using var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
+        await service.ApplyAsync(SettingsFor(Btc));
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count == 3);
+
+        // The day is kept for a while only; past that, choosing it again starts a new load and drops the old series.
+        _time.Advance(TimeSpan.FromMinutes(11));
+        service.SetChartRange(HistoryRange.Month);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 2);
+        service.SetChartRange(HistoryRange.Day);
+        await WaitUntilAsync(() => Volatile.Read(ref loads) == 3);
+
+        factory.Provider!.Emit(new Quote(Btc.Id, 99m, null, _time.GetUtcNow()));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline[^1] == 99m);
+        service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(24));
+        release.SetResult();
     }
 
     /// <summary>
@@ -1002,7 +1491,7 @@ public class ChartRangeTests
     /// <param name="id">
     /// The id of the provider.
     /// </param>
-    private sealed class RangeFactory(DateTimeOffset now, bool supportsDay, bool onlyOneRangePoint = false, decimal? quoteOnSubscribe = null, Func<Task>? rangeHook = null, Action<CancellationToken>? rangeToken = null, string id = "crypto") : IMarketDataProviderFactory
+    private sealed class RangeFactory(DateTimeOffset now, bool supportsDay, bool onlyOneRangePoint = false, decimal? quoteOnSubscribe = null, Func<Task>? rangeHook = null, Action<CancellationToken>? rangeToken = null, string id = "crypto", HistoryRange? alsoSupports = null) : IMarketDataProviderFactory
     {
         /// <inheritdoc />
         public ProviderDescriptor Descriptor { get; } = new(
@@ -1039,6 +1528,11 @@ public class ChartRangeTests
             if (supportsDay)
             {
                 provider.SupportedRanges.Add(HistoryRange.Day);
+            }
+
+            if (alsoSupports is { } more)
+            {
+                provider.SupportedRanges.Add(more);
             }
 
             Provider = provider;

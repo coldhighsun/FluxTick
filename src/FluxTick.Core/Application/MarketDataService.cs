@@ -89,6 +89,12 @@ public sealed class MarketDataService : IAsyncDisposable
     private static readonly TimeSpan RangeCacheLifetime = TimeSpan.FromMinutes(10);
 
     /// <summary>
+    /// How long a chart stays as it was while the history of a newly chosen range loads, at most, whatever became of the
+    /// load.
+    /// </summary>
+    private static readonly TimeSpan HeldMaxWait = TimeSpan.FromMinutes(2);
+
+    /// <summary>
     /// The number of quotes in a row, each traded before the one shown, that are ignored as late answers; the next one is
     /// taken as a time that really went back.
     /// </summary>
@@ -923,8 +929,10 @@ public sealed class MarketDataService : IAsyncDisposable
 
     /// <summary>
     /// Changes the range the sparklines show, loads the history of it from the sources that have it and raises a snapshot
-    /// for every instrument. History loaded for the range a short while ago is kept and shown again at once. A source
-    /// without the range keeps showing the last hour, placed where it was traded.
+    /// for every instrument. History loaded for the range a short while ago is kept and shown again at once. While the
+    /// history of the range loads, the chart stays as it was, with its own window, instead of falling back to the last
+    /// hour; it stops waiting when the load brings no history. A source without the range keeps showing the last hour,
+    /// placed where it was traded.
     /// </summary>
     /// <param name="range">
     /// The new range.
@@ -938,16 +946,98 @@ public sealed class MarketDataService : IAsyncDisposable
                 return;
             }
 
+            var before = _range;
             _range = range;
             var now = _timeProvider.GetUtcNow();
             foreach (var state in _assets.Values)
             {
+                // What is on show now, so that it can stay while the history of the new range loads.
+                var shown = ViewOf(state, before);
+
                 state.Range = range != HistoryRange.Hour && RangeHistoryOf(state, range) is not null ? SeedOf(state, range, now) : null;
+
+                // A range whose loads gave up has no history to wait for, so nothing is held for it.
+                if (state.Range is { HasHistory: false, GaveUp: false } waiting)
+                {
+                    // The deadline belongs to the load, so that going through another range (or the last hour, which holds
+                    // nothing) and back while it hangs does not start the wait over, and a load that was only just started is
+                    // never cut short by the deadline of another range's load.
+                    var until = HoldDeadline(waiting.HoldUntil, now);
+                    waiting.HoldUntil = until;
+                    state.Held = shown with { Until = until, WaitsFor = waiting };
+                }
+                else
+                {
+                    state.Held = null;
+                }
             }
         }
 
         SeedRangeSeries();
         RefreshHealth(forceRaise: true);
+    }
+
+    /// <summary>
+    /// Works out until when a chart is held for the history of a range. The deadline the load was given earlier is kept
+    /// while it is still ahead, so that choosing the range again while the load hangs does not start the wait over; one that
+    /// has passed is not taken over, as choosing the range again after that is a new wait, not a chart that is dropped at
+    /// once.
+    /// </summary>
+    /// <param name="loadDeadline">
+    /// The deadline the load of the range was given by an earlier hold, or the default value when none waited for it yet.
+    /// </param>
+    /// <param name="now">
+    /// The current time.
+    /// </param>
+    /// <returns>
+    /// The time after which the chart stops waiting for the history.
+    /// </returns>
+    internal static DateTimeOffset HoldDeadline(DateTimeOffset loadDeadline, DateTimeOffset now) =>
+        loadDeadline > now ? loadDeadline : now + HeldMaxWait;
+
+    /// <summary>
+    /// Tells whether a chart that is held for the history of a range has waited long enough. A load that is still to bring
+    /// the history (running, queued behind the gate or waiting for its next try) gets one more <see cref="HeldMaxWait"/>
+    /// after the deadline, so a slow load does not make the chart change twice.
+    /// </summary>
+    /// <param name="until">
+    /// The deadline of the hold.
+    /// </param>
+    /// <param name="loadPending">
+    /// Whether the load the chart waits for is still the one of the chosen range and has not given up.
+    /// </param>
+    /// <param name="now">
+    /// The current time.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the chart is to stop waiting.
+    /// </returns>
+    internal static bool HoldExpired(DateTimeOffset until, bool loadPending, DateTimeOffset now) =>
+        now >= (loadPending ? until + HeldMaxWait : until);
+
+    /// <summary>
+    /// Describes what the chart of an instrument shows while a range is chosen: what is held while the history loads, else
+    /// the series of the range or the last hour. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="range">
+    /// The range that is chosen.
+    /// </param>
+    /// <returns>
+    /// The series, the window and whether it is the history of the range.
+    /// </returns>
+    private static HeldView ViewOf(AssetState state, HistoryRange range)
+    {
+        if (state.Held is { } holding)
+        {
+            return holding;
+        }
+
+        var series = state.SeriesToShow;
+        HistoryRange? covers = range != HistoryRange.Hour && ReferenceEquals(series, state.Range?.Series) ? range : null;
+        return new HeldView(series, range == HistoryRange.Hour ? series.Window : HistoryRangeSpec.For(range).Window, covers);
     }
 
     /// <summary>
@@ -990,6 +1080,7 @@ public sealed class MarketDataService : IAsyncDisposable
     private void SeedRangeSeries(bool failedOnly = false)
     {
         List<(AssetState State, RangeSeed Seed, IRangeHistoryProvider History, SemaphoreSlim Gate)> work = [];
+        List<AssetSnapshot> released = [];
         var now = _timeProvider.GetUtcNow();
         lock (_gate)
         {
@@ -1000,9 +1091,15 @@ public sealed class MarketDataService : IAsyncDisposable
 
             foreach (var state in _assets.Values)
             {
-                // A source without the range keeps its hour, so nothing is kept for the range of such an instrument.
+                // A source without the range keeps its hour, so nothing is kept for the range of such an instrument. A chart
+                // held for its history cannot wait for one that no load will bring (the source was disabled or lost it).
                 if (RangeHistoryOf(state, _range) is not { } history)
                 {
+                    if (state.Held is not null)
+                    {
+                        released.Add(ReleaseHold(state));
+                    }
+
                     continue;
                 }
 
@@ -1015,6 +1112,11 @@ public sealed class MarketDataService : IAsyncDisposable
                     work.Add((state, seed, history, _slots[state.Asset.ProviderId].RangeLoadGate));
                 }
             }
+        }
+
+        foreach (var snapshot in released)
+        {
+            RaiseSnapshot(snapshot);
         }
 
         foreach (var (state, seed, history, gate) in work)
@@ -1051,6 +1153,66 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </returns>
     private static TimeSpan SeedRetryWait(int failures) =>
         TimeSpan.FromTicks(Math.Min(SeedRetryBase.Ticks << Math.Min(failures - 1, 10), SeedRetryMax.Ticks));
+
+    /// <summary>
+    /// Tells whether a series is the one of a range history that the instrument still keeps, and so gets the live prices
+    /// from the loop over them. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="series">
+    /// The series to look for.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a kept range history owns the series.
+    /// </returns>
+    private static bool IsSeedSeries(AssetState state, SparklineSeries series)
+    {
+        foreach (var seed in state.RangeSeeds.Values)
+        {
+            if (ReferenceEquals(seed.Series, series))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Stops holding the chart as it was when the history of the chosen range will not come now, so that it shows the last
+    /// hour as it does for a source without the range. Must be called while holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <returns>
+    /// The snapshot to raise.
+    /// </returns>
+    private AssetSnapshot ReleaseHold(AssetState state)
+    {
+        state.Held = null;
+        var snapshot = BuildSnapshot(state);
+        MarkPublished(state, snapshot);
+        return snapshot;
+    }
+
+    /// <summary>
+    /// Stops holding the chart as it was when the loads of the history of its range have given up. Must be called while
+    /// holding the lock.
+    /// </summary>
+    /// <param name="state">
+    /// The instrument state.
+    /// </param>
+    /// <param name="seed">
+    /// The history of the range whose load just ended.
+    /// </param>
+    /// <returns>
+    /// The snapshot to raise, or <see langword="null"/> when the chart is not held for this history or it will still come.
+    /// </returns>
+    private AssetSnapshot? ReleaseIfGivenUp(AssetState state, RangeSeed seed) =>
+        state.Held is not null && ReferenceEquals(state.Range, seed) && seed.GaveUp ? ReleaseHold(state) : null;
 
     /// <summary>
     /// Loads the history of a range for one instrument and merges it with the live price.
@@ -1119,6 +1281,14 @@ public sealed class MarketDataService : IAsyncDisposable
                     seed.NextAttempt = _timeProvider.GetUtcNow() + SeedRetryBase;
                 }
 
+                // Without history the chart cannot stay as it was for ever; it shows the last hour as before once the empty
+                // answers are taken as the answer. While the health timer still asks again, the chart stays as it was, so that
+                // it changes once if the history comes and not twice.
+                if (points.Count < 2)
+                {
+                    snapshot = ReleaseIfGivenUp(state, seed);
+                }
+
                 if (points.Count >= 2 && _assets.ContainsKey(state.Asset.Id))
                 {
                     var latest = state.Latest;
@@ -1135,6 +1305,7 @@ public sealed class MarketDataService : IAsyncDisposable
 
                     if (ReferenceEquals(state.Range, seed))
                     {
+                        state.Held = null;
                         snapshot = BuildSnapshot(state);
                         MarkPublished(state, snapshot);
                     }
@@ -1158,6 +1329,11 @@ public sealed class MarketDataService : IAsyncDisposable
                 {
                     seed.Failures++;
                     seed.NextAttempt = _timeProvider.GetUtcNow() + SeedRetryWait(seed.Failures);
+
+                    // The timer asks again until MaxTimerSeedRetries, and the chart stays as it was meanwhile, as it does for
+                    // empty answers, but no longer than the hold allows (HeldMaxWait, one more while a load is pending, see
+                    // HoldExpired); a source that keeps failing cannot hold it for ever.
+                    snapshot = ReleaseIfGivenUp(state, seed);
                 }
             }
         }
@@ -1294,6 +1470,12 @@ public sealed class MarketDataService : IAsyncDisposable
                 seed.Series.Add(quote.Price, quote.Timestamp);
             }
 
+            // The series held for the chart may belong to a load that was replaced since, which the loop above does not reach.
+            if (state.Held is { } held && !ReferenceEquals(held.Series, state.Series) && !IsSeedSeries(state, held.Series))
+            {
+                held.Series.Add(quote.Price, quote.Timestamp);
+            }
+
             snapshot = BuildSnapshot(state);
             MarkPublished(state, snapshot);
         }
@@ -1329,6 +1511,18 @@ public sealed class MarketDataService : IAsyncDisposable
                 // raised. The sparkline slides along with the time, so a new bucket alone also changes the snapshot.
                 var (health, _) = ComputeHealth(state);
                 var now = _timeProvider.GetUtcNow();
+
+                // A chart held for history that no load brings must not wait for ever; this is the net under the releases of
+                // the loads themselves (which drop the hold as soon as they give up). A load that is running right now (slow, or
+                // queued behind the gate) is given one more wait, so that the chart does not fall back to the last hour just
+                // before its history arrives; a load that hangs is still dropped at the end of that.
+                var released = state.Held is { } held
+                    && HoldExpired(held.Until, ReferenceEquals(state.Range, held.WaitsFor) && state.Range is { GaveUp: false }, now);
+                if (released)
+                {
+                    state.Held = null;
+                }
+
                 var bucket = BucketOf(state, now);
 
                 // A new bucket moves the window on, which changes the chart only when it has points to move or just lost
@@ -1343,7 +1537,7 @@ public sealed class MarketDataService : IAsyncDisposable
                         state.Asset.Id, state.LastHealth, health, state.LastMarketState, market);
                 }
 
-                if (forceRaise || health != state.LastHealth || slid || market != state.LastMarketState)
+                if (forceRaise || released || health != state.LastHealth || slid || market != state.LastMarketState)
                 {
                     state.LastHealth = health;
                     state.LastMarketState = market;
@@ -1405,18 +1599,20 @@ public sealed class MarketDataService : IAsyncDisposable
         var (health, detail) = ComputeHealth(state);
         var now = _timeProvider.GetUtcNow();
         var isShut = state.Asset.AssetClass == AssetClass.Crypto ? null : state.IsShut ??= time => IsShutAt(state, time);
-        var series = state.SeriesToShow;
-        var coversRange = _range != HistoryRange.Hour && ReferenceEquals(series, state.Range?.Series);
 
-        // A source without the range keeps the points of the last hour; they stay where they were traded in the window of
-        // the range, and the chart carries the first price back to the edge.
-        var window = _range == HistoryRange.Hour ? series.Window : HistoryRangeSpec.For(_range).Window;
-        var asOf = coversRange ? ChartEndOf(series, window, now, isShut) : now;
+        // While the history of a newly chosen range loads, the chart stays as it was, with its own window. A source without
+        // the range keeps the points of the last hour; they stay where they were traded in the window of the range, and the
+        // chart carries the first price back to the edge.
+        var (series, shownWindow, covered, _, _) = ViewOf(state, _range);
+
+        // The rows trust the range a timeline names, so a timeline that names one always has the window of that range.
+        var window = covered is { } range ? HistoryRangeSpec.For(range).Window : shownWindow;
+        var asOf = covered is not null ? ChartEndOf(series, window, now, isShut) : now;
         var sparkline = series.Snapshot(asOf);
 
         // Without its source the hours are not known, which says nothing about the market, so that answer is not remembered.
         var timeline = new SparklineTimeline(
-            series.Times(asOf), asOf, window, series.Bucket, coversRange, isShut,
+            series.Times(asOf), asOf, window, series.Bucket, covered, isShut,
             shutGapMemo: _slots.ContainsKey(state.Asset.ProviderId) ? state.ShutGaps : null);
         return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline, MarketStateOf(state, now));
     }
@@ -1861,11 +2057,45 @@ public sealed class MarketDataService : IAsyncDisposable
         public Func<DateTimeOffset, bool>? IsShut { get; set; }
 
         /// <summary>
-        /// Gets the series the snapshot is made from: the one of the range once it holds history, even when no price of it
-        /// is in the window, so that the chart and the texts around it stay with the range; else the last hour.
+        /// Gets the series the snapshot is made from: the one that is held while the history of the chosen range loads; else
+        /// the one of the range once it holds history, even when no price of it is in the window, so that the chart and the
+        /// texts around it stay with the range; else the last hour.
         /// </summary>
-        public SparklineSeries SeriesToShow => Range is { HasHistory: true } seed ? seed.Series : Series;
+        public SparklineSeries SeriesToShow => Held?.Series ?? (Range is { HasHistory: true } seed ? seed.Series : Series);
+
+        /// <summary>
+        /// Gets or sets what the chart showed when another range was chosen, which it keeps showing until the history of that
+        /// range arrives, so that the chart does not fall back to the last hour in between. It is dropped the moment the
+        /// history arrives, the loads give up, the source loses the range or the deadline passes, never inferred from the load
+        /// state, so that it cannot come back when that state resets.
+        /// </summary>
+        public HeldView? Held { get; set; }
     }
+
+    /// <summary>
+    /// What a chart showed: the series, the window it was drawn over and whether that was the history of a range.
+    /// </summary>
+    /// <param name="Series">
+    /// The prices.
+    /// </param>
+    /// <param name="Window">
+    /// The time the chart covered.
+    /// </param>
+    /// <param name="CoveredRange">
+    /// The range whose history the prices were, or <see langword="null"/> when they were not the history of a range.
+    /// </param>
+    /// <param name="Until">
+    /// The time after which the chart stops waiting for the history, whatever became of the load.
+    /// </param>
+    /// <param name="WaitsFor">
+    /// The history of the chosen range that the chart waits for, or <see langword="null"/> before a hold is set.
+    /// </param>
+    private readonly record struct HeldView(
+        SparklineSeries Series,
+        TimeSpan Window,
+        HistoryRange? CoveredRange,
+        DateTimeOffset Until = default,
+        RangeSeed? WaitsFor = null);
 
     /// <summary>
     /// The history of one range for one instrument: its series and how far the loading of it has come. Guarded by the lock
@@ -1903,6 +2133,18 @@ public sealed class MarketDataService : IAsyncDisposable
         /// Gets or sets a value indicating whether a load is in flight.
         /// </summary>
         public bool Seeding { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time after which the chart stops waiting for the history of this load, or the default value when
+        /// no chart has waited for it yet. It belongs to the load, so that it survives a visit to another range.
+        /// </summary>
+        public DateTimeOffset HoldUntil { get; set; }
+
+        /// <summary>
+        /// Gets a value indicating whether no history will come for now: the loads gave up after empty answers, or failed
+        /// until the timer stops asking.
+        /// </summary>
+        public bool GaveUp => (Seeded && !HasHistory) || Failures >= MaxTimerSeedRetries;
 
         /// <summary>
         /// Gets or sets a value indicating whether <see cref="Series"/> lacks the prices of a time nothing was received, which

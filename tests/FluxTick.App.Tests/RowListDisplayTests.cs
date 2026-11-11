@@ -1,5 +1,6 @@
 using FluxTick.Abstractions;
 using FluxTick.App.Localization;
+using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 
@@ -31,16 +32,17 @@ public class RowListDisplayTests
         new(Stock, new Quote(Stock.Id, 110m, 100m, DateTimeOffset.UnixEpoch), [100m, 110m], health, MarketState: market);
 
     /// <summary>
-    /// Verifies only the card follows the range of the chart: the list, the tray and the sort keep the change against the
-    /// reference price, which every source has, so that rows of sources with and without the range stay comparable.
+    /// Verifies the headline change is the one against the reference price in every layout, and the change over the range
+    /// of the chart is a figure of its own that only the card shows, so that rows of sources with and without the range
+    /// stay comparable.
     /// </summary>
     [Fact]
-    public void Update_ChartOfARange_OnlyTheCardShowsTheChangeOverIt()
+    public void Update_ChartOfARange_HeadlineKeepsTheDailyChangeAndRangeChangeIsSeparate()
     {
         var asOf = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset[] times = [asOf.AddHours(-20), asOf.AddHours(-1)];
-        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), coversRange: true);
-        var row = new AssetRowViewModel(Stock, "p") { ChartRange = HistoryRange.Day };
+        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), range: HistoryRange.Day);
+        var row = new AssetRowViewModel(Stock, "p");
 
         // The price is 10% above the reference and 45% below the start of the chart.
         row.Update(new AssetSnapshot(Stock, new Quote(Stock.Id, 110m, 100m, asOf), [200m, 110m], AssetHealth.Live, Timeline: timeline));
@@ -48,22 +50,85 @@ public class RowListDisplayTests
         row.ChangePercent.Should().Be(10m);
         row.ChangeDisplayText.Should().Be("+10.00%");
         row.IsUp.Should().BeTrue();
-        row.CardChangeText.Should().Be("-45.00%");
-        row.IsCardDown.Should().BeTrue();
+        row.ChangeText.Should().Be("+10.00%");
+        row.RangeChangeText.Should().Be("-45.00%");
+        row.HasRangeChange.Should().BeTrue();
+        row.IsRangeDown.Should().BeTrue();
     }
 
     /// <summary>
-    /// Verifies the card shows the change against the reference price while the chart has no range of its own.
+    /// Verifies the card shows no change over a range while the chart has no range of its own, and that the chart is
+    /// coloured by the change against the reference price then.
     /// </summary>
     [Fact]
-    public void Update_NoRange_CardShowsTheChangeOfTheQuote()
+    public void Update_NoRange_NoRangeChangeAndChartFollowsTheQuote()
     {
         var row = new AssetRowViewModel(Stock, "p");
 
         row.Update(Snapshot(AssetHealth.Live, MarketState.Open));
 
-        row.CardChangeText.Should().Be("+10.00%");
-        row.IsCardUp.Should().BeTrue();
+        row.ChangeText.Should().Be("+10.00%");
+        row.HasRangeChange.Should().BeFalse();
+        row.RangeChangeText.Should().BeEmpty();
+        row.IsRangeUp.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies the change over the range is cleared when a snapshot has no quote.
+    /// </summary>
+    [Fact]
+    public void Update_QuoteLost_ClearsTheRangeChange()
+    {
+        var asOf = new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset[] times = [asOf.AddHours(-20), asOf.AddHours(-1)];
+        var timeline = new SparklineTimeline(times, asOf, TimeSpan.FromDays(1), TimeSpan.FromMinutes(5), range: HistoryRange.Day);
+        var row = new AssetRowViewModel(Stock, "p");
+        row.Update(new AssetSnapshot(Stock, new Quote(Stock.Id, 110m, 100m, asOf), [200m, 110m], AssetHealth.Live, Timeline: timeline));
+
+        row.Update(new AssetSnapshot(Stock, null, [200m, 110m], AssetHealth.Live, Timeline: timeline));
+
+        row.HasRangeChange.Should().BeFalse();
+        row.RangeChangeText.Should().BeEmpty();
+        row.ChangeOverRange.Should().BeNull();
+        row.ReferenceText.Should().Be(PriceFormatter.Unavailable);
+        row.ReferenceLabel.Should().Be(Loc.Get("Row_Reference"));
+        row.IsRangeUp.Should().BeFalse();
+        row.IsRangeDown.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies the text that names the baseline follows the basis of the quote.
+    /// </summary>
+    /// <param name="basis">
+    /// The basis of the reference price.
+    /// </param>
+    /// <param name="key">
+    /// The key of the expected text.
+    /// </param>
+    [Theory]
+    [InlineData(ReferenceBasis.PreviousClose, "Row_BasisPrevClose")]
+    [InlineData(ReferenceBasis.Rolling24Hours, "Row_Basis24h")]
+    public void Update_Basis_NamesTheBaseline(ReferenceBasis basis, string key)
+    {
+        var row = new AssetRowViewModel(Stock, "p");
+        var quote = new Quote(Stock.Id, 110m, 100m, DateTimeOffset.UnixEpoch) { Basis = basis };
+
+        row.Update(new AssetSnapshot(Stock, quote, [100m, 110m], AssetHealth.Live));
+
+        row.BasisText.Should().Be(Loc.Get(key));
+    }
+
+    /// <summary>
+    /// Verifies no basis is named when the quote has no change to measure.
+    /// </summary>
+    [Fact]
+    public void Update_QuoteWithoutReference_BasisTextIsEmpty()
+    {
+        var row = new AssetRowViewModel(Stock, "p");
+
+        row.Update(new AssetSnapshot(Stock, new Quote(Stock.Id, 110m, null, DateTimeOffset.UnixEpoch), [100m, 110m], AssetHealth.Live));
+
+        row.BasisText.Should().BeEmpty();
     }
 
     /// <summary>
