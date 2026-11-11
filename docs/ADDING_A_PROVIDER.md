@@ -215,8 +215,9 @@ and add a project reference from `FluxTick.App`. That's the whole integration.
 ### Translations (optional)
 
 The provider describes itself in English. The interface language setting can show it in Chinese when
-`src/FluxTick.App/Localization/Strings/zh-CN.json` has these keys (`ProviderText` looks them up; anything missing
-falls back to the English text from your descriptor):
+`src/FluxTick.App/Localization/Strings/zh-CN.json` (Simplified) and `zh-TW.json` (Traditional) have these keys
+(`ProviderText` looks them up; anything missing falls back to the English text from your descriptor, not to the other
+Chinese file, and a test requires both files to have the same keys):
 
 | Key | Translates |
 | --- | --- |
@@ -229,7 +230,7 @@ falls back to the English text from your descriptor):
 An option that reuses a key such as `PollInterval` gets the shared translation. If it means something else for your
 source (for the streaming ones it is the interval while the stream is down), add `Option_{id}_{Key}_Label` instead of
 inventing a new key. `en.json` needs no
-entries, and the localization tests only allow keys starting with `Provider_` or `Option_` that exist in `zh-CN.json` alone.
+entries, and the localization tests only allow keys starting with `Provider_` or `Option_` that exist in the Chinese files alone.
 
 ## 6. Test it
 
