@@ -129,10 +129,10 @@ public sealed class SparklineTimeline
     /// The time one price stands for, or <see langword="null"/> for a minute. Prices of a longer bucket may be a few
     /// buckets apart without a gap, as a night or a weekend of a market is not a lost stretch of the chart.
     /// </param>
-    /// <param name="coversRange">
-    /// Whether the prices are the history of a range longer than the last hour, so that the chart of the range starts at the
-    /// first of them. It is <see langword="false"/> for the last hour, and for a source that has no longer range, whose last
-    /// hour only stands where it was traded.
+    /// <param name="range">
+    /// The range whose history the prices are, so that the chart of the range starts at the first of them, or
+    /// <see langword="null"/> for the last hour, and for a source that has no longer range, whose last hour only stands where
+    /// it was traded.
     /// </param>
     /// <param name="isMarketShut">
     /// Tells whether the market of the instrument is shut at a time, or <see langword="null"/> when that is not known. A
@@ -147,14 +147,21 @@ public sealed class SparklineTimeline
         DateTimeOffset asOf,
         TimeSpan window,
         TimeSpan? bucket = null,
-        bool coversRange = false,
+        HistoryRange? range = null,
         Func<DateTimeOffset, bool>? isMarketShut = null,
         ShutGapMemo? shutGapMemo = null)
     {
+        // The rows work out the change and the labels of the chart from the range alone, so a timeline that names a range
+        // must have the window of that range.
+        if (range is { } named && named != HistoryRange.Hour && window != HistoryRangeSpec.For(named).Window)
+        {
+            throw new ArgumentException($"The window {window} is not the window of the range {named}.", nameof(window));
+        }
+
         Times = times;
         AsOf = asOf;
         Window = window;
-        CoversRange = coversRange;
+        Range = range;
         GapAfter = GapAfterOf(times, bucket is { } b && b > TimeSpan.FromMinutes(1) ? MinGapOf(b, window) : MinGap);
         if (isMarketShut is null)
         {
@@ -174,7 +181,7 @@ public sealed class SparklineTimeline
 
         // The stretch after the last price grows with the clock, so it is looked at every time, and only when it is long
         // enough to be a gap at all.
-        _trailingShut = coversRange && times.Count > 0 && IsGap(times[^1], asOf) && IsMostlyShut(times[^1] + priceBucket, asOf, isMarketShut);
+        _trailingShut = CoversRange && times.Count > 0 && IsGap(times[^1], asOf) && IsMostlyShut(times[^1] + priceBucket, asOf, isMarketShut);
     }
 
     /// <summary>
@@ -193,10 +200,16 @@ public sealed class SparklineTimeline
     public TimeSpan Window { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the prices are the history of a range longer than the last hour. The first price is
-    /// the oldest one the source holds for the window, which may lie after its start; nothing is known before it.
+    /// Gets the range whose history the prices are, or <see langword="null"/> when they are the last hour (or the last hour
+    /// of a source that has no longer range). The first price is the oldest one the source holds for the window, which may
+    /// lie after its start; nothing is known before it.
     /// </summary>
-    public bool CoversRange { get; }
+    public HistoryRange? Range { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the prices are the history of a range longer than the last hour.
+    /// </summary>
+    public bool CoversRange => Range is { } range && range != HistoryRange.Hour;
 
     /// <summary>
     /// Gets how far two neighboring prices, or the last price and <see cref="AsOf"/>, have to be apart for the stretch

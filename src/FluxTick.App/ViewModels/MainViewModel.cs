@@ -1695,7 +1695,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
                 {
                     RollEnabled = Settings.RollPriceOnUpdate,
                     CardSize = CardSize,
-                    ChartRange = ChartRange,
                 };
                 Rows.Insert(i, row);
             }
@@ -2010,20 +2009,6 @@ public sealed partial class MainViewModel : LocalizedViewModel
         foreach (var row in Rows)
         {
             row.CardSize = value;
-        }
-    }
-
-    /// <summary>
-    /// Tells every row which time span the charts show.
-    /// </summary>
-    /// <param name="value">
-    /// The new range.
-    /// </param>
-    partial void OnChartRangeChanged(HistoryRange value)
-    {
-        foreach (var row in Rows)
-        {
-            row.ChartRange = value;
         }
     }
 

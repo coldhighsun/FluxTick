@@ -28,7 +28,7 @@ public class RangeChangeRulesTests
     /// The timeline.
     /// </returns>
     private static SparklineTimeline DayTimeline(bool coversRange, params int[] hoursAgo) =>
-        new([.. hoursAgo.Select(h => AsOf.AddHours(-h))], AsOf, TimeSpan.FromHours(24), TimeSpan.FromMinutes(5), coversRange);
+        new([.. hoursAgo.Select(h => AsOf.AddHours(-h))], AsOf, TimeSpan.FromHours(24), TimeSpan.FromMinutes(5), coversRange ? HistoryRange.Day : null);
 
     /// <summary>
     /// Verifies the change is worked out from the first price of the window when the history of the range is there.
@@ -38,7 +38,7 @@ public class RangeChangeRulesTests
     {
         var timeline = DayTimeline(true, 24, 12, 0);
 
-        var change = RangeChangeRules.Compute([100m, 110m, 120m], timeline, HistoryRange.Day, 125m);
+        var change = RangeChangeRules.Compute([100m, 110m, 120m], timeline, 125m);
 
         change.Should().NotBeNull();
         change!.Value.Baseline.Should().Be(100m);
@@ -51,22 +51,30 @@ public class RangeChangeRulesTests
     /// Verifies the last hour keeps the change against the reference price of the source.
     /// </summary>
     [Fact]
-    public void Compute_HourRange_IsNull() =>
-        RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 24, 0), HistoryRange.Hour, 110m).Should().BeNull();
+    public void Compute_HourWindow_IsNull() =>
+        RangeChangeRules.Compute([100m, 110m], new SparklineTimeline([AsOf.AddMinutes(-60), AsOf], AsOf, TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), range: HistoryRange.Hour), 110m).Should().BeNull();
 
     /// <summary>
     /// Verifies a chart that only holds the last hour of a source without the range is not a change over the range.
     /// </summary>
     [Fact]
     public void Compute_RangeNotCovered_IsNull() =>
-        RangeChangeRules.Compute([100m, 110m], DayTimeline(false, 1, 0), HistoryRange.Day, 110m).Should().BeNull();
+        RangeChangeRules.Compute([100m, 110m], DayTimeline(false, 1, 0), 110m).Should().BeNull();
 
     /// <summary>
-    /// Verifies a timeline made for another range than the one chosen is not used.
+    /// Verifies the change is of the range the window of the timeline tells, whatever range was chosen since, so that the
+    /// card stays with the chart it shows while the history of a newly chosen range loads.
     /// </summary>
     [Fact]
-    public void Compute_TimelineOfAnotherRange_IsNull() =>
-        RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 24, 0), HistoryRange.Year, 110m).Should().BeNull();
+    public void Compute_TimelineOfAWindow_ChangesOverThatRange()
+    {
+        var timeline = new SparklineTimeline([AsOf.AddDays(-365), AsOf], AsOf, TimeSpan.FromDays(365), TimeSpan.FromDays(1), range: HistoryRange.Year);
+
+        var change = RangeChangeRules.Compute([100m, 110m], timeline, 110m);
+
+        change.Should().NotBeNull();
+        change!.Value.Range.Should().Be(HistoryRange.Year);
+    }
 
     /// <summary>
     /// Verifies there is no change to work out from nothing, from a price that is not positive or from prices that have
@@ -75,10 +83,10 @@ public class RangeChangeRulesTests
     [Fact]
     public void Compute_NothingToMeasureFrom_IsNull()
     {
-        RangeChangeRules.Compute([], DayTimeline(true), HistoryRange.Day, 110m).Should().BeNull();
-        RangeChangeRules.Compute([0m, 5m], DayTimeline(true, 24, 0), HistoryRange.Day, 5m).Should().BeNull();
-        RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 24), HistoryRange.Day, 110m).Should().BeNull();
-        RangeChangeRules.Compute([100m], null, HistoryRange.Day, 110m).Should().BeNull();
+        RangeChangeRules.Compute([], DayTimeline(true), 110m).Should().BeNull();
+        RangeChangeRules.Compute([0m, 5m], DayTimeline(true, 24, 0), 5m).Should().BeNull();
+        RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 24), 110m).Should().BeNull();
+        RangeChangeRules.Compute([100m], null, 110m).Should().BeNull();
     }
 
     /// <summary>
@@ -86,7 +94,7 @@ public class RangeChangeRulesTests
     /// </summary>
     [Fact]
     public void Compute_FirstPriceShortlyAfterWindowStart_Changes() =>
-        RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 22, 0), HistoryRange.Day, 110m).Should().NotBeNull();
+        RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 22, 0), 110m).Should().NotBeNull();
 
     /// <summary>
     /// Verifies a range whose history starts well after the window, such as a year of which only part is held, is measured
@@ -95,7 +103,7 @@ public class RangeChangeRulesTests
     [Fact]
     public void Compute_FirstPriceLongAfterWindowStart_ChangesFromIt()
     {
-        var change = RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 12, 0), HistoryRange.Day, 110m);
+        var change = RangeChangeRules.Compute([100m, 110m], DayTimeline(true, 12, 0), 110m);
 
         change.Should().NotBeNull();
         change!.Value.Baseline.Should().Be(100m);
@@ -104,16 +112,16 @@ public class RangeChangeRulesTests
     }
 
     /// <summary>
-    /// Verifies the texts about the chart name the range only when its history is what the chart holds.
+    /// Verifies the texts about the chart name the range its timeline tells, and the last hour for a chart
+    /// that holds no history of a range.
     /// </summary>
     [Fact]
     public void ShownRange_HistoryOrFallback_NamesTheDataShown()
     {
-        RangeChangeRules.ShownRange(DayTimeline(true, 24, 0), HistoryRange.Day).Should().Be(HistoryRange.Day);
-        RangeChangeRules.ShownRange(DayTimeline(false, 1, 0), HistoryRange.Day).Should().Be(HistoryRange.Hour);
-        RangeChangeRules.ShownRange(DayTimeline(true, 24, 0), HistoryRange.Year).Should().Be(HistoryRange.Hour);
-        RangeChangeRules.ShownRange(null, HistoryRange.Day).Should().Be(HistoryRange.Hour);
-        RangeChangeRules.ShownRange(DayTimeline(true, 24, 0), HistoryRange.Hour).Should().Be(HistoryRange.Hour);
+        RangeChangeRules.ShownRange(DayTimeline(true, 24, 0)).Should().Be(HistoryRange.Day);
+        RangeChangeRules.ShownRange(DayTimeline(false, 1, 0)).Should().Be(HistoryRange.Hour);
+        RangeChangeRules.ShownRange(null).Should().Be(HistoryRange.Hour);
+        RangeChangeRules.ShownRange(new SparklineTimeline([], AsOf, TimeSpan.FromDays(365), TimeSpan.FromDays(1), range: HistoryRange.Year)).Should().Be(HistoryRange.Year);
     }
 
     /// <summary>

@@ -29,9 +29,10 @@ public readonly record struct RangeChange(HistoryRange Range, decimal Baseline, 
 public static class RangeChangeRules
 {
     /// <summary>
-    /// Works out the change over the range of the chart. The last hour keeps the change against the reference price of the
-    /// source, and so does a range whose history is not there (a source without it, or still loading). A source that holds
-    /// only part of the range (a year of 300 days, an instrument that is new) is measured from its first price, whose time
+    /// Works out the change over the range the chart shows, which the window of the timeline tells. The last hour has no
+    /// change of its own, and neither has a range whose history is not there (a source without it). While the history of a
+    /// newly chosen range loads, the chart and this change stay with the range that was shown. A source that holds only part
+    /// of the range (a year of 300 days, an instrument that is new) is measured from its first price, whose time
     /// <see cref="RangeChange.BaselineTime"/> tells; the chart shows nothing is known before it.
     /// </summary>
     /// <param name="sparkline">
@@ -40,20 +41,17 @@ public static class RangeChangeRules
     /// <param name="timeline">
     /// When the prices were traded.
     /// </param>
-    /// <param name="range">
-    /// The range the chart shows.
-    /// </param>
     /// <param name="price">
     /// The latest price.
     /// </param>
     /// <returns>
-    /// The change, or <see langword="null"/> when the change against the reference price is to be shown.
+    /// The change, or <see langword="null"/> when the change against the reference price is the only one to show.
     /// </returns>
-    public static RangeChange? Compute(IReadOnlyList<decimal> sparkline, SparklineTimeline? timeline, HistoryRange range, decimal price)
+    public static RangeChange? Compute(IReadOnlyList<decimal> sparkline, SparklineTimeline? timeline, decimal price)
     {
+        var range = ShownRange(timeline);
         if (range == HistoryRange.Hour
-            || timeline is not { CoversRange: true }
-            || timeline.Window != HistoryRangeSpec.For(range).Window
+            || timeline is null
             || sparkline.Count == 0
             || timeline.Times.Count != sparkline.Count
             || sparkline[0] <= 0m)
@@ -67,20 +65,16 @@ public static class RangeChangeRules
     }
 
     /// <summary>
-    /// Tells which range the data of a chart is for: the chosen one once its history is there, else the last hour that the
-    /// chart falls back to, so that the texts around the chart do not name a range the prices are not of.
+    /// Tells which range the data of a chart is for, from the window of its timeline: the range whose history the timeline
+    /// holds, else the last hour that the chart falls back to, so that the texts around the chart do not name a range the
+    /// prices are not of.
     /// </summary>
     /// <param name="timeline">
     /// When the prices were traded, or <see langword="null"/> before the first snapshot.
     /// </param>
-    /// <param name="range">
-    /// The range the chart is set to show.
-    /// </param>
     /// <returns>
-    /// <paramref name="range"/> when the timeline holds its history, otherwise <see cref="HistoryRange.Hour"/>.
+    /// The range of the history the timeline holds, otherwise <see cref="HistoryRange.Hour"/>.
     /// </returns>
-    public static HistoryRange ShownRange(SparklineTimeline? timeline, HistoryRange range) =>
-        range != HistoryRange.Hour && timeline is { CoversRange: true } && timeline.Window == HistoryRangeSpec.For(range).Window
-            ? range
-            : HistoryRange.Hour;
+    public static HistoryRange ShownRange(SparklineTimeline? timeline) =>
+        timeline?.Range ?? HistoryRange.Hour;
 }

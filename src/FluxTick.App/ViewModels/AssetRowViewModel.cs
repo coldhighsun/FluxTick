@@ -99,13 +99,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial string ChangeText { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the percentage change the card shows: over the range of the chart when it has one, else
-    /// <see cref="ChangeText"/>. The list and the tray have no room to name a range, so they keep the latter.
-    /// </summary>
-    [ObservableProperty]
-    public partial string CardChangeText { get; set; } = string.Empty;
-
-    /// <summary>
     /// Gets or sets the daily change in percent that the list is sorted by, or <see langword="null"/> before the first
     /// quote or when the quote has no reference price.
     /// </summary>
@@ -165,10 +158,12 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial PriceDirection Direction { get; set; }
 
     /// <summary>
-    /// Gets or sets the direction of the change the card shows.
+    /// Gets or sets the direction of the change over the range of the chart, which colours the chart and
+    /// <see cref="RangeChangeText"/>; it is the direction of <see cref="Direction"/> while the chart has no range of its
+    /// own. The headline change and the price keep <see cref="Direction"/>.
     /// </summary>
     [ObservableProperty]
-    public partial PriceDirection CardDirection { get; set; }
+    public partial PriceDirection RangeDirection { get; set; }
 
     /// <summary>
     /// Gets or sets the recent prices for the sparkline.
@@ -322,21 +317,21 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial CardSize CardSize { get; set; } = CardSize.Medium;
 
     /// <summary>
-    /// Gets or sets the time span the chart shows, which the texts about the chart name.
-    /// </summary>
-    [ObservableProperty]
-    public partial HistoryRange ChartRange { get; set; } = HistoryRange.Hour;
-
-    /// <summary>
     /// The range the texts about the chart named last, to raise their change only when it moves.
     /// </summary>
     private HistoryRange _shownRange = HistoryRange.Hour;
 
     /// <summary>
-    /// Gets the range the prices of the chart are for: <see cref="ChartRange"/> once its history is there, else the last
-    /// hour that the chart falls back to.
+    /// The basis of the reference price that <see cref="BasisText"/> named last, to raise its change only when it moves;
+    /// <see langword="null"/> while there is no quote.
     /// </summary>
-    private HistoryRange ShownRange => RangeChangeRules.ShownRange(_lastSnapshot?.Timeline, ChartRange);
+    private ReferenceBasis? _shownBasis;
+
+    /// <summary>
+    /// Gets the range the prices of the chart are for, as the snapshot tells: the chart stays as it was while the history
+    /// of a newly chosen range loads, and falls back to the last hour when a source has none.
+    /// </summary>
+    private HistoryRange ShownRange => RangeChangeRules.ShownRange(_lastSnapshot?.Timeline);
 
     /// <summary>
     /// Gets the tooltip of the chart.
@@ -354,10 +349,45 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public string RangeHighLabel => Loc.Get("Row_RangeHigh", EnumLabel.Of(ShownRange));
 
     /// <summary>
-    /// Gets the change over the range of the chart that the card shows instead of the change against the reference price,
-    /// or <see langword="null"/> when it shows the latter.
+    /// Gets the change over the range of the chart that the card shows next to the start of the range, besides the
+    /// change against the reference price, or <see langword="null"/> when the chart has no range of its own.
     /// </summary>
     public RangeChange? ChangeOverRange { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the percentage change over the range of the chart, or an empty text when the chart has no range of
+    /// its own. It is a figure of its own: the headline change is always the one against the reference price.
+    /// </summary>
+    [ObservableProperty]
+    public partial string RangeChangeText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets a value indicating whether the card shows the change over the range of the chart.
+    /// </summary>
+    public bool HasRangeChange => RangeChangeText.Length > 0;
+
+    /// <summary>
+    /// Gets the short text that names what the change is measured against: the previous close or 24 hours ago.
+    /// </summary>
+    public string BasisText => _lastSnapshot?.Quote is { } quote && BasisOf(quote) is { } basis
+        ? basis switch
+        {
+            ReferenceBasis.PreviousClose => Loc.Get("Row_BasisPrevClose"),
+            ReferenceBasis.Rolling24Hours => Loc.Get("Row_Basis24h"),
+            _ => string.Empty,
+        }
+        : string.Empty;
+
+    /// <summary>
+    /// Tells the basis that the change of a quote is measured against.
+    /// </summary>
+    /// <param name="quote">
+    /// The quote.
+    /// </param>
+    /// <returns>
+    /// The basis of the reference price, or <see langword="null"/> when the quote has no change to name a baseline for.
+    /// </returns>
+    private static ReferenceBasis? BasisOf(Quote quote) => quote.Change is null ? null : quote.Basis;
 
     /// <summary>
     /// Gets the label of the first figure of the large card: the price at the start of the range of the chart, or the
@@ -409,14 +439,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Tells the views that the texts about the chart changed with the range.
-    /// </summary>
-    /// <param name="value">
-    /// The new range.
-    /// </param>
-    partial void OnChartRangeChanged(HistoryRange value) => RaiseChartTextsChanged();
-
-    /// <summary>
     /// Raises the change of the texts that name the range of the chart.
     /// </summary>
     private void RaiseChartTextsChanged()
@@ -426,6 +448,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         OnPropertyChanged(nameof(RangeLowLabel));
         OnPropertyChanged(nameof(RangeHighLabel));
         OnPropertyChanged(nameof(ReferenceLabel));
+        OnPropertyChanged(nameof(BasisText));
         OnPropertyChanged(nameof(ChartTip));
     }
 
@@ -653,14 +676,14 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public bool IsDown => Direction == PriceDirection.Down;
 
     /// <summary>
-    /// Gets a value indicating whether the change the card shows is positive.
+    /// Gets a value indicating whether the change over the range of the chart is positive.
     /// </summary>
-    public bool IsCardUp => CardDirection == PriceDirection.Up;
+    public bool IsRangeUp => RangeDirection == PriceDirection.Up;
 
     /// <summary>
-    /// Gets a value indicating whether the change the card shows is negative.
+    /// Gets a value indicating whether the change over the range of the chart is negative.
     /// </summary>
-    public bool IsCardDown => CardDirection == PriceDirection.Down;
+    public bool IsRangeDown => RangeDirection == PriceDirection.Down;
 
     /// <summary>
     /// Gets a value indicating whether a status note is shown instead of the change.
@@ -717,10 +740,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public void Update(AssetSnapshot snapshot)
     {
         _lastSnapshot = snapshot;
-        if (ShownRange != _shownRange)
-        {
-            RaiseChartTextsChanged();
-        }
 
         var shut = IsClosingPrice(snapshot);
         var shutChanged = shut != IsMarketShut;
@@ -744,19 +763,28 @@ public sealed partial class AssetRowViewModel : ObservableObject
             PriceText = PriceFormatter.FormatPrice(quote.Price, Asset.AssetClass);
             var sparkline = snapshot.Sparkline;
 
-            // Over a longer range the card tells the change over that range, from the first price of the window, as
-            // the chart does; otherwise the change against the reference price of the source.
+            // The headline change is always the one against the reference price of the source, in every layout. Over a
+            // longer range the card also tells the change over that range, from the first price of the window, as the
+            // chart does, as a figure of its own next to the start of the range.
             var rangeBefore = ChangeOverRange?.Range;
-            ChangeOverRange = RangeChangeRules.Compute(sparkline, snapshot.Timeline, ChartRange, quote.Price);
-            var change = ChangeOverRange?.Change ?? quote.Change;
+            ChangeOverRange = RangeChangeRules.Compute(sparkline, snapshot.Timeline, quote.Price);
+            var dailyDirection = DirectionOf(quote.Change);
             ChangeText = PriceFormatter.FormatPercent(quote.ChangePercent);
             ChangePercent = quote.ChangePercent;
-            CardChangeText = PriceFormatter.FormatPercent(ChangeOverRange?.Percent ?? quote.ChangePercent);
+            RangeChangeText = ChangeOverRange is { } over ? PriceFormatter.FormatPercent(over.Percent) : string.Empty;
+            RangeDirection = ChangeOverRange is { } overRange ? DirectionOf(overRange.Change) : dailyDirection;
             var reference = ChangeOverRange?.Baseline ?? quote.Reference;
             ReferenceText = reference is { } shown ? PriceFormatter.FormatPrice(shown, Asset.AssetClass) : PriceFormatter.Unavailable;
-            ChangeAmountText = change is { } amount
+            ChangeAmountText = quote.Change is { } amount
                 ? (amount > 0m ? "+" : string.Empty) + PriceFormatter.FormatPrice(amount, Asset.AssetClass)
                 : string.Empty;
+
+            // The text names the basis, so it moves only when that does (the language is covered by RaiseChartTextsChanged).
+            if (_shownBasis != BasisOf(quote))
+            {
+                _shownBasis = BasisOf(quote);
+                OnPropertyChanged(nameof(BasisText));
+            }
 
             // The label names the range of the change, so it moves only when that does; the tip shows a price only while the
             // pointer is on one.
@@ -790,8 +818,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
                 HighText = PriceFormatter.Unavailable;
             }
 
-            Direction = DirectionOf(quote.Change);
-            CardDirection = DirectionOf(change);
+            Direction = dailyDirection;
             ApplyHolding(quote.Price);
             RefreshTooltip();
 
@@ -808,7 +835,31 @@ public sealed partial class AssetRowViewModel : ObservableObject
         }
         else
         {
+            // Nothing to measure a change from without a quote, so the change over the range goes too.
+            // The reference figure goes with it: it would show the start of the range under the plain "Reference" label.
+            if (ChangeOverRange is not null)
+            {
+                ChangeOverRange = null;
+                ReferenceText = PriceFormatter.Unavailable;
+                OnPropertyChanged(nameof(ReferenceLabel));
+            }
+
+            RangeChangeText = string.Empty;
+            RangeDirection = PriceDirection.Flat;
+
+            if (_shownBasis is not null)
+            {
+                _shownBasis = null;
+                OnPropertyChanged(nameof(BasisText));
+            }
+
             RefreshTooltip();
+        }
+
+        // Last, so that the texts that name the range are raised with the change over it already worked out.
+        if (ShownRange != _shownRange)
+        {
+            RaiseChartTextsChanged();
         }
     }
 
@@ -887,16 +938,24 @@ public sealed partial class AssetRowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Notifies bindings of derived properties when the direction the card shows changes.
+    /// Notifies bindings of derived properties when the direction of the change over the range changes.
     /// </summary>
     /// <param name="value">
     /// The new direction.
     /// </param>
-    partial void OnCardDirectionChanged(PriceDirection value)
+    partial void OnRangeDirectionChanged(PriceDirection value)
     {
-        OnPropertyChanged(nameof(IsCardUp));
-        OnPropertyChanged(nameof(IsCardDown));
+        OnPropertyChanged(nameof(IsRangeUp));
+        OnPropertyChanged(nameof(IsRangeDown));
     }
+
+    /// <summary>
+    /// Notifies bindings when the card starts or stops showing the change over the range.
+    /// </summary>
+    /// <param name="value">
+    /// The new text.
+    /// </param>
+    partial void OnRangeChangeTextChanged(string value) => OnPropertyChanged(nameof(HasRangeChange));
 
     /// <summary>
     /// Notifies bindings of derived properties when the status text changes.
