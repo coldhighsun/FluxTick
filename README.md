@@ -10,7 +10,7 @@
 [![Avalonia](https://img.shields.io/badge/UI-Avalonia-8B44AC)](https://avaloniaui.net/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#getting-started)
 
-**English** | [简体中文](README.zh-CN.md)
+**English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
 
 **Every market. Every tick.**
 
@@ -69,7 +69,7 @@ commodities side by side, from the data sources *you* choose.
   threshold, or when what comes in was traded more than 30 minutes ago (a stuck source, a closed market). Stale
   prices are left out of the holdings total unless the market is shut; delayed ones still count. Price alerts wait while a source is stale,
   delayed or reconnecting.
-- **Language**: Simplified Chinese or English, switchable at runtime; Auto follows the system language.
+- **Language**: Simplified Chinese, Traditional Chinese or English, switchable at runtime; Auto follows the system language.
 - **Up/down colors**: green-up or red-up, automatic by UI language (red-up for Chinese).
 - **Cross-platform**: Windows, Linux and macOS (built on [Avalonia](https://avaloniaui.net/) and .NET 10).
 - **Extensible**: adding a data source is one small class library and one line of registration.
