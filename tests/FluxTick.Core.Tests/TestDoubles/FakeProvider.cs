@@ -253,13 +253,19 @@ public sealed class FakeProviderFactory : IMarketDataProviderFactory
     /// </summary>
     public Exception? HistoryFailure { get; set; }
 
+    /// <summary>
+    /// Gets or sets the exception the providers created from now on fail with when their subscriptions change, or
+    /// <see langword="null"/>.
+    /// </summary>
+    public Exception? SubscribeFailure { get; set; }
+
     /// <inheritdoc />
     public ProviderDescriptor Descriptor { get; }
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)
     {
-        var provider = new FakeProvider(Descriptor, context.Options) { HistoryFailure = HistoryFailure, Hours = Hours };
+        var provider = new FakeProvider(Descriptor, context.Options) { HistoryFailure = HistoryFailure, SubscribeFailure = SubscribeFailure, Hours = Hours };
         Created.Add(provider);
         return provider;
     }
