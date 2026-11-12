@@ -98,9 +98,22 @@ public sealed class FakeProvider(ProviderDescriptor descriptor)
     /// </param>
     public void ChangeStatus(ProviderConnectionState state, string? message = null) => SetStatus(state, message);
 
+    /// <summary>
+    /// Gets or sets what a search waits for before it answers, for example a request that is in flight or one that
+    /// fails, or <see langword="null"/> to answer at once.
+    /// </summary>
+    public Func<CancellationToken, Task>? SearchHook { get; set; }
+
     /// <inheritdoc />
-    public Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default) =>
-        Task.FromResult(SearchResults);
+    public async Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default)
+    {
+        if (SearchHook is { } hook)
+        {
+            await hook(cancellationToken);
+        }
+
+        return SearchResults;
+    }
 
     /// <inheritdoc />
     protected override Task OnSubscriptionsChangedAsync(
