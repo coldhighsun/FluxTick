@@ -229,7 +229,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         _settings = settings;
         _market = market;
         _registry = registry;
-        _snapshots = new SnapshotCoalescer(ui, OnSnapshot, ex => logger.LogError(ex, "Could not hand a price update to the UI"));
+        _snapshots = new SnapshotCoalescer(ui, OnSnapshot, ex => logger.LogError(ex, "Could not show a price update"));
         _logger = logger;
         AddAsset = addAsset;
         Settings = settingsPage;

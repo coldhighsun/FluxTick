@@ -142,33 +142,37 @@ public class SnapshotCoalescerTests
     }
 
     /// <summary>
-    /// Verifies snapshots that are left when applying one fails are not stranded until the next price arrives.
+    /// Verifies a snapshot that fails to apply is reported instead of escaping the UI thread's callback, and the other
+    /// snapshots of the same hand-over are still applied.
     /// </summary>
     [Fact]
-    public void Drain_ApplyThrows_RemainingSnapshotsAreStillHandedOver()
+    public void Drain_ApplyThrows_ReportsAndAppliesTheOthers()
     {
         var ui = new QueueDispatcher();
         List<string> applied = [];
+        List<Exception> errors = [];
         var failOnce = true;
-        var coalescer = new SnapshotCoalescer(ui, s =>
-        {
-            if (failOnce)
+        var coalescer = new SnapshotCoalescer(
+            ui,
+            s =>
             {
-                failOnce = false;
-                throw new InvalidOperationException("boom");
-            }
+                if (failOnce)
+                {
+                    failOnce = false;
+                    throw new InvalidOperationException("boom");
+                }
 
-            applied.Add(s.Asset.Symbol);
-        });
+                applied.Add(s.Asset.Symbol);
+            },
+            errors.Add);
 
         coalescer.Submit(Snapshot(Btc, 1));
         coalescer.Submit(Snapshot(Eth, 1));
 
         var act = ui.RunAll;
 
-        act.Should().Throw<InvalidOperationException>();
-        ui.Background.Should().ContainSingle("the leftover snapshot is queued again");
-        ui.RunAll();
+        act.Should().NotThrow();
+        errors.Should().ContainSingle().Which.Should().BeOfType<InvalidOperationException>();
         applied.Should().HaveCount(1);
     }
 

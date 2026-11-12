@@ -16,8 +16,9 @@ namespace FluxTick.App.Services;
 /// Applies one snapshot; it runs on the UI thread.
 /// </param>
 /// <param name="onError">
-/// Called when a hand-over could not be queued. Such a failure never reaches the caller of
-/// <see cref="Submit"/>, which is a data source's quote loop that must not end because the UI is not available.
+/// Called when a hand-over could not be queued, or when applying a snapshot failed. A failure to queue never reaches
+/// the caller of <see cref="Submit"/>, which is a data source's quote loop that must not end because the UI is not
+/// available; a failure to apply does not escape the UI thread's callback, where it would end the process.
 /// </param>
 public sealed class SnapshotCoalescer(IUiDispatcher ui, Action<AssetSnapshot> apply, Action<Exception>? onError = null)
 {
@@ -73,23 +74,24 @@ public sealed class SnapshotCoalescer(IUiDispatcher ui, Action<AssetSnapshot> ap
     {
         // Cleared before reading, so a snapshot that arrives meanwhile queues the next hand-over and is not lost.
         Interlocked.Exchange(ref _scheduled, 0);
-        try
+
+        // Enumerating the dictionary is safe while entries are removed, and unlike Keys it copies nothing.
+        foreach (var (id, _) in _pending)
         {
-            // Enumerating the dictionary is safe while entries are removed, and unlike Keys it copies nothing.
-            foreach (var (id, _) in _pending)
+            if (!_pending.TryRemove(id, out var snapshot))
             {
-                if (_pending.TryRemove(id, out var snapshot))
-                {
-                    apply(snapshot);
-                }
+                continue;
             }
-        }
-        finally
-        {
-            // Reached with snapshots left only when applying one failed; they must not wait for the next price.
-            if (!_pending.IsEmpty)
+
+            // One snapshot that cannot be shown must neither keep the others from being shown nor leave the UI
+            // thread's callback, where an exception ends the process.
+            try
             {
-                Schedule();
+                apply(snapshot);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                onError?.Invoke(ex);
             }
         }
     }

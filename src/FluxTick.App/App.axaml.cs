@@ -180,7 +180,8 @@ public sealed partial class App : Application
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     /// <summary>
-    /// Writes exceptions that nothing handled to the log, so a crash or a lost background failure leaves a trace.
+    /// Writes exceptions that nothing handled to the log, so a crash or a lost background failure leaves a trace. One
+    /// that left a UI thread callback is logged and then taken as handled, so it does not end the app.
     /// </summary>
     /// <param name="services">
     /// The service provider that holds the logger.
@@ -197,6 +198,13 @@ public sealed partial class App : Application
             {
                 AppHost.FlushLogs();
             }
+        };
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            // A callback posted to the UI thread that failed, such as one showing a price or applying a setting. The
+            // app keeps running in the tray for days, so one such failure is logged instead of ending it.
+            logger.LogError(e.Exception, "A UI callback failed");
+            e.Handled = true;
         };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
