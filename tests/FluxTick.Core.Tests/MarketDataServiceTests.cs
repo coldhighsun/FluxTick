@@ -655,6 +655,30 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a quote dated far in the future, such as one read in the wrong time zone, does not freeze the sparkline
+    /// until that time comes: once the price follows the correct times again, so does the sparkline.
+    /// </summary>
+    [Fact]
+    public async Task Quote_DatedFarInTheFuture_DoesNotFreezeTheSparkline()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Btc));
+        var provider = _crypto.Created.Single();
+        provider.Emit(new Quote(Btc.Id, 1m, null, _time.GetUtcNow().AddHours(8)));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote?.Price == 1m);
+
+        // Enough quotes with correct times that the price takes the time as having gone back.
+        _time.Advance(TimeSpan.FromMinutes(1));
+        for (var i = 0; i < 10; i++)
+        {
+            provider.Emit(new Quote(Btc.Id, 2m, null, _time.GetUtcNow().AddSeconds(i)));
+        }
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote?.Price == 2m);
+        service.GetSnapshots().Single().Sparkline[^1].Should().Be(2m);
+    }
+
+    /// <summary>
     /// Verifies the trading state is part of the snapshot, and that a snapshot is raised when the market opens even though
     /// nothing else changed.
     /// </summary>
