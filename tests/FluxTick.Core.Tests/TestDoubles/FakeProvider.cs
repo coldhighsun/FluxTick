@@ -130,9 +130,14 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
     /// </summary>
     public ExchangeHours? Hours { get; set; }
 
+    /// <summary>
+    /// Gets or sets an exception that <see cref="GetMarketState"/> throws, or <see langword="null"/> for none.
+    /// </summary>
+    public Exception? MarketStateFailure { get; set; }
+
     /// <inheritdoc />
     public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
-        Hours?.GetState(now, lastTradeTime, holidayGrace) ?? MarketState.Unknown;
+        MarketStateFailure is { } failure ? throw failure : Hours?.GetState(now, lastTradeTime, holidayGrace) ?? MarketState.Unknown;
 
     /// <summary>
     /// Changes the reported status.

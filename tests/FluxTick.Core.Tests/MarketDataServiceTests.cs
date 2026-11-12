@@ -614,6 +614,25 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a quote that fails to apply, because the source's trading hours throw, does not end the quote stream.
+    /// </summary>
+    [Fact]
+    public async Task Quote_ApplyingOneThrows_LaterQuotesStillArrive()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Aapl));
+        var provider = _stocks.Created.Single();
+        provider.MarketStateFailure = new InvalidOperationException("no hours for this date");
+        provider.Emit(new Quote(Aapl.Id, 1m, null, _time.GetUtcNow()));
+        await Task.Delay(100);
+
+        provider.MarketStateFailure = null;
+        provider.Emit(new Quote(Aapl.Id, 2m, null, _time.GetUtcNow().AddSeconds(1)));
+
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Quote?.Price == 2m);
+    }
+
+    /// <summary>
     /// Verifies the trading state is part of the snapshot, and that a snapshot is raised when the market opens even though
     /// nothing else changed.
     /// </summary>

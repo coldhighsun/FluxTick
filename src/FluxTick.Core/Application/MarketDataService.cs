@@ -1388,7 +1388,17 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             await foreach (var quote in slot.Provider.ReadQuotesAsync(slot.Cts.Token).ConfigureAwait(false))
             {
-                HandleQuote(quote);
+                // One quote that cannot be applied, for example because the source's trading hours throw for a date, must
+                // not end the stream: nothing would read the provider's channel anymore, its instruments would turn stale
+                // and the quotes it keeps publishing would pile up.
+                try
+                {
+                    HandleQuote(quote);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    _logger.LogErrorThrottled($"quote:{slot.Id}", _options.HandlerLogInterval, ex, "A quote of {ProviderId} could not be applied", slot.Id);
+                }
             }
         }
         catch (OperationCanceledException)
