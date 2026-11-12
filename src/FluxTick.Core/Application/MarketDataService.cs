@@ -238,18 +238,7 @@ public sealed class MarketDataService : IAsyncDisposable
         _options = options ?? new MarketDataServiceOptions();
         _logger = loggerFactory.CreateLogger<MarketDataService>();
         _healthTimer = timeProvider.CreateTimer(
-            _ =>
-            {
-                RefreshHealth();
-
-                // A tick that was already running when the service was disposed must not start loads on providers that
-                // are being closed.
-                if (!_disposed)
-                {
-                    SeedEmptySeries(failedOnly: true);
-                    SeedRangeSeries(failedOnly: true);
-                }
-            },
+            _ => OnHealthTick(),
             null,
             _options.HealthInterval,
             _options.HealthInterval);
@@ -1506,6 +1495,30 @@ public sealed class MarketDataService : IAsyncDisposable
         }
 
         RaiseSnapshot(snapshot);
+    }
+
+    /// <summary>
+    /// Runs one tick of the health timer: refreshes the health and retries the history loads that failed. An exception
+    /// is logged rather than left to escape, because an exception that leaves a timer callback ends the process.
+    /// </summary>
+    private void OnHealthTick()
+    {
+        try
+        {
+            RefreshHealth();
+
+            // A tick that was already running when the service was disposed must not start loads on providers that are
+            // being closed.
+            if (!_disposed)
+            {
+                SeedEmptySeries(failedOnly: true);
+                SeedRangeSeries(failedOnly: true);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogErrorThrottled("health:failed", _options.HandlerLogInterval, ex, "The health refresh failed");
+        }
     }
 
     /// <summary>

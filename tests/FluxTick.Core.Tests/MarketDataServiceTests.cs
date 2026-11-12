@@ -633,6 +633,28 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies an exception in the health refresh is caught rather than escaping the timer callback, which would end
+    /// the process, and that later ticks still run.
+    /// </summary>
+    [Fact]
+    public async Task Health_RefreshThrows_TimerKeepsRunning()
+    {
+        await using var service = NewService();
+        await service.ApplyAsync(SettingsFor(Aapl));
+        var provider = _stocks.Created.Single();
+        provider.Emit(new Quote(Aapl.Id, 1m, null, _time.GetUtcNow()));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Live);
+        provider.MarketStateFailure = new InvalidOperationException("no hours for this date");
+
+        var act = () => _time.Advance(TimeSpan.FromSeconds(5));
+
+        act.Should().NotThrow();
+        provider.MarketStateFailure = null;
+        _time.Advance(TimeSpan.FromMinutes(2));
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Health == AssetHealth.Stale);
+    }
+
+    /// <summary>
     /// Verifies the trading state is part of the snapshot, and that a snapshot is raised when the market opens even though
     /// nothing else changed.
     /// </summary>
