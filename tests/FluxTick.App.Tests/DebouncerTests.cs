@@ -106,4 +106,92 @@ public sealed class DebouncerTests
 
         runs.Should().Be(1);
     }
+
+    /// <summary>
+    /// Verifies a flush that blocks the thread the action was scheduled on, as the exit handler does on the UI thread,
+    /// does not deadlock while that action is in flight.
+    /// </summary>
+    [Fact]
+    public async Task FlushAsync_BlockingTheSchedulingContextWhileActionInFlight_Completes()
+    {
+        var time = new FakeTimeProvider();
+        var debouncer = new Debouncer(Delay, time);
+        using var context = new SingleThreadContext();
+        var started = false;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        context.Post(() => debouncer.Run(async () =>
+        {
+            started = true;
+            await gate.Task.ConfigureAwait(false);
+        }));
+        await Harness.EventuallyAsync(() => context.Processed == 1);
+        time.Advance(Delay);
+        await Harness.EventuallyAsync(() => started);
+
+        var flushed = new TaskCompletionSource();
+        context.Post(() =>
+        {
+            debouncer.FlushAsync().GetAwaiter().GetResult();
+            flushed.SetResult();
+        });
+        await Task.Delay(50);
+        gate.SetResult();
+
+        (await Task.WhenAny(flushed.Task, Task.Delay(TimeSpan.FromSeconds(3)))).Should().BeSameAs(flushed.Task);
+    }
+
+    /// <summary>
+    /// A synchronization context with one thread of its own that runs posted work in order, like a UI thread.
+    /// </summary>
+    private sealed class SingleThreadContext : SynchronizationContext, IDisposable
+    {
+        /// <summary>
+        /// The work waiting to run.
+        /// </summary>
+        private readonly System.Collections.Concurrent.BlockingCollection<Action> _queue = [];
+
+        /// <summary>
+        /// The number of posted items that finished running.
+        /// </summary>
+        private int _processed;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SingleThreadContext"/> class and starts its thread.
+        /// </summary>
+        public SingleThreadContext()
+        {
+            var thread = new Thread(() =>
+            {
+                SetSynchronizationContext(this);
+                foreach (var work in _queue.GetConsumingEnumerable())
+                {
+                    work();
+                    Interlocked.Increment(ref _processed);
+                }
+            })
+            {
+                IsBackground = true,
+            };
+            thread.Start();
+        }
+
+        /// <summary>
+        /// Gets the number of posted items that finished running.
+        /// </summary>
+        public int Processed => Volatile.Read(ref _processed);
+
+        /// <summary>
+        /// Queues work to run on the context's thread.
+        /// </summary>
+        /// <param name="work">
+        /// The work to run.
+        /// </param>
+        public void Post(Action work) => _queue.Add(work);
+
+        /// <inheritdoc />
+        public override void Post(SendOrPostCallback d, object? state) => _queue.Add(() => d(state));
+
+        /// <inheritdoc />
+        public void Dispose() => _queue.CompleteAdding();
+    }
 }

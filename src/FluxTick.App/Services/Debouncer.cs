@@ -2,7 +2,7 @@ namespace FluxTick.App.Services;
 
 /// <summary>
 /// Runs only the latest of rapidly repeated actions, after a quiet period. Used to avoid saving settings on every
-/// step of a slider drag.
+/// step of a slider drag. The action runs on a thread-pool thread, not on the context <see cref="Run"/> was called on.
 /// </summary>
 /// <param name="delay">
 /// The quiet period to wait before running the action.
@@ -150,12 +150,14 @@ public sealed class Debouncer(TimeSpan delay, TimeProvider timeProvider)
     {
         try
         {
-            await Task.Delay(delay, timeProvider, cancellationToken);
+            // Not back on the caller's context: a flush that blocks the UI thread on exit waits for this action to end,
+            // which it could not if ending it had to wait for the UI thread.
+            await Task.Delay(delay, timeProvider, cancellationToken).ConfigureAwait(false);
             if (TryTake(action) is { } running)
             {
                 try
                 {
-                    await action();
+                    await action().ConfigureAwait(false);
                 }
                 finally
                 {
