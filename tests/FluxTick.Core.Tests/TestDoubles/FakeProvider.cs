@@ -161,13 +161,39 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
     public Task<IReadOnlyList<Asset>> SearchAsync(string query, AssetClass? assetClass, CancellationToken cancellationToken = default) =>
         Task.FromResult(SearchResults);
 
+    /// <summary>
+    /// Gets or sets what a subscription change waits for before it is applied, or <see langword="null"/> for nothing.
+    /// </summary>
+    public Func<Task>? SubscribeHook { get; set; }
+
+    /// <summary>
+    /// The number of subscription changes the provider was told of.
+    /// </summary>
+    private int _subscriptionChanges;
+
+    /// <summary>
+    /// Gets the number of subscription changes the provider was told of.
+    /// </summary>
+    public int SubscriptionChanges => Volatile.Read(ref _subscriptionChanges);
+
+    /// <summary>
+    /// Gets the token that is cancelled when the provider is disposed.
+    /// </summary>
+    public CancellationToken Shutdown => ShutdownToken;
+
     /// <inheritdoc />
-    protected override Task OnSubscriptionsChangedAsync(
+    protected override async Task OnSubscriptionsChangedAsync(
         IReadOnlyCollection<Asset> current,
         IReadOnlyCollection<Asset> added,
         IReadOnlyCollection<Asset> removed,
         CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _subscriptionChanges);
+        if (SubscribeHook is { } hook)
+        {
+            await hook();
+        }
+
         if (SubscribeFailure is { } failure)
         {
             throw failure;
@@ -186,8 +212,6 @@ public sealed class FakeProvider(ProviderDescriptor descriptor, ProviderOptions 
                 Publish(new Quote(asset.Id, price, null, TimeProvider.GetUtcNow()));
             }
         }
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
