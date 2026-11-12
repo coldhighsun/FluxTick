@@ -933,6 +933,47 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies the search progress bar turns off when the query is cleared while a search is in flight.
+    /// </summary>
+    [Fact]
+    public async Task Search_QueryClearedWhileSearching_StopsShowingProgress()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.StocksFactory.Fake.SearchHook = token => Task.Delay(Timeout.Infinite, token);
+        h.Main.ShowAddCommand.Execute(null);
+        h.AddAsset.SelectedAssetClass = AssetClass.Equity;
+        h.AddAsset.SelectedProvider = h.AddAsset.AvailableProviders.Single(p => p.Id == Harness.Stocks);
+        h.AddAsset.Query = "app";
+        h.Time.Advance(TimeSpan.FromSeconds(1));
+        await Harness.EventuallyAsync(() => h.AddAsset.IsSearching);
+
+        h.AddAsset.Query = string.Empty;
+
+        await Harness.EventuallyAsync(() => !h.AddAsset.IsSearching);
+    }
+
+    /// <summary>
+    /// Verifies a search that times out, which surfaces as a cancellation nobody asked for, is reported as failed rather
+    /// than ignored like a search that was replaced.
+    /// </summary>
+    [Fact]
+    public async Task Search_RequestTimesOut_ShowsTheFailure()
+    {
+        await using var h = new Harness();
+        await h.Main.InitializeAsync();
+        h.StocksFactory.Fake.SearchHook = _ => Task.FromException(new TaskCanceledException("timed out"));
+        h.Main.ShowAddCommand.Execute(null);
+        h.AddAsset.SelectedAssetClass = AssetClass.Equity;
+        h.AddAsset.SelectedProvider = h.AddAsset.AvailableProviders.Single(p => p.Id == Harness.Stocks);
+        h.AddAsset.Query = "app";
+        h.Time.Advance(TimeSpan.FromSeconds(1));
+
+        await Harness.EventuallyAsync(() => h.AddAsset.Message.StartsWith("Search failed", StringComparison.Ordinal));
+        h.AddAsset.IsSearching.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies adding an instrument from search results saves it and finishes the page.
     /// </summary>
     [Fact]

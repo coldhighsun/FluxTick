@@ -502,6 +502,8 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
         var query = Query.Trim();
         var assetClass = SelectedAssetClass;
 
+        // A search that was replaced leaves the bar on for this one to turn off, which it may never do below.
+        IsSearching = false;
         Results.Clear();
         ShowMessage(null);
         CanSearch = provider is not null && _market.SupportsSearch(provider.Id);
@@ -542,12 +544,14 @@ public sealed partial class AddAssetViewModel : LocalizedViewModel
             var none = found.Count == 0;
             ShowMessage(none ? () => Loc.Get("Add_NoMatches") : null);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Replaced by a newer search, or the page closed.
             return;
         }
-        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException or OperationCanceledException)
         {
+            // A cancellation that nobody asked for is a request that timed out.
             _logger.LogWarning(ex, "Search on {Provider} failed", provider.Id);
             var detail = ex.Message;
             ShowMessage(() => Loc.Get("Add_SearchFailed", detail));
