@@ -344,8 +344,40 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
         IReadOnlyCollection<Asset> removed,
         CancellationToken cancellationToken)
     {
-        await base.OnSubscriptionsChangedAsync(current, added, removed, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await base.OnSubscriptionsChangedAsync(current, added, removed, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller stopped waiting for the stream, which brings its socket in line later. The subscriptions are
+            // recorded and the next change will not report these instruments again, so the polling side must follow
+            // them now: new ones get their first price and are watched for a quiet stream, removed ones are forgotten.
+            await FollowSubscriptionsAsync(current, added, removed).ConfigureAwait(false);
+            throw;
+        }
 
+        await FollowSubscriptionsAsync(current, added, removed).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Brings the polling side in line with a change of the subscriptions: what it knows of each instrument, the
+    /// fallback loop, and the first prices of new instruments.
+    /// </summary>
+    /// <param name="current">
+    /// The full subscription set after the change.
+    /// </param>
+    /// <param name="added">
+    /// The instruments that were added.
+    /// </param>
+    /// <param name="removed">
+    /// The instruments that were removed.
+    /// </param>
+    /// <returns>
+    /// A task that completes once the polling side follows the change.
+    /// </returns>
+    private async Task FollowSubscriptionsAsync(IReadOnlyCollection<Asset> current, IReadOnlyCollection<Asset> added, IReadOnlyCollection<Asset> removed)
+    {
         foreach (var asset in added)
         {
             _lastQuoteAt.TryAdd(asset.Id, TimeProvider.GetTimestamp());

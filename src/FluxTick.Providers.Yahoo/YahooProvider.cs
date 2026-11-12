@@ -249,10 +249,18 @@ public sealed class YahooProvider : RestBackedWebSocketProviderBase, IRangeHisto
         IReadOnlyCollection<Asset> removed,
         CancellationToken cancellationToken)
     {
-        await base.OnSubscriptionsChangedAsync(current, added, removed, cancellationToken).ConfigureAwait(false);
-        foreach (var asset in removed)
+        try
         {
-            _lastPushed.TryRemove(asset.Symbol, out _);
+            await base.OnSubscriptionsChangedAsync(current, added, removed, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Also when the change failed: the base class keeps the new subscriptions, so these will not be reported as
+            // removed again.
+            foreach (var asset in removed)
+            {
+                _lastPushed.TryRemove(asset.Symbol, out _);
+            }
         }
     }
 
