@@ -244,6 +244,43 @@ public class AbstractionsTests
     }
 
     /// <summary>
+    /// Verifies the shutdown token can still be read once the provider is disposed, and is then cancelled.
+    /// </summary>
+    [Fact]
+    public async Task ShutdownToken_AfterDispose_IsCancelled()
+    {
+        var factory = new FakeProviderFactory("fake", [AssetClass.Crypto]);
+        var provider = (FakeProvider)factory.Create(NewContext(factory));
+
+        await provider.DisposeAsync();
+
+        provider.Shutdown.IsCancellationRequested.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies a subscription change that waited for the lock while the provider was disposed is rejected instead of
+    /// reaching the derived class, which could start work that nothing would stop.
+    /// </summary>
+    [Fact]
+    public async Task SetSubscriptionsAsync_DisposedWhileWaitingForTheLock_IsRejected()
+    {
+        var factory = new FakeProviderFactory("fake", [AssetClass.Crypto]);
+        var provider = (FakeProvider)factory.Create(NewContext(factory));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        provider.SubscribeHook = () => gate.Task;
+        var first = provider.SetSubscriptionsAsync([new Asset("fake", "BTC", "Bitcoin", AssetClass.Crypto)]);
+        var second = provider.SetSubscriptionsAsync([new Asset("fake", "ETH", "Ether", AssetClass.Crypto)]);
+
+        await provider.DisposeAsync();
+        gate.SetResult();
+        await first;
+
+        var act = () => second;
+        await act.Should().ThrowAsync<ObjectDisposedException>();
+        provider.SubscriptionChanges.Should().Be(1);
+    }
+
+    /// <summary>
     /// Verifies status changes raise an event only when the status actually changes.
     /// </summary>
     [Fact]

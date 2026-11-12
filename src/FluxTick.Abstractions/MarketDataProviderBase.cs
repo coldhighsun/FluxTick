@@ -71,9 +71,24 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     protected TimeProvider TimeProvider { get; } = timeProvider;
 
     /// <summary>
-    /// Gets a token that is cancelled when the provider is disposed. Background loops must observe it.
+    /// Gets a token that is cancelled when the provider is disposed. Background loops must observe it. It can be read
+    /// at any time, also after disposal, when it is cancelled.
     /// </summary>
-    protected CancellationToken ShutdownToken => _shutdown.Token;
+    protected CancellationToken ShutdownToken
+    {
+        get
+        {
+            try
+            {
+                return _shutdown.Token;
+            }
+            catch (ObjectDisposedException)
+            {
+                // Disposal cancelled the source before disposing it.
+                return new CancellationToken(canceled: true);
+            }
+        }
+    }
 
     /// <summary>
     /// Gets a snapshot of the current subscriptions.
@@ -89,6 +104,10 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
         await _subscriptionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Disposal may have run while this call waited for the lock; a derived class must not start anything now
+            // that nothing would stop.
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+
             var next = assets
                 .Where(a => a.ProviderId == Descriptor.Id)
                 .GroupBy(a => a.Id)
@@ -144,7 +163,10 @@ public abstract class MarketDataProviderBase(ProviderDescriptor descriptor, Time
     }
 
     /// <summary>
-    /// Called, serialized, whenever the set of subscriptions changed. Start, stop or adjust network activity here.
+    /// Called, serialized, whenever the set of subscriptions changed. Start, stop or adjust network activity here. The
+    /// new set is recorded before this is called and stays recorded when it throws, so the next change does not report
+    /// these instruments as added or removed again: an override that fails part way must still bring its own state in
+    /// line with the new set, or arrange to do so later.
     /// </summary>
     /// <param name="current">
     /// The full subscription set after the change.
