@@ -157,6 +157,11 @@ public sealed partial class App : Application
     private LanguageMode? _appliedLanguage;
 
     /// <summary>
+    /// How long exiting waits for settings saves that are still running.
+    /// </summary>
+    private static readonly TimeSpan ExitSaveWait = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// How long after the popup closed by itself a click on the tray icon is taken as the one that closed it.
     /// </summary>
     private static readonly TimeSpan TrayReopenGuard = TimeSpan.FromMilliseconds(300);
@@ -305,6 +310,20 @@ public sealed partial class App : Application
                 {
                     // Nothing can be done about a failed save now, and the services below must still be shut down.
                     _services.GetService<ILogger<App>>()?.LogWarning(ex, "Could not save the window position on exit");
+                }
+
+                // Changes saved without waiting for them, such as a switch flipped just before exiting, must reach the file
+                // before the process ends. A save that hangs does not keep the app from exiting.
+                try
+                {
+                    if (_settings?.WhenIdleAsync().Wait(ExitSaveWait) == false)
+                    {
+                        _services.GetService<ILogger<App>>()?.LogWarning("A settings save was still running on exit");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _services.GetService<ILogger<App>>()?.LogWarning(ex, "Could not wait for the settings to be saved on exit");
                 }
 
                 _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
