@@ -29,6 +29,11 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
     private const long NoSuccess = long.MinValue;
 
     /// <summary>
+    /// Stands for no connection in <see cref="_messagesAtConnect"/>.
+    /// </summary>
+    private const long NotConnected = -1;
+
+    /// <summary>
     /// The factor by which the rounds required for a reconnect may grow at most, after reconnects that did not help.
     /// </summary>
     private const int MaxEscalation = 8;
@@ -68,6 +73,18 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
     /// The number of rounds of the fallback in a row that delivered no price.
     /// </summary>
     private int _failedRounds;
+
+    /// <summary>
+    /// The value of <see cref="WebSocketProviderBase.MessageCount"/> when the stream last connected, or
+    /// <see cref="NotConnected"/> while it is not connected. Only touched in <see cref="OnStreamStatusChanged"/>, which
+    /// runs with the status lock held.
+    /// </summary>
+    private long _messagesAtConnect = NotConnected;
+
+    /// <summary>
+    /// The timestamp of the last time the stream connected. Only touched in <see cref="OnStreamStatusChanged"/>.
+    /// </summary>
+    private long _connectedAt;
 
     /// <summary>
     /// Whether there are subscriptions and every one of them is outside trading, so that the fallback has nothing to fetch.
@@ -268,9 +285,22 @@ public abstract class RestBackedWebSocketProviderBase : WebSocketProviderBase, I
     {
         if (stream.State == ProviderConnectionState.Connected)
         {
-            // The stream is back: the rounds that failed while it was down no longer count towards a failure.
+            _messagesAtConnect = MessageCount;
+            _connectedAt = TimeProvider.GetTimestamp();
+            return;
+        }
+
+        // A handshake alone proves nothing: a server that accepts and hangs up at once, as one that rejects the key may,
+        // would otherwise clear the failures on every attempt and the source would never show as failed. Only a
+        // connection that delivered prices, or stayed up as long as the backoff takes for a healthy one, makes the rounds
+        // that failed while the stream was down no longer count.
+        if (_messagesAtConnect != NotConnected
+            && (MessageCount > _messagesAtConnect || TimeProvider.GetElapsedTime(_connectedAt) >= HealthyUptime))
+        {
             Volatile.Write(ref _failedRounds, 0);
         }
+
+        _messagesAtConnect = NotConnected;
     }
 
     /// <inheritdoc />

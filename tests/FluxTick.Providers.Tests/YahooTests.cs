@@ -1525,8 +1525,8 @@ public class YahooTests
     }
 
     /// <summary>
-    /// Verifies the rounds that failed while the stream was down are forgotten once it connects, so the next outage does
-    /// not start with the source already failed.
+    /// Verifies the rounds that failed while the stream was down are forgotten once it was back for a while, so the next
+    /// outage does not start with the source already failed.
     /// </summary>
     [Fact]
     public async Task Status_StreamBackAfterFailedRounds_NextOutageStartsReconnecting()
@@ -1548,6 +1548,8 @@ public class YahooTests
             return provider.Status.State == ProviderConnectionState.Connected;
         });
 
+        // Up long enough to count as healthy, though it delivered no prices.
+        time.Advance(TimeSpan.FromSeconds(10));
         server.DropCurrentConnection();
         await server.DisposeAsync();
 
