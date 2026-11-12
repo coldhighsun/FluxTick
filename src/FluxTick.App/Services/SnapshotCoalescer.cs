@@ -33,15 +33,16 @@ public sealed class SnapshotCoalescer(IUiDispatcher ui, Action<AssetSnapshot> ap
     private int _scheduled;
 
     /// <summary>
-    /// Offers a snapshot. It replaces an older one of the same instrument that was not applied yet. May be called
-    /// from any thread.
+    /// Offers a snapshot. It replaces an older one of the same instrument that was not applied yet, and is dropped when a
+    /// newer one waits already. May be called from any thread.
     /// </summary>
     /// <param name="snapshot">
     /// The snapshot.
     /// </param>
     public void Submit(AssetSnapshot snapshot)
     {
-        _pending[snapshot.Asset.Id] = snapshot;
+        // Snapshots come from several threads, so an older one can arrive after a newer one that is still waiting.
+        _pending.AddOrUpdate(snapshot.Asset.Id, snapshot, (_, waiting) => waiting.Sequence > snapshot.Sequence ? waiting : snapshot);
         Schedule();
     }
 
