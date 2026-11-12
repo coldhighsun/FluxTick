@@ -1503,6 +1503,21 @@ public class MarketDataServiceTests
     }
 
     /// <summary>
+    /// Verifies a source that fails to subscribe does not keep the history of the other sources from being loaded.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_OneSourceFailsToSubscribe_OtherSourcesStillLoadHistory()
+    {
+        _stocks.SubscribeFailure = new HttpRequestException("down");
+        await using var service = NewService();
+
+        var act = () => service.ApplyAsync(SettingsFor(Btc, Aapl));
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        await WaitUntilAsync(() => _crypto.Created.Single().HistoryRequests == 1);
+    }
+
+    /// <summary>
     /// Verifies replacing a provider, for example after its options changed, ends the wait that followed the failed
     /// history load of the old one.
     /// </summary>

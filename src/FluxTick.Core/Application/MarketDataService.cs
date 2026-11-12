@@ -1,5 +1,6 @@
 using FluxTick.Abstractions;
 using FluxTick.Core.Domain;
+using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using ThrottledLogging;
@@ -382,6 +383,7 @@ public sealed class MarketDataService : IAsyncDisposable
     {
         List<string> announced = [];
         List<AssetId> snapshots;
+        ExceptionDispatchInfo? routingFailure = null;
         await _applyLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -401,7 +403,17 @@ public sealed class MarketDataService : IAsyncDisposable
 
             var watchlist = WatchlistOf(settings);
             UpdateAssets(watchlist);
-            await RouteSubscriptionsAsync(watchlist, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await RouteSubscriptionsAsync(watchlist, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A source that failed to subscribe must not keep the others' snapshots and start announcements from
+                // going out; the failure is raised to the caller once they did.
+                routingFailure = ExceptionDispatchInfo.Capture(ex);
+            }
+
             snapshots = CollectHealthChanges(forceRaise: true);
         }
         finally
@@ -413,6 +425,7 @@ public sealed class MarketDataService : IAsyncDisposable
         // deadlock.
         RaiseSnapshots(snapshots);
         EnqueueStatus(announced);
+        routingFailure?.Throw();
     }
 
     /// <inheritdoc />
@@ -538,13 +551,15 @@ public sealed class MarketDataService : IAsyncDisposable
             }
         }
 
+        // The history of the sources that did get their instruments is loaded even when another one failed; the health
+        // timer only retries loads that failed, so one that was never started here would never start.
+        SeedEmptySeries();
+        SeedRangeSeries();
+
         if (failures.Count > 0)
         {
             throw failures.Count == 1 ? failures[0] : new AggregateException(failures);
         }
-
-        SeedEmptySeries();
-        SeedRangeSeries();
     }
 
     /// <summary>
