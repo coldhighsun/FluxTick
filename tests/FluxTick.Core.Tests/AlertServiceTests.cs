@@ -180,6 +180,31 @@ public sealed class AlertServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// Verifies a snapshot that was built before one already evaluated, and is raised after it because snapshots are
+    /// raised on several threads, does not take the condition back, so the next price does not fire the rule again.
+    /// </summary>
+    [Fact]
+    public async Task OlderSnapshotRaisedLate_DoesNotFireTheRuleAgain()
+    {
+        var provider = await StartAsync(AlertCondition.PriceAbove, 100, repeat: true);
+        AssetSnapshot? below = null;
+        _market.SnapshotChanged += (_, snapshot) =>
+        {
+            if (snapshot.Quote?.Price == 99)
+            {
+                below = snapshot;
+            }
+        };
+        await EmitAsync(provider, 99);
+        await EmitAsync(provider, 101);
+
+        _alerts.Evaluate(below!);
+        await EmitAsync(provider, 102);
+
+        _fired.Should().ContainSingle().Which.Quote.Price.Should().Be(101);
+    }
+
+    /// <summary>
     /// Verifies a rule that fires is logged once, with its id, the instrument and the price.
     /// </summary>
     [Fact]

@@ -49,6 +49,12 @@ public sealed class AlertService : IDisposable
     private Dictionary<AssetId, List<Watched>> _watched = [];
 
     /// <summary>
+    /// The sequence number of the newest snapshot evaluated for each instrument, so that an older one raised late is not
+    /// evaluated after it. Guarded by <see cref="_gate"/>.
+    /// </summary>
+    private readonly Dictionary<AssetId, long> _lastSequence = [];
+
+    /// <summary>
     /// How many rules are in <see cref="_watched"/>. Guarded by <see cref="_gate"/>.
     /// </summary>
     private int _watchedCount;
@@ -183,18 +189,38 @@ public sealed class AlertService : IDisposable
     /// <param name="snapshot">
     /// The snapshot.
     /// </param>
-    private void OnSnapshotChanged(object? sender, AssetSnapshot snapshot)
-    {
-        // A price that is not live says nothing about the market: it neither fires a rule nor counts as the condition
-        // having stopped.
-        if (snapshot.Quote is not { } quote || snapshot.Health != AssetHealth.Live)
-        {
-            return;
-        }
+    private void OnSnapshotChanged(object? sender, AssetSnapshot snapshot) => Evaluate(snapshot);
 
+    /// <summary>
+    /// Evaluates the rules of an instrument against a snapshot of it, unless a newer snapshot was evaluated already.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The snapshot.
+    /// </param>
+    internal void Evaluate(AssetSnapshot snapshot)
+    {
         List<AlertRule> fired = [];
         lock (_gate)
         {
+            // A snapshot built before one already evaluated would take the condition back to where it was, and the newer
+            // price that comes next would fire the rule a second time.
+            if (snapshot.Sequence != 0)
+            {
+                if (_lastSequence.TryGetValue(snapshot.Asset.Id, out var last) && last >= snapshot.Sequence)
+                {
+                    return;
+                }
+
+                _lastSequence[snapshot.Asset.Id] = snapshot.Sequence;
+            }
+
+            // A price that is not live says nothing about the market: it neither fires a rule nor counts as the condition
+            // having stopped.
+            if (snapshot.Quote is not { } quote || snapshot.Health != AssetHealth.Live)
+            {
+                return;
+            }
+
             if (!_watched.TryGetValue(snapshot.Asset.Id, out var list))
             {
                 return;
@@ -214,7 +240,8 @@ public sealed class AlertService : IDisposable
 
         foreach (var rule in fired)
         {
-            Fire(rule, snapshot.Asset, quote);
+            // Only a snapshot with a quote gets this far.
+            Fire(rule, snapshot.Asset, snapshot.Quote!);
         }
     }
 

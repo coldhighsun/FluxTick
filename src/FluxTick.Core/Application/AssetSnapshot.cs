@@ -486,4 +486,12 @@ public sealed record AssetSnapshot(
     AssetHealth Health,
     string? HealthDetail = null,
     SparklineTimeline? Timeline = null,
-    MarketState MarketState = MarketState.Unknown);
+    MarketState MarketState = MarketState.Unknown)
+{
+    /// <summary>
+    /// Gets the order in which the snapshot was built: a higher number is newer. Snapshots are raised on several threads,
+    /// so one built earlier can arrive after a newer one; a listener that must not go back drops it. Zero means not
+    /// known, for a snapshot that was not built by the market data service.
+    /// </summary>
+    public long Sequence { get; init; }
+}

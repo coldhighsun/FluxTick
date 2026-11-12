@@ -102,6 +102,11 @@ public sealed class MarketDataService : IAsyncDisposable
     private const int MaxOlderQuotesInARow = 5;
 
     /// <summary>
+    /// The sequence number of the snapshot built last; see <see cref="AssetSnapshot.Sequence"/>.
+    /// </summary>
+    private long _snapshotSequence;
+
+    /// <summary>
     /// How far ahead of the clock a trade time may be and still place its point in the sparkline; the clocks of source
     /// and machine may differ by a little. A time further ahead, such as one read in the wrong time zone, is placed at
     /// the time the quote was received.
@@ -1663,7 +1668,10 @@ public sealed class MarketDataService : IAsyncDisposable
         var timeline = new SparklineTimeline(
             series.Times(asOf), asOf, window, series.Bucket, covered, isShut,
             shutGapMemo: _slots.ContainsKey(state.Asset.ProviderId) ? state.ShutGaps : null);
-        return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline, MarketStateOf(state, now));
+        return new AssetSnapshot(state.Asset, state.Latest, sparkline, health, detail, timeline, MarketStateOf(state, now))
+        {
+            Sequence = Interlocked.Increment(ref _snapshotSequence),
+        };
     }
 
     /// <summary>

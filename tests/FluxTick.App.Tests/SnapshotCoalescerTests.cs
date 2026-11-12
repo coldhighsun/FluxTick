@@ -142,6 +142,24 @@ public class SnapshotCoalescerTests
     }
 
     /// <summary>
+    /// Verifies an older snapshot that arrives after a newer one of the same instrument, which is still waiting, does
+    /// not replace it.
+    /// </summary>
+    [Fact]
+    public void Submit_OlderSnapshotAfterANewerOne_KeepsTheNewer()
+    {
+        var ui = new QueueDispatcher();
+        List<decimal> applied = [];
+        var coalescer = new SnapshotCoalescer(ui, s => applied.Add(s.Quote!.Price));
+
+        coalescer.Submit(Snapshot(Btc, 2) with { Sequence = 2 });
+        coalescer.Submit(Snapshot(Btc, 1) with { Sequence = 1 });
+        ui.RunAll();
+
+        applied.Should().Equal(2m);
+    }
+
+    /// <summary>
     /// Verifies a snapshot that fails to apply is reported instead of escaping the UI thread's callback, and the other
     /// snapshots of the same hand-over are still applied.
     /// </summary>
