@@ -102,6 +102,13 @@ public sealed class MarketDataService : IAsyncDisposable
     private const int MaxOlderQuotesInARow = 5;
 
     /// <summary>
+    /// How far ahead of the clock a trade time may be and still place its point in the sparkline; the clocks of source
+    /// and machine may differ by a little. A time further ahead, such as one read in the wrong time zone, is placed at
+    /// the time the quote was received.
+    /// </summary>
+    private static readonly TimeSpan MaxTradeTimeAhead = TimeSpan.FromMinutes(1);
+
+    /// <summary>
     /// How long a regular session has to be under way before no trade today means a holiday, for a source that reports the
     /// state of the market itself. It is longer than the default, as such a source may lag by up to half an hour, and its
     /// last trade is from the day before until the first delayed trade comes in.
@@ -1478,16 +1485,20 @@ public sealed class MarketDataService : IAsyncDisposable
 
             state.Latest = quote;
             state.LastReceivedAt = received;
-            state.Series.Add(quote.Price, quote.Timestamp);
+
+            // A point dated in the future would move the series past the clock, and every correct point after it would be
+            // dropped as older until that time came.
+            var pointTime = quote.Timestamp - received > MaxTradeTimeAhead ? received : quote.Timestamp;
+            state.Series.Add(quote.Price, pointTime);
             foreach (var seed in state.RangeSeeds.Values)
             {
-                seed.Series.Add(quote.Price, quote.Timestamp);
+                seed.Series.Add(quote.Price, pointTime);
             }
 
             // The series held for the chart may belong to a load that was replaced since, which the loop above does not reach.
             if (state.Held is { } held && !ReferenceEquals(held.Series, state.Series) && !IsSeedSeries(state, held.Series))
             {
-                held.Series.Add(quote.Price, quote.Timestamp);
+                held.Series.Add(quote.Price, pointTime);
             }
 
             snapshot = BuildSnapshot(state);
