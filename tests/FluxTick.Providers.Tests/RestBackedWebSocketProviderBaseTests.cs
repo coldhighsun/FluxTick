@@ -33,6 +33,27 @@ public class RestBackedWebSocketProviderBaseTests
     }
 
     /// <summary>
+    /// Verifies a source whose stream accepts each connection and hangs up at once, while polling fails too, shows as
+    /// failed and stays so: a handshake that delivers no prices does not clear the failed rounds.
+    /// </summary>
+    [Fact]
+    public async Task Status_StreamHangsUpAndPollingFails_StaysFailed()
+    {
+        await using var server = LoopbackServer.Start();
+        server.CloseOnConnect = true;
+        await using var provider = new TestProvider(server.Uri, TimeSpan.FromMilliseconds(20)) { RestFails = true };
+        var states = new System.Collections.Concurrent.ConcurrentQueue<ProviderConnectionState>();
+        provider.StatusChanged += (_, status) => states.Enqueue(status.State);
+
+        await provider.SetSubscriptionsAsync([Coin("A")]);
+        await TestWait.EventuallyAsync(() => provider.Status.State == ProviderConnectionState.Failed);
+        var connections = server.ConnectionCount;
+        await TestWait.EventuallyAsync(() => server.ConnectionCount >= connections + 3);
+
+        states.SkipWhile(s => s != ProviderConnectionState.Failed).Should().NotContain(ProviderConnectionState.Reconnecting);
+    }
+
+    /// <summary>
     /// Creates a test instrument.
     /// </summary>
     /// <param name="symbol">
@@ -50,11 +71,14 @@ public class RestBackedWebSocketProviderBaseTests
     /// <param name="uri">
     /// The address of the stream.
     /// </param>
-    private sealed class TestProvider(Uri uri)
+    /// <param name="fallbackInterval">
+    /// How often REST is polled while the stream is down, or <see langword="null"/> for an hour.
+    /// </param>
+    private sealed class TestProvider(Uri uri, TimeSpan? fallbackInterval = null)
         : RestBackedWebSocketProviderBase(
             new ProviderDescriptor("test", "Test", "A test source.", [AssetClass.Crypto], ProviderUpdateMode.Streaming),
             uri,
-            TimeSpan.FromHours(1),
+            fallbackInterval ?? TimeSpan.FromHours(1),
             TimeProvider.System,
             NullLogger.Instance,
             TimeSpan.FromHours(1))
@@ -68,6 +92,11 @@ public class RestBackedWebSocketProviderBaseTests
         /// Whether a subscribe is waiting at the gate.
         /// </summary>
         private int _subscribeBlocked;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether every REST request fails.
+        /// </summary>
+        public bool RestFails { get; set; }
 
         /// <summary>
         /// Gets the symbols fetched over REST so far.
@@ -98,7 +127,9 @@ public class RestBackedWebSocketProviderBaseTests
                 Fetched.Add(asset.Symbol);
             }
 
-            return Task.FromResult(new PollOutcome(assets.Count, 0, null, BackOff: false));
+            return Task.FromResult(RestFails
+                ? new PollOutcome(0, assets.Count, "down", BackOff: false)
+                : new PollOutcome(assets.Count, 0, null, BackOff: false));
         }
 
         /// <inheritdoc />
