@@ -402,7 +402,7 @@ public sealed class SparklineControl : Control
         // The axis goes under the prices too; the first price of the window is the 0% it measures from.
         if (ShowPercentAxis && bounds.Height >= MinAxisHeight)
         {
-            DrawPercentAxis(context, (double)points[0], min, max, gapBrush, bounds.Width, pad, height);
+            DrawPercentAxis(context, (double)points[0], min, max, gapBrush, bounds.Width, pad, height, coordinates[0].Y, coordinates[^1].Y);
         }
 
         // After the last price of a source that stopped, however it shows (stale, reconnecting, failed), the last price is
@@ -603,7 +603,13 @@ public sealed class SparklineControl : Control
     /// <param name="height">
     /// The height of the chart without the space around it.
     /// </param>
-    private void DrawPercentAxis(DrawingContext context, double baseline, double bottom, double top, IBrush brush, double totalWidth, double pad, double height)
+    /// <param name="firstY">
+    /// The vertical position of the first price, where the line starts at the left edge.
+    /// </param>
+    /// <param name="lastY">
+    /// The vertical position of the last price, where the line ends at the right edge.
+    /// </param>
+    private void DrawPercentAxis(DrawingContext context, double baseline, double bottom, double top, IBrush brush, double totalWidth, double pad, double height, double firstY, double lastY)
     {
         var pen = new Pen(brush, 0.5);
         foreach (var (percent, position) in SparklineScale.PercentTicks(bottom, top, baseline))
@@ -618,9 +624,15 @@ public sealed class SparklineControl : Control
 
             // The label sits on its line, and is moved inside the chart when the line is at an edge.
             var top0 = Math.Clamp(y - text.Height, 0, Math.Max(0, pad + height - text.Height));
+
+            // The price line starts at the left edge on the 0% line, so a label there would lie on the price line. It goes to
+            // the end of the line whose price is farther from the label.
+            var middle = top0 + (text.Height / 2);
+            var onRight = Math.Abs(lastY - middle) > Math.Abs(firstY - middle);
+            var x = onRight ? totalWidth - pad - 1 - text.Width : pad + 1;
             using (context.PushOpacity(0.7))
             {
-                context.DrawText(text, new Point(pad + 1, top0));
+                context.DrawText(text, new Point(x, top0));
             }
         }
     }

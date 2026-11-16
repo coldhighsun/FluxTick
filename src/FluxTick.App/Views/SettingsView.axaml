@@ -27,6 +27,12 @@
     <Style Selector="Button.providerRow:pointerover Path.chevron">
       <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
     </Style>
+    <!-- The keyboard focus ring of the row, like the other buttons. -->
+    <Style Selector="Button.providerRow:focus-visible /template/ ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
   </UserControl.Styles>
   <UserControl.Resources>
     <!-- One compact row of the data source list: a button that opens the detail page, and the enable switch beside it. -->
@@ -41,13 +47,13 @@
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
                   <Border Classes="chip warn" IsVisible="{Binding HasMissingRequired}" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Provider_NeedsSetup}" Classes="warn" FontSize="10" />
+                    <TextBlock Text="{loc:T Provider_NeedsSetup}" Classes="warn" FontSize="11" />
                   </Border>
                   <Border Classes="chip warn" IsVisible="{Binding HasOptionError}" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_CheckSettings}" Classes="warn" FontSize="10" />
+                    <TextBlock Text="{loc:T Settings_CheckSettings}" Classes="warn" FontSize="11" />
                   </Border>
                   <Border Classes="chip warn" IsVisible="{Binding IsDirty}" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_Unsaved}" Classes="warn" FontSize="10" />
+                    <TextBlock Text="{loc:T Settings_Unsaved}" Classes="warn" FontSize="11" />
                   </Border>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="5">
@@ -55,7 +61,7 @@
                   <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" MaxWidth="150"
                              ToolTip.Tip="{Binding StatusText}" />
                   <TextBlock Text="·" Classes="muted" FontSize="11" />
-                  <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="10" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                  <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                              ToolTip.Tip="{Binding Summary}" />
                 </StackPanel>
               </StackPanel>
@@ -79,7 +85,7 @@
                  views:NumericInput.Enabled="True" views:NumericInput.Kind="{Binding NumberKind}" />
         <ToggleSwitch IsChecked="{Binding BoolValue}" IsVisible="{Binding IsBool}" />
         <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" IsVisible="{Binding IsChoice}" HorizontalAlignment="Stretch" />
-        <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Classes="muted" FontSize="10" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
         <TextBlock Text="{Binding Error}" Classes="warn" FontSize="11" />
       </StackPanel>
     </DataTemplate>
@@ -400,12 +406,12 @@
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
                               <Border Classes="chip" Margin="0,0,4,0">
-                                <TextBlock Text="{Binding}" FontSize="10" Classes="muted" />
+                                <TextBlock Text="{Binding}" FontSize="11" Classes="muted" />
                               </Border>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <TextBlock Text="{Binding ModeLabel}" Classes="muted" FontSize="10" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ModeLabel}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
                       </StackPanel>
                       <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasHomepage}">
                         <TextBlock Text="{loc:T Settings_Website}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
@@ -552,7 +558,7 @@
 
     <StackPanel Grid.Row="1" Margin="14,4,14,12">
       <TextBlock Text="{loc:T Tagline}" Classes="muted" FontSize="11" HorizontalAlignment="Center" Margin="0,0,0,2" />
-      <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="10"
+      <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="11"
                  TextWrapping="Wrap" TextAlignment="Center" />
     </StackPanel>
   </Grid>
