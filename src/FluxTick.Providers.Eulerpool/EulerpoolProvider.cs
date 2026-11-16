@@ -130,12 +130,58 @@ public sealed class EulerpoolProvider : RestBackedWebSocketProviderBase, ISymbol
             HistoryRange.Month => "60",
             _ => "D",
         };
-        var candles = await FetchCandlesAsync(asset, resolution, now - HistoryRangeSpec.For(range).Window, now, cancellationToken).ConfigureAwait(false);
+        var from = now - HistoryRangeSpec.For(range).Window;
+
+        // The service keeps hourly candles for about a week only, so a month asks for the daily closes of the time before them.
+        if (range == HistoryRange.Month)
+        {
+            var hourlyTask = FetchCandlesAsync(asset, resolution, from, now, cancellationToken);
+            var dailyTask = FetchDailyBeforeAsync(asset, from, now, cancellationToken);
+            var hourly = await hourlyTask.ConfigureAwait(false);
+            var daily = await dailyTask.ConfigureAwait(false);
+
+            // A daily candle dated within a day of the first hourly one covers the same time, and its close lies later than its date.
+            var firstHourly = hourly.Count > 0 ? hourly.Min(p => p.Timestamp) : DateTimeOffset.MaxValue;
+            var cutoff = firstHourly == DateTimeOffset.MaxValue ? firstHourly : firstHourly - TimeSpan.FromDays(1);
+            return [.. daily.Where(p => p.Timestamp <= cutoff), .. hourly];
+        }
+
+        var candles = await FetchCandlesAsync(asset, resolution, from, now, cancellationToken).ConfigureAwait(false);
 
         // A shut market has few or no candles in the last day; the chart shows its last session once that is older.
         return range == HistoryRange.Day && HistoryWindow.MissesLastSession(candles, now)
             ? await FetchCandlesAsync(asset, resolution, now - HistoryWindow.LastSessionSpan, now, cancellationToken).ConfigureAwait(false)
             : candles;
+    }
+
+    /// <summary>
+    /// Asks for the daily closes that fill the start of a longer chart; they only add to the hourly candles, so a failure leaves none.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <param name="from">
+    /// The start of the stretch.
+    /// </param>
+    /// <param name="to">
+    /// The end of the stretch.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token to cancel the request.
+    /// </param>
+    /// <returns>
+    /// The daily closes, or none when the service could not answer.
+    /// </returns>
+    private async Task<IReadOnlyList<PricePoint>> FetchDailyBeforeAsync(Asset asset, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await FetchCandlesAsync(asset, "D", from, to, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return [];
+        }
     }
 
     /// <summary>

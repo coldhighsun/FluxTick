@@ -1,3 +1,4 @@
+using System.Net;
 using System.Globalization;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
@@ -624,7 +625,6 @@ public class EulerpoolTests
     [Theory]
     [InlineData(HistoryRange.Day, "5", 86400)]
     [InlineData(HistoryRange.FiveDays, "30", 432000)]
-    [InlineData(HistoryRange.Month, "60", 2592000)]
     [InlineData(HistoryRange.HalfYear, "D", 15811200)]
     [InlineData(HistoryRange.Year, "D", 31536000)]
     public async Task Provider_RangeHistory_AsksForItsResolution(HistoryRange range, string resolution, int seconds)
@@ -638,5 +638,81 @@ public class EulerpoolTests
 
         provider.SupportsRange(range).Should().BeTrue();
         handler.Requests.Single().RequestUri!.PathAndQuery.Should().Be($"/api/1/charting/ohlcv/AAPL?resolution={resolution}&from={now - seconds}&to={now}");
+    }
+
+    /// <summary>
+    /// Verifies a month takes the hourly candles the service still has and fills the time before them with daily closes.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MonthHistory_FillsTimeBeforeTheHourlyCandlesWithDailyCloses()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+        var handler = new StubHttpHandler(request => request.RequestUri!.Query.Contains("resolution=60")
+            ? StubHttpHandler.Json($$"""{"t":[{{now - 86400}},{{now - 3600}}],"c":[6.1,6.2]}""")
+            : StubHttpHandler.Json($$"""{"t":[{{now - 864000}},{{now - 777600}},{{now - 90000}},{{now - 3000}}],"c":[5.1,5.2,6.0,6.3]}"""));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+
+        var points = await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), HistoryRange.Month);
+
+        handler.Requests.Select(r => r.RequestUri!.PathAndQuery).Should().Equal(
+            $"/api/1/charting/ohlcv/AAPL?resolution=60&from={now - 2592000}&to={now}",
+            $"/api/1/charting/ohlcv/AAPL?resolution=D&from={now - 2592000}&to={now}");
+        // The daily close dated a day before the first hourly candle covers the same time, so it is left out.
+        points.Select(p => p.Price).Should().Equal(5.1m, 5.2m, 6.1m, 6.2m);
+    }
+
+    /// <summary>
+    /// Verifies a month with no hourly candles is drawn from the daily closes alone.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MonthHistory_WithoutHourlyCandles_UsesAllDailyCloses()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+        var handler = new StubHttpHandler(request => request.RequestUri!.Query.Contains("resolution=60")
+            ? StubHttpHandler.Json("""{"t":[],"c":[]}""")
+            : StubHttpHandler.Json($$"""{"t":[{{now - 864000}},{{now - 90000}}],"c":[5.1,6.0]}"""));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+
+        var points = await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), HistoryRange.Month);
+
+        points.Select(p => p.Price).Should().Equal(5.1m, 6.0m);
+    }
+
+    /// <summary>
+    /// Verifies a month keeps the hourly candles when the daily closes cannot be fetched.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MonthHistory_WhenDailyCloseRequestFails_KeepsHourlyCandles()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+        var handler = new StubHttpHandler(request => request.RequestUri!.Query.Contains("resolution=60")
+            ? StubHttpHandler.Json($$"""{"t":[{{now - 86400}},{{now - 3600}}],"c":[6.1,6.2]}""")
+            : new HttpResponseMessage(HttpStatusCode.TooManyRequests));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+
+        var points = await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), HistoryRange.Month);
+
+        points.Select(p => p.Price).Should().Equal(6.1m, 6.2m);
+    }
+
+    /// <summary>
+    /// Verifies a month puts the hourly candles in time order when the service sends them newest first.
+    /// </summary>
+    [Fact]
+    public async Task Provider_MonthHistory_WithHourlyCandlesNewestFirst_StillFillsOnlyTimeBeforeThem()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 28, 15, 0, 0, TimeSpan.Zero));
+        var now = time.GetUtcNow().ToUnixTimeSeconds();
+        var handler = new StubHttpHandler(request => request.RequestUri!.Query.Contains("resolution=60")
+            ? StubHttpHandler.Json($$"""{"t":[{{now - 3600}},{{now - 86400}}],"c":[6.2,6.1]}""")
+            : StubHttpHandler.Json($$"""{"t":[{{now - 864000}},{{now - 3000}}],"c":[5.1,6.3]}"""));
+        await using var provider = CreateProvider(new Uri("ws://127.0.0.1:1/unreachable"), handler, time);
+
+        var points = await provider.GetHistoryAsync(new Asset("eulerpool", "AAPL", "Apple", AssetClass.Equity), HistoryRange.Month);
+
+        points.Select(p => p.Price).Should().Contain(5.1m).And.NotContain(6.3m);
     }
 }
