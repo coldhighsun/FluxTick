@@ -104,6 +104,41 @@ public sealed class EdgeDockRulesTests
     }
 
     /// <summary>
+    /// A window left at an edge starts docked, one away from the edges does not, and neither does one that is off every
+    /// screen or whose hidden place would show on a neighboring screen.
+    /// </summary>
+    [Fact]
+    public void RestsAtEdge_Position_DependsOnEdgeAndNeighbors()
+    {
+        var screen = (Bounds: new PixelRect(0, 0, 1920, 1040), Area);
+        var neighbor = (Bounds: new PixelRect(-1280, 0, 1280, 1000), Area: new PixelRect(-1280, 0, 1280, 960));
+
+        EdgeDockRules.RestsAtEdge(new PixelRect(1238, 40, 340, 420), [screen], 8, 4).Should().BeTrue();
+        EdgeDockRules.RestsAtEdge(new PixelRect(1580, 300, 340, 420), [screen], 8, 4).Should().BeTrue();
+        EdgeDockRules.RestsAtEdge(new PixelRect(800, 300, 340, 420), [screen], 8, 4).Should().BeFalse();
+        EdgeDockRules.RestsAtEdge(new PixelRect(-2000, 300, 340, 420), [screen], 8, 4).Should().BeFalse();
+        EdgeDockRules.RestsAtEdge(new PixelRect(0, 300, 340, 420), [screen, neighbor], 8, 4).Should().BeFalse();
+        EdgeDockRules.RestsAtEdge(new PixelRect(1580, 300, 340, 420), [screen, neighbor], 8, 4).Should().BeTrue();
+        EdgeDockRules.RestsAtEdge(new PixelRect(800, 44, 340, 420), [screen], 8, 4).Should().BeTrue();
+        EdgeDockRules.RestsAtEdge(new PixelRect(800, 44, 340, 420), [screen], 8, 4, [DockEdge.Top]).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A window left hidden beyond an edge has its top-left corner outside the work area, yet it still rests at that
+    /// edge; the screen is the one it overlaps most, as the running dock takes it.
+    /// </summary>
+    [Fact]
+    public void RestsAtEdge_WindowHiddenBeyondEdge_StillRestsThere()
+    {
+        var screen = (Bounds: new PixelRect(0, 0, 1920, 1040), Area);
+        var right = (Bounds: new PixelRect(1920, 0, 1920, 1040), Area: new PixelRect(1920, 40, 1920, 1000));
+
+        EdgeDockRules.RestsAtEdge(new PixelRect(-336, 300, 340, 420), [screen], 8, 4).Should().BeTrue();
+        EdgeDockRules.RestsAtEdge(new PixelRect(1916, 300, 340, 420), [screen], 8, 4).Should().BeTrue();
+        EdgeDockRules.RestsAtEdge(new PixelRect(1700, 300, 340, 420), [screen, right], 8, 4).Should().BeFalse();
+    }
+
+    /// <summary>
     /// A pointer inside the window, or within the margin around it, is on the window; one further out is not.
     /// </summary>
     /// <param name="x">

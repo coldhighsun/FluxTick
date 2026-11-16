@@ -63,6 +63,12 @@ public sealed partial class MainWindow
     private IDisposable? _dockSettle;
 
     /// <summary>
+    /// Whether the window was opened in sight only because it was expected to hide at its edge. If the dock turns out not
+    /// to work, the window goes to the tray instead, as a start minimized asks.
+    /// </summary>
+    private bool _hideToTrayIfNotDocked;
+
+    /// <summary>
     /// Whether the wait for the position to settle follows a resize: the window then keeps the edge it is docked to and
     /// is only put flush with it again, because a smaller window is not moved away from its edge by the user.
     /// </summary>
@@ -186,8 +192,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void ApplyAutoHide()
     {
-        _dock.SetEnabled(
-            (DataContext as MainViewModel)?.Settings is { AutoHideSupported: true, AutoHideAtEdge: true, AlwaysOnTop: true });
+        _dock.SetEnabled(AutoHideWanted());
         if (_dock.Enabled)
         {
             ScheduleDockSettle();
@@ -198,10 +203,53 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
+    /// Determines whether the settings ask for edge hiding and the platform supports it.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the window is to be hidden at an edge it rests at.
+    /// </returns>
+    private bool AutoHideWanted() =>
+        (DataContext as MainViewModel)?.Settings is { AutoHideSupported: true, AutoHideAtEdge: true, AlwaysOnTop: true };
+
+    /// <summary>
+    /// Determines, before the window is shown, whether it will be docked: edge hiding is on and the geometry that was
+    /// restored leaves it at a screen edge. The window left at an edge is hidden there at the next start, so starting
+    /// minimized must not keep it away from the screen altogether.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the window will hide at its edge once it opens.
+    /// </returns>
+    public bool RestsAtDockEdge()
+    {
+        // A size that was never set (not a number) says nothing about where the window ends up.
+        if (!AutoHideWanted() || WindowState != WindowState.Normal || !double.IsFinite(Width) || !double.IsFinite(Height))
+        {
+            return false;
+        }
+
+        // The window has no screen yet, so its own scaling is not known: the screen the restored position lies on gives it.
+        var screens = Screens.All;
+        var scaling = screens.FirstOrDefault(s => s.WorkingArea.Contains(Position))?.Scaling ?? Screens.Primary?.Scaling ?? 1;
+        var scale = ScreenUnits.PerPixel(scaling);
+        return EdgeDockRules.RestsAtEdge(
+            new PixelRect(Position, PixelSize.FromSize(new Size(Width, Height), scale)),
+            screens.Select(s => (s.Bounds, s.WorkingArea)).ToList(),
+            ScaledPixels(EdgeDockRules.SnapDistance, scale),
+            ScaledPixels(EdgeDockRules.Sliver, scale));
+    }
+
+    /// <summary>
+    /// Makes the window go to the tray if the dock it was expected to hide at does not hide it: the platform refuses the
+    /// edge, or the window is not docked once it opens.
+    /// </summary>
+    public void HideToTrayIfNotDocked() => _hideToTrayIfNotDocked = true;
+
+    /// <summary>
     /// Ends the docking: a hidden window comes out and the window is a plain window again until it rests at an edge anew.
     /// </summary>
     private void ReleaseDock()
     {
+        _hideToTrayIfNotDocked = false;
         CancelDockSettle();
         CancelDockLeave();
         if (_dock.Hidden && EnsureDockArea())
@@ -370,6 +418,8 @@ public sealed partial class MainWindow
     /// </param>
     private void RunDockDrag(Action drag, bool resize)
     {
+        // The user took the window in hand, so the start's wish to hide it to the tray no longer applies.
+        _hideToTrayIfNotDocked = false;
         _dock.SetDragging(true);
         try
         {
@@ -425,6 +475,13 @@ public sealed partial class MainWindow
         _dockSettle = null;
         if (!_dock.CanSettle || Screens.ScreenFromWindow(this) is not { } screen)
         {
+            // Nothing can be decided about the window, so it is not docked and the start's wish to hide it applies.
+            if (_hideToTrayIfNotDocked)
+            {
+                _hideToTrayIfNotDocked = false;
+                Hide();
+            }
+
             return;
         }
 
@@ -437,6 +494,12 @@ public sealed partial class MainWindow
                 CurrentPixelBounds(), screen.WorkingArea, others, ScaledPixels(EdgeDockRules.SnapDistance), ScaledPixels(EdgeDockRules.Sliver));
         if (shown is null)
         {
+            if (_hideToTrayIfNotDocked)
+            {
+                _hideToTrayIfNotDocked = false;
+                Hide();
+            }
+
             return;
         }
 
@@ -600,6 +663,10 @@ public sealed partial class MainWindow
         DispatcherTimer.RunOnce(
             () =>
             {
+                // The check ends the start's wait whatever it finds: a window that came out again is in sight by its own
+                // doing, and a stale flag must not send it to the tray at some later time.
+                var hideToTray = _hideToTrayIfNotDocked;
+                _hideToTrayIfNotDocked = false;
                 if (!_dock.Hidden || _dock.Sliding)
                 {
                     return;
@@ -623,6 +690,10 @@ public sealed partial class MainWindow
 
                     MoveDock(shown);
                     RaiseGeometryChanged();
+                    if (hideToTray)
+                    {
+                        Hide();
+                    }
                 }
             },
             DockVerifyDelay);
@@ -650,5 +721,19 @@ public sealed partial class MainWindow
     /// <returns>
     /// The length in screen pixels, at least one.
     /// </returns>
-    private int ScaledPixels(double length) => Math.Max(1, (int)Math.Round(length * ScreenUnitScale));
+    private int ScaledPixels(double length) => ScaledPixels(length, ScreenUnitScale);
+
+    /// <summary>
+    /// Converts a length in device independent pixels to screen pixels at a given scale.
+    /// </summary>
+    /// <param name="length">
+    /// The length in device independent pixels.
+    /// </param>
+    /// <param name="scale">
+    /// How many screen units one device independent pixel makes.
+    /// </param>
+    /// <returns>
+    /// The length in screen pixels, at least one.
+    /// </returns>
+    private static int ScaledPixels(double length, double scale) => Math.Max(1, (int)Math.Round(length * scale));
 }

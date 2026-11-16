@@ -160,6 +160,98 @@ internal static class EdgeDockRules
         !otherScreens.Any(screen => screen.Intersects(hidden));
 
     /// <summary>
+    /// Determines whether a window at a given place counts as docked, so that it will be hidden at its edge once it
+    /// opens: it lies at an edge of the work area it starts in, and hidden there it would stay off the other screens.
+    /// This is the judgment <c>EdgeDockModel.Settle</c> makes, asked before the window exists.
+    /// </summary>
+    /// <param name="window">
+    /// The window bounds in screen pixels.
+    /// </param>
+    /// <param name="screens">
+    /// The bounds and the work area of every screen.
+    /// </param>
+    /// <param name="snap">
+    /// The distance to an edge that still counts, in screen pixels.
+    /// </param>
+    /// <param name="sliver">
+    /// The width of the strip that stays visible when hidden, in screen pixels.
+    /// </param>
+    /// <param name="excluded">
+    /// Edges that are not used, because the platform did not keep a window beyond them.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the window starts on a screen and rests at one of its edges.
+    /// </returns>
+    public static bool RestsAtEdge(
+        PixelRect window,
+        IReadOnlyList<(PixelRect Bounds, PixelRect Area)> screens,
+        int snap,
+        int sliver,
+        IReadOnlyCollection<DockEdge>? excluded = null)
+    {
+        // The screen the window lies on most, as the running dock takes it: a window left hidden beyond an edge has its
+        // top-left corner outside the work area although it overlaps the screen.
+        var best = -1L;
+        var found = default((PixelRect Bounds, PixelRect Area));
+        foreach (var screen in screens)
+        {
+            var overlap = screen.Area.Intersect(window);
+            var size = (long)overlap.Width * overlap.Height;
+            if (size > best)
+            {
+                best = size;
+                found = screen;
+            }
+        }
+
+        if (best <= 0)
+        {
+            return false;
+        }
+
+        var others = screens.Where(other => other.Bounds != found.Bounds).Select(other => other.Bounds);
+        return Decide(window, found.Area, others, snap, sliver, excluded) != DockEdge.None;
+    }
+
+    /// <summary>
+    /// Decides which edge a window rests at on a screen: the edge it is docked to, unless hidden there it would show up
+    /// on another screen. The running dock and the start of the app both rely on this judgment.
+    /// </summary>
+    /// <param name="window">
+    /// The window bounds in screen pixels.
+    /// </param>
+    /// <param name="area">
+    /// The work area of the screen the window is on, in screen pixels.
+    /// </param>
+    /// <param name="otherScreens">
+    /// The bounds of every other screen.
+    /// </param>
+    /// <param name="snap">
+    /// The distance to an edge that still counts, in screen pixels.
+    /// </param>
+    /// <param name="sliver">
+    /// The width of the strip that stays visible when hidden, in screen pixels.
+    /// </param>
+    /// <param name="excluded">
+    /// Edges that are not used, because the platform did not keep a window beyond them.
+    /// </param>
+    /// <returns>
+    /// The edge, or <see cref="DockEdge.None"/> when the window is not docked.
+    /// </returns>
+    public static DockEdge Decide(
+        PixelRect window, PixelRect area, IEnumerable<PixelRect> otherScreens, int snap, int sliver, IReadOnlyCollection<DockEdge>? excluded = null)
+    {
+        var edge = DetectEdge(window, area, snap, excluded);
+        if (edge == DockEdge.None)
+        {
+            return DockEdge.None;
+        }
+
+        var hidden = new PixelRect(HiddenPosition(window, area, edge, sliver), window.Size);
+        return StaysOffOtherScreens(hidden, otherScreens) ? edge : DockEdge.None;
+    }
+
+    /// <summary>
     /// Determines whether the pointer is on the window, judged by where the system says the pointer is rather than by
     /// the pointer events the window received, which stop being reliable after a pop-up or a drag took the pointer.
     /// </summary>
