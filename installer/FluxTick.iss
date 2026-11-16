@@ -1,5 +1,5 @@
 ; Inno Setup script for the FluxTick Windows installer.
-; Compile with: iscc /DAppVersion=0.1.0 /DNumericVersion=0.1.0.0 /DSourceExe=<path>\FluxTick.exe
+; Compile with: iscc /DAppVersion=0.1.0 /DNumericVersion=0.1.0.0 /DSourceDir=<publish dir>
 ;               /DOutputDir=<dir> /DOutputName=FluxTick-v0.1.0-win-x64-setup installer\FluxTick.iss
 
 #ifndef AppVersion
@@ -8,8 +8,8 @@
 #ifndef NumericVersion
   #define NumericVersion "0.0.0.0"
 #endif
-#ifndef SourceExe
-  #error SourceExe must point at the published FluxTick.exe
+#ifndef SourceDir
+  #error SourceDir must point at the (non-single-file) publish folder holding FluxTick.exe
 #endif
 #ifndef OutputDir
   #define OutputDir "."
@@ -53,8 +53,12 @@ Name: "chinesetraditional"; MessagesFile: "compiler:Languages\ChineseTraditional
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; Drop libraries left by an earlier version, so an update never mixes old and new files.
+Type: files; Name: "{app}\*.dll"
+
 [Files]
-Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "*.pdb,*.xml"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\FluxTick"; Filename: "{app}\FluxTick.exe"
