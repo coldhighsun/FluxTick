@@ -151,11 +151,17 @@
                   <ComboBox Grid.Column="1" ItemsSource="{Binding BaseCurrencies}" SelectedItem="{Binding BaseCurrency}" Width="140" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <TextBlock Text="{loc:T Settings_KeepOnTop}" VerticalAlignment="Center" />
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_KeepOnTop}" />
+                    <TextBlock Text="{loc:T Settings_KeepOnTopHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <TextBlock Text="{loc:T Settings_LockPosition}" VerticalAlignment="Center" />
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_LockPosition}" />
+                    <TextBlock Text="{loc:T Settings_LockPositionHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding Locked}" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding AutoHideSupported}">
@@ -181,7 +187,7 @@
               <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                   <TextBlock Text="{loc:T Settings_Opacity}" VerticalAlignment="Center" />
-                  <Slider Grid.Column="1" Minimum="0.3" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True" Value="{Binding Opacity}" Margin="12,0" />
+                  <Slider Grid.Column="1" Minimum="{x:Static vm:SettingsViewModel.MinOpacity}" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True" Value="{Binding Opacity}" Margin="12,0" />
                   <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat={}{0:P0}}" Classes="muted mono" VerticalAlignment="Center" />
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">

@@ -116,7 +116,7 @@
   <Style Selector="Path.arrow.down">
     <Setter Property="Fill" Value="{DynamicResource DownBrush}" />
   </Style>
-  <Style Selector="Border.row.dimmed Path.arrow, Border.tile.dimmed Path.arrow">
+  <Style Selector="Border.row.dimmed Path.arrow, Border.tile.dimmed Path.arrow, Grid.stopped Path.arrow">
     <Setter Property="Fill" Value="{DynamicResource MutedBrush}" />
   </Style>
 

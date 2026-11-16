@@ -1310,6 +1310,21 @@ public class ViewModelFlowTests
     }
 
     /// <summary>
+    /// Verifies an opacity saved below the lowest one the slider allows, as an older version could, is raised to it.
+    /// </summary>
+    [Fact]
+    public async Task Opacity_SavedBelowTheLowest_IsRaisedToIt()
+    {
+        var settings = new AppSettings();
+        settings.Appearance.Opacity = 0.3;
+        await using var h = new Harness(settings);
+
+        await h.Main.InitializeAsync();
+
+        h.SettingsPage.Opacity.Should().Be(SettingsViewModel.MinOpacity);
+    }
+
+    /// <summary>
     /// Verifies a failing data source turns its chip bad and its tooltip carries the reason.
     /// </summary>
     [Fact]

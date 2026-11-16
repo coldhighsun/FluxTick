@@ -51,9 +51,13 @@
                 <TextBlock Text="{Binding PriceText}" Classes="mono" HorizontalAlignment="Right"
                            Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
                 <Panel MinWidth="64">
-                  <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11" HorizontalAlignment="Right"
-                             IsVisible="{Binding !HasStatus}"
-                             Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+                  <!-- A small triangle says the direction as well as the color does, as in the window. -->
+                  <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Right" IsVisible="{Binding !HasStatus}">
+                    <Path Classes="arrow up" Data="M0 5L3 0L6 5Z" IsVisible="{Binding IsUp}" />
+                    <Path Classes="arrow down" Data="M0 0L6 0L3 5Z" IsVisible="{Binding IsDown}" />
+                    <TextBlock Text="{Binding ChangeText}" Classes="mono" FontSize="11"
+                               Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" />
+                  </StackPanel>
                   <TextBlock Text="{Binding StatusText}" Classes="warn" Classes.muted="{Binding StatusIsNeutral}" FontSize="11" HorizontalAlignment="Right"
                              IsVisible="{Binding HasStatus}" />
                 </Panel>

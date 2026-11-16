@@ -1572,7 +1572,13 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             TaskScheduler.Default);
 
     /// <summary>
-    /// Gets or sets the background opacity between 0.3 and 1.
+    /// The lowest background opacity. Below it the text over a busy wallpaper is hard to read, so a lower value saved by an
+    /// older version is raised to it.
+    /// </summary>
+    public const double MinOpacity = 0.5;
+
+    /// <summary>
+    /// Gets or sets the background opacity between <see cref="MinOpacity"/> and 1.
     /// </summary>
     [ObservableProperty]
     public partial double Opacity { get; set; } = 0.9;
@@ -1760,7 +1766,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             BossKey = _settings.Current.General.BossKey;
             IsRecordingBossKey = false;
             BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.IsChinese(Loc.Instance.Language));
-            Opacity = current.Appearance.Opacity;
+            Opacity = Math.Clamp(current.Appearance.Opacity, MinOpacity, 1);
             AlwaysOnTop = current.Appearance.AlwaysOnTop;
             Locked = current.Appearance.Locked;
             RollPriceOnUpdate = current.Appearance.RollPriceOnUpdate;
