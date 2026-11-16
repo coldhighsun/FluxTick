@@ -16,7 +16,8 @@
     <Style Selector="Button.providerRow">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="0" />
+      <!-- Room inside the focus ring, taken from the card around the button so that the text stays where it was. -->
+      <Setter Property="Padding" Value="6,4,2,4" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Cursor" Value="Hand" />
@@ -42,7 +43,7 @@
     <DataTemplate x:Key="ProviderRowTemplate" x:DataType="vm:ProviderSettingsViewModel">
       <StackPanel>
       <TextBlock Text="{Binding SectionTitle}" Classes="section" Margin="2,6,0,6" IsVisible="{Binding HasSectionTitle}" />
-      <Border Classes="card" Padding="8,6" Margin="0,0,0,6">
+      <Border Classes="card" Padding="2,2,8,2" Margin="0,0,0,6">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
           <Button Classes="providerRow" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Name}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
@@ -101,6 +102,7 @@
       <TabItem Header="{loc:T Settings_TabGeneral}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,10,14,4">
+            <TextBlock Text="{loc:T Settings_SectionLanguage}" Classes="section" Margin="2,0,0,6" />
             <Border Classes="card">
               <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
@@ -110,6 +112,18 @@
                   </StackPanel>
                   <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" Width="140" />
                 </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_BaseCurrency}" />
+                    <TextBlock Text="{loc:T Settings_BaseCurrencyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding BaseCurrencies}" SelectedItem="{Binding BaseCurrency}" Width="140" />
+                </Grid>
+              </StackPanel>
+            </Border>
+            <TextBlock Text="{loc:T Settings_SectionStartup}" Classes="section" Margin="2,6,0,6" />
+            <Border Classes="card">
+              <StackPanel Spacing="8">
                 <!-- Only Windows can register the app to start at sign-in. -->
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding IsAutoStartSupported}">
                   <StackPanel VerticalAlignment="Center">
@@ -139,20 +153,11 @@
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding ShowDockIcon}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding IsBossKeySupported}">
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_BossKey}" />
-                    <TextBlock Text="{loc:T Settings_BossKeyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                  </StackPanel>
-                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" EmptyText="{loc:T Settings_BossKeyNone}" RecordingText="{loc:T Settings_BossKeyPress}" IsCapturing="{Binding IsRecordingBossKey}" Width="140" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:T Settings_BaseCurrency}" />
-                    <TextBlock Text="{loc:T Settings_BaseCurrencyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
-                  </StackPanel>
-                  <ComboBox Grid.Column="1" ItemsSource="{Binding BaseCurrencies}" SelectedItem="{Binding BaseCurrency}" Width="140" />
-                </Grid>
+              </StackPanel>
+            </Border>
+            <TextBlock Text="{loc:T Settings_SectionWindow}" Classes="section" Margin="2,6,0,6" />
+            <Border Classes="card">
+              <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Settings_KeepOnTop}" />
@@ -176,6 +181,13 @@
                                IsVisible="{Binding !AutoHideAvailable}" />
                   </StackPanel>
                   <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoHideAtEdge}" IsVisible="{Binding AutoHideAvailable}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" IsVisible="{Binding IsBossKeySupported}">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_BossKey}" />
+                    <TextBlock Text="{loc:T Settings_BossKeyHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <views:HotkeyBox Grid.Column="1" Value="{Binding BossKey}" EmptyText="{loc:T Settings_BossKeyNone}" RecordingText="{loc:T Settings_BossKeyPress}" IsCapturing="{Binding IsRecordingBossKey}" Width="140" VerticalAlignment="Center" AutomationProperties.Name="{loc:T Settings_BossKey}" />
                 </Grid>
               </StackPanel>
             </Border>
