@@ -41,7 +41,7 @@
                        VerticalAlignment="Center" MaxWidth="72" TextTrimming="CharacterEllipsis" />
           </StackPanel>
 
-          <!-- The header holds up to nine buttons. Their width is set on each button (24 px instead of the 26 px of the
+          <!-- The header holds up to eight buttons and a divider. Their width is set on each button (24 px instead of the 26 px of the
                icon style) because a value on the element always wins, so it fits the narrowest window widths for sure. -->
           <StackPanel Grid.Column="1" Orientation="Horizontal">
             <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Add_Title}" Command="{Binding ShowAddCommand}">
@@ -71,30 +71,27 @@
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
-            <!-- Three squares growing in size read as "card size"; a drop down picks small, medium or large. -->
-            <Button Name="CardSizeButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Settings_CardSize}" IsVisible="{Binding IsCardLayout}"
-                    AutomationProperties.Name="{loc:T Settings_CardSize}">
-              <Path Data="M2 12V9.5h2.5V12zM6 12V6.5h2.5V12zM10 12V2.5h2.5V12z" />
+            <!-- Two sliders read as "view options". One menu holds the card size, the time span of the charts and the full
+                 screen, which would be three more buttons in the header. The card size and the full screen only exist in the
+                 card layout (IsCardLayout is also true while the window is full screen); the button is lit while the window
+                 is full screen. -->
+            <Button Name="ViewButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_View}" Classes.active="{Binding IsFullScreen}"
+                    AutomationProperties.Name="{loc:T Main_View}">
+              <Path Data="M2 4h3.5M9 4h3M2 10h1.5M7 10h5M5.5 4a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0 -3.5 0M3.5 10a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0 -3.5 0" />
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedRight">
-                  <MenuItem Header="{loc:T CardSize_Small}" ToggleType="Radio"
+                  <MenuItem Header="{loc:T Settings_CardSize}" IsEnabled="False" IsVisible="{Binding IsCardLayout}" />
+                  <MenuItem Header="{loc:T CardSize_Small}" ToggleType="Radio" IsVisible="{Binding IsCardLayout}"
                             IsChecked="{Binding IsCardSizeSmall, Mode=OneWay}"
                             Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Small}" />
-                  <MenuItem Header="{loc:T CardSize_Medium}" ToggleType="Radio"
+                  <MenuItem Header="{loc:T CardSize_Medium}" ToggleType="Radio" IsVisible="{Binding IsCardLayout}"
                             IsChecked="{Binding IsCardSizeMedium, Mode=OneWay}"
                             Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Medium}" />
-                  <MenuItem Header="{loc:T CardSize_Large}" ToggleType="Radio"
+                  <MenuItem Header="{loc:T CardSize_Large}" ToggleType="Radio" IsVisible="{Binding IsCardLayout}"
                             IsChecked="{Binding IsCardSizeLarge, Mode=OneWay}"
                             Command="{Binding SetCardSizeCommand}" CommandParameter="{x:Static core:CardSize.Large}" />
-                </MenuFlyout>
-              </Button.Flyout>
-            </Button>
-            <!-- A line rising and falling reads as "chart"; a drop down picks the time span every chart shows. -->
-            <Button Name="ChartRangeButton" Classes="icon" Width="24" ToolTip.Tip="{loc:T Settings_ChartRange}"
-                    AutomationProperties.Name="{loc:T Settings_ChartRange}">
-              <Path Data="M1.5 10l3-4 2.5 2 3-5 2.5 3" />
-              <Button.Flyout>
-                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                  <Separator IsVisible="{Binding IsCardLayout}" />
+                  <MenuItem Header="{loc:T Settings_ChartRange}" IsEnabled="False" />
                   <MenuItem Header="{loc:T HistoryRange_Hour}" ToggleType="Radio"
                             IsChecked="{Binding IsChartRangeHour, Mode=OneWay}"
                             Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.Hour}" />
@@ -113,17 +110,10 @@
                   <MenuItem Header="{loc:T HistoryRange_Year}" ToggleType="Radio"
                             IsChecked="{Binding IsChartRangeYear, Mode=OneWay}"
                             Command="{Binding SetChartRangeCommand}" CommandParameter="{x:Static abs:HistoryRange.Year}" />
+                  <Separator IsVisible="{Binding IsCardLayout}" />
+                  <MenuItem Header="{Binding FullScreenTip}" IsVisible="{Binding IsCardLayout}" Click="OnFullScreenClicked" />
                 </MenuFlyout>
               </Button.Flyout>
-            </Button>
-            <!-- Four corners pointing out mean "fill the screen"; pointing in they mean "go back". Only the cards can fill the
-                 screen, so the list has no such button (IsCardLayout is also true while the window is full screen). -->
-            <Button Classes="icon" Width="24" IsVisible="{Binding IsCardLayout}" ToolTip.Tip="{Binding FullScreenTip}" Click="OnFullScreenClicked" Classes.active="{Binding IsFullScreen}"
-                    AutomationProperties.Name="{loc:T Main_FullScreen}">
-              <Panel>
-                <Path Data="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" IsVisible="{Binding !IsFullScreen}" />
-                <Path Data="M5 2v3H2M9 2v3h3M12 9H9v3M2 9h3v3" IsVisible="{Binding IsFullScreen}" />
-              </Panel>
             </Button>
             <!-- An arrow up to a bar at the top reads as "stay on top"; the padlock next to it is "lock position". -->
             <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_AlwaysOnTop}" Command="{Binding TogglePinCommand}" Classes.active="{Binding Settings.AlwaysOnTop}"
