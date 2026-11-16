@@ -38,6 +38,21 @@ public class WindowFitRulesTests
     }
 
     /// <summary>
+    /// Verifies a saved width that is almost one more column than the cards fill, as an older version left it, is narrowed
+    /// to the two columns the cards really use.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsWidth_SavedWidthJustShortOfAnotherColumn_DropsTheEmptyColumn()
+    {
+        // Large cards are 300 wide with 3 of margin on each side; at 150% the layout rounds each margin and the frame up to
+        // whole screen pixels, so a column is 306.67 and three columns need 942.67, more than 928.67.
+        var width = WindowFitRules.NarrowedCardsWidth([new(5, false)], CardSize.Large, 928.67, 1.5);
+
+        // Two columns of 306.67 plus the sides of 22.67.
+        width.Should().BeApproximately(636, 0.001);
+    }
+
+    /// <summary>
     /// Verifies a window higher than its rows is lowered to the rows.
     /// </summary>
     [Fact]

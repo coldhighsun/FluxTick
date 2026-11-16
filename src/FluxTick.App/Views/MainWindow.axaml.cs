@@ -720,6 +720,32 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Takes the empty space at the right of and below the cards away once after the start, for a window that was saved
+    /// wider or higher than its cards need (by an older version, or before cards were removed). It waits until the window
+    /// is open and its cards are laid out, but not for ever: a window that stays hidden is left as it is.
+    /// </summary>
+    public void NarrowCardsOnStartup()
+    {
+        var attempts = 0;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        timer.Tick += (_, _) =>
+        {
+            var ready = IsLoaded && Watchlist is not null && Watchlist.Bounds.Height > 0;
+            if (!ready && ++attempts < 30)
+            {
+                return;
+            }
+
+            timer.Stop();
+            if (ready)
+            {
+                NarrowCardsToContent();
+            }
+        };
+        timer.Start();
+    }
+
+    /// <summary>
     /// Takes the empty space at the right of and below the cards away once the user has finished resizing the card
     /// layout. The window never grows here, the cards keep their rows and the left and top edges of the window stay where
     /// they are, so the right and bottom edges move in.

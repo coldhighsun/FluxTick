@@ -592,6 +592,9 @@ public sealed partial class App : Application
         };
         await viewModel.InitializeAsync();
 
+        // A window saved wider than its cards need (by an older version, say) loses its empty space at the right.
+        _window?.NarrowCardsOnStartup();
+
         // The total of the first prices may have been worked out before anything listened; show it on the icon too.
         ScheduleTrayTooltip();
         var page = args.FirstOrDefault(a => a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))?["--page=".Length..];
