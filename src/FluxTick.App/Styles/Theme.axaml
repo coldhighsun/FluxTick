@@ -299,6 +299,32 @@
     <Setter Property="Opacity" Value="0.7" />
   </Style>
 
+  <!-- A row of search results: no fill, the hover color of the theme (the built-in button hover is a plain gray) and the
+       focus ring of the other buttons. -->
+  <Style Selector="Button.result">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+  </Style>
+  <Style Selector="Button.result:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+  </Style>
+  <Style Selector="Button.result:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    <Setter Property="Opacity" Value="0.7" />
+  </Style>
+  <Style Selector="Button.result:focus-visible /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <!-- The label drawn by a data template is a text block of its own, which would take the text color and not the muted
+       color of the control around it. -->
+  <Style Selector="ContentControl.classLabel TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+
   <!-- Text boxes: the same border and rounding as the buttons and drop-down lists. The border sits on a template part. The
        built-in focused look thickens the border to 2px and changes the fill, which shifts the text, so both are set again. -->
   <Style Selector="TextBox">

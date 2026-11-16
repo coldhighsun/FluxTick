@@ -34,7 +34,7 @@
       <ItemsControl ItemsSource="{Binding Results}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="abs:Asset">
-            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" Padding="8,6"
+            <Button Classes="result" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,6"
                     Command="{Binding $parent[UserControl].((vm:AddAssetViewModel)DataContext).AddCommand}"
                     CommandParameter="{Binding}">
               <Grid ColumnDefinitions="*,Auto">
@@ -42,7 +42,7 @@
                   <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" />
                   <TextBlock Text="{Binding DisplayName}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                <ContentControl Grid.Column="1" Content="{Binding AssetClass}" ContentTemplate="{DynamicResource EnumLabelTemplate}"
+                <ContentControl Grid.Column="1" Classes="classLabel" Content="{Binding AssetClass}" ContentTemplate="{DynamicResource EnumLabelTemplate}"
                                 Foreground="{DynamicResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
               </Grid>
             </Button>
