@@ -46,8 +46,8 @@ public class WindowWidthRulesTests
     /// </param>
     [Theory]
     [InlineData(555, 555)]
-    [InlineData(376, 376)]
-    [InlineData(100, 376)]
+    [InlineData(328, 328)]
+    [InlineData(100, 328)]
     public void TargetWidth_CardLayout_UsesRememberedWidthAboveMinimum(double remembered, double expected)
     {
         WindowWidthRules.TargetWidth(WatchlistLayout.Cards, remembered).Should().Be(expected);
@@ -170,6 +170,6 @@ public class WindowWidthRulesTests
         CardLayout.ListPadding.Left.Should().Be(CardLayout.ListPadding.Right);
         WindowWidthRules.CardsMinWidth.Should().BeGreaterThanOrEqualTo(CardLayout.LargeCardWidth + (2 * CardLayout.CardMargin) + space);
         WindowWidthRules.CardsMinWidth.Should().BeGreaterThanOrEqualTo(CardLayout.HeaderMinWidth);
-        WindowWidthRules.CardsMinWidth.Should().Be(376);
+        WindowWidthRules.CardsMinWidth.Should().Be(328);
     }
 }

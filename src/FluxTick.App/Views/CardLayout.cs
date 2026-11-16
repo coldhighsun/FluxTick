@@ -78,10 +78,10 @@ internal static class CardLayout
     /// <summary>
     /// The smallest width at which the header of the card layout, with its eight buttons and a divider, the icon and the
     /// title, does not overlap: 14 of padding, 16 for the icon, 8 of space, about 60 for the title, 192 for the buttons,
-    /// 11 for the divider and 8 of padding, the frame, and some room between the title and the buttons. It was set for ten
-    /// buttons and is kept, so that a window does not get narrower than it could be before.
+    /// 11 for the divider and 8 of padding, the frame, and some room between the title and the buttons. That is 311, and
+    /// 17 of room make 328, which is also the width of one large card, so the card is what sets the narrowest window.
     /// </summary>
-    public const double HeaderMinWidth = 376;
+    public const double HeaderMinWidth = 328;
 
     /// <summary>
     /// The width the window needs for one large card with the same space left and right of it.
