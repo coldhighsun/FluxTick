@@ -28,6 +28,9 @@
       <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
     </Style>
     <!-- The keyboard focus ring of the row, like the other buttons. -->
+    <Style Selector="Button.providerRow">
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+    </Style>
     <Style Selector="Button.providerRow:focus-visible /template/ ContentPresenter">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />

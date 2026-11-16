@@ -156,6 +156,11 @@
   <Style Selector="Button.icon:pointerover Path">
     <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
   </Style>
+  <!-- The built-in keyboard focus mark is a white box around the control, which does not suit the theme; these buttons
+       draw their own ring in the accent color instead (below, and for the data source rows in the settings page). -->
+  <Style Selector="Button.icon, Button.status, Button.link, Button.outline, ToggleButton.filter, ToggleButton.disclosure">
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+  </Style>
   <!-- The keyboard focus ring, shown only when the focus came by key (not by a click): a thin ring in the accent color. -->
   <Style Selector="Button.icon:focus-visible /template/ ContentPresenter">
     <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
