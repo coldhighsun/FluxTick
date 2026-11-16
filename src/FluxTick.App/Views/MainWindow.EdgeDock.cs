@@ -75,6 +75,12 @@ public sealed partial class MainWindow
     private bool _dockRealign;
 
     /// <summary>
+    /// The wait for a resize by the user to stop before the card layout is narrowed to its cards, or
+    /// <see langword="null"/> when none is pending.
+    /// </summary>
+    private IDisposable? _narrowCards;
+
+    /// <summary>
     /// The wait for the list of screens to stay as it is, or <see langword="null"/> when none is pending.
     /// </summary>
     private IDisposable? _dockScreens;
@@ -428,6 +434,13 @@ public sealed partial class MainWindow
         finally
         {
             _dock.SetDragging(false);
+            if (resize)
+            {
+                // Where the system carries the drag out on its own, this point is reached when it starts, not when it ends;
+                // resizes that follow keep postponing the narrowing, see OnResized.
+                ScheduleNarrowCards();
+            }
+
             if (!resize)
             {
                 ScheduleDockSettle();
@@ -437,6 +450,22 @@ public sealed partial class MainWindow
                 ScheduleDockSettle(realign: true);
             }
         }
+    }
+
+    /// <summary>
+    /// Restarts the wait for the size to stop changing after a resize by the user; the empty space of the card layout is
+    /// taken away once it has.
+    /// </summary>
+    private void ScheduleNarrowCards()
+    {
+        _narrowCards?.Dispose();
+        _narrowCards = DispatcherTimer.RunOnce(
+            () =>
+            {
+                _narrowCards = null;
+                NarrowCardsToContent();
+            },
+            DockSettleDelay);
     }
 
     /// <summary>

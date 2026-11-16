@@ -73,18 +73,6 @@ public sealed partial class MainWindow : Window
     private double _cardsWidth = WindowWidthRules.ListWidth;
 
     /// <summary>
-    /// Whether the window is to take the height of the list layout as soon as the rows are laid out, after a change from
-    /// the card layout.
-    /// </summary>
-    private bool _fitListPending;
-
-    /// <summary>
-    /// The number of the latest wait for the rows of the list layout; the timer that ends a wait only counts when it
-    /// still holds the latest number.
-    /// </summary>
-    private int _fitListGeneration;
-
-    /// <summary>
     /// The top of the window in screen pixels while the width animation runs; the animation keeps it fixed.
     /// </summary>
     private int _widthAnimationTop;
@@ -138,9 +126,10 @@ public sealed partial class MainWindow : Window
     private FullScreenExit _fullScreenExit = FullScreenExit.Restore;
 
     /// <summary>
-    /// The width and position a running width animation ends at, or <see langword="null"/> when none runs.
+    /// The width, position and, when the animation changes it too, height a running width animation ends at, or
+    /// <see langword="null"/> when none runs.
     /// </summary>
-    private (double Width, PixelPoint Position)? _widthAnimationEnd;
+    private (double Width, PixelPoint Position, double? Height)? _widthAnimationEnd;
 
     /// <summary>
     /// The press on the header while the window is full screen, which turns into a drag once the pointer moved, or
@@ -180,11 +169,7 @@ public sealed partial class MainWindow : Window
                 Watchlist.CancelContentDrags();
             }
         };
-        Watchlist.ListContentHeightChanged += (_, _) =>
-        {
-            ApplyHeightRule();
-            ApplyListFit();
-        };
+        Watchlist.ListContentHeightChanged += (_, _) => ApplyHeightRule();
         if (GroupButton.Flyout is MenuFlyout groupFlyout)
         {
             groupFlyout.Opening += (_, _) =>
@@ -534,6 +519,7 @@ public sealed partial class MainWindow : Window
             // The list layout has a fixed width, which would keep the window from filling the screen.
             MinWidth = 0;
             MaxWidth = double.PositiveInfinity;
+            MaxHeight = double.PositiveInfinity;
             (DataContext as MainViewModel)?.SetFullScreen(true);
             return;
         }
@@ -575,6 +561,8 @@ public sealed partial class MainWindow : Window
                 ApplyWidthRule(immediate: _fullScreenExit == FullScreenExit.Dragged);
             }
 
+            // The list layout is put back to the height of its rows.
+            ApplyHeightRule();
             ResumeDockLeave();
         }
         finally
@@ -624,6 +612,10 @@ public sealed partial class MainWindow : Window
             _widthAnimation.Stop();
             Width = end.Width;
             Position = end.Position;
+            if (end.Height is { } endHeight)
+            {
+                Height = endHeight;
+            }
         }
 
         // A window that rests beyond its screen edge is at a hidden position; the one it is shown at is the one to return to.
@@ -653,8 +645,6 @@ public sealed partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.IsCardLayout))
         {
-            _fitListPending = false;
-
             // The sections are rebuilt right after the flag changes, so the fit waits until they are settled.
             if (IsLoaded && IsVisible)
             {
@@ -671,7 +661,14 @@ public sealed partial class MainWindow : Window
         {
             ApplyHeightRule();
         }
-        else if (e.PropertyName is nameof(SettingsViewModel.AutoHideAtEdge) or nameof(SettingsViewModel.AlwaysOnTop))
+
+        // A new card size or grouping changes the rows the cards take; the empty space is taken away once the sections are rebuilt.
+        if (e.PropertyName is nameof(MainViewModel.CardSize) or nameof(MainViewModel.Grouping) && IsLoaded && IsVisible)
+        {
+            Dispatcher.UIThread.Post(NarrowCardsToContent, DispatcherPriority.Loaded);
+        }
+
+        if (e.PropertyName is nameof(SettingsViewModel.AutoHideAtEdge) or nameof(SettingsViewModel.AlwaysOnTop))
         {
             ApplyAutoHide();
         }
@@ -684,36 +681,15 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void FitToLayout()
     {
-        if (_observed is { } viewModel && WindowState == WindowState.Normal && !FillsScreen && Watchlist.Bounds.Height > 0)
+        if (_observed is { IsCardLayout: true } viewModel && WindowState == WindowState.Normal && !FillsScreen && Watchlist.Bounds.Height > 0)
         {
-            if (viewModel.IsCardLayout)
-            {
-                FitCards(viewModel);
-            }
-            else
-            {
-                _fitListPending = true;
-            }
+            FitCards(viewModel);
         }
 
         ApplyWidthRule();
-        ApplyListFit();
 
-        // The rows may report their height late or not at all; the window must not be resized by a change much later.
-        if (_fitListPending)
-        {
-            // A later change to the list layout starts its own wait; the timer of this one must not end that.
-            var generation = ++_fitListGeneration;
-            DispatcherTimer.RunOnce(
-                () =>
-                {
-                    if (generation == _fitListGeneration)
-                    {
-                        _fitListPending = false;
-                    }
-                },
-                TimeSpan.FromSeconds(1));
-        }
+        // The list layout follows its rows all the time; this only makes it start now, if the rows are laid out.
+        ApplyHeightRule();
     }
 
     /// <summary>
@@ -744,29 +720,64 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Gives the window the height that shows every row of the list layout once a change to that layout is waiting for it
-    /// and the rows are laid out.
+    /// Takes the empty space at the right of and below the cards away once the user has finished resizing the card
+    /// layout. The window never grows here, the cards keep their rows and the left and top edges of the window stay where
+    /// they are, so the right and bottom edges move in.
     /// </summary>
-    private void ApplyListFit()
+    private void NarrowCardsToContent()
     {
-        if (!_fitListPending || _observed is not { IsCardLayout: false } || Watchlist.ListContentHeight is not { } content)
+        if (_observed is not { IsCardLayout: true } viewModel || WindowState != WindowState.Normal || FillsScreen || !IsVisible
+            || Watchlist is null || Watchlist.Bounds.Height <= 0)
         {
             return;
         }
 
-        // The window may have been maximized or made to fill the screen while the rows were being laid out.
-        if (WindowState != WindowState.Normal || FillsScreen)
+        var sections = viewModel.Sections.Select(section => new FitSection(section.Count, section.IsCollapsed)).ToList();
+        var currentWidth = ClientSize.Width;
+        var currentHeight = ClientSize.Height;
+        var width = WindowFitRules.NarrowedCardsWidth(sections, viewModel.CardSize, currentWidth, RenderScaling);
+        var chrome = currentHeight - Watchlist.Bounds.Height;
+        var height = WindowFitRules.NarrowedCardsHeight(
+            sections, viewModel.Grouping != CardGrouping.None, viewModel.CardSize, chrome, width ?? currentWidth, currentHeight, RenderScaling);
+        if (width is null && height is null)
         {
-            _fitListPending = false;
             return;
         }
 
+        // The width the user chose is the narrower one from now on; the animation is the window's own doing.
+        if (width is { } narrowed)
+        {
+            _cardsWidth = narrowed;
+        }
+
+        // A docked window keeps the edge it is docked to; any other keeps its left edge.
+        var anchor = _dock.Edge == DockEdge.Right ? DockEdge.Right : DockEdge.Left;
+        _widthAnimation.Stop();
+        AnimateWidth(currentWidth, width ?? currentWidth, WindowWidthRules.For(WatchlistLayout.Cards), anchor, height);
+    }
+
+    /// <summary>
+    /// Gives the window of the list layout the height that shows every row, and keeps it there: the height is the only one
+    /// the window may have, so the user cannot change it. A window that grows is moved up when it would reach below the
+    /// work area.
+    /// </summary>
+    /// <param name="content">
+    /// The height of all rows together.
+    /// </param>
+    /// <param name="chrome">
+    /// The height of the window around the list.
+    /// </param>
+    private void ApplyListHeight(double content, double chrome)
+    {
         var area = Screens.ScreenFromWindow(this)?.WorkingArea;
         var scale = ScreenUnitScale;
         var limit = area is { } a ? a.Height / scale : double.PositiveInfinity;
-        _fitListPending = false;
-        ApplyHeightRule();
-        var height = WindowHeightRules.ListContentMinHeight(content, ClientSize.Height - Watchlist.Bounds.Height, limit);
+        var height = WindowHeightRules.ListContentMinHeight(content, chrome, limit);
+        if (Math.Abs(Height - height) <= 0.5 && Math.Abs(MinHeight - height) <= 0.5 && Math.Abs(MaxHeight - height) <= 0.5)
+        {
+            return;
+        }
+
         if (area is { } work)
         {
             // A window that grows must not reach below the work area, and the width animation, if it still runs, keeps the top it has.
@@ -778,12 +789,17 @@ public sealed partial class MainWindow : Window
                 _widthAnimationTop = top;
                 if (_widthAnimationEnd is { } end)
                 {
-                    _widthAnimationEnd = (end.Width, new PixelPoint(end.Position.X, top));
+                    _widthAnimationEnd = (end.Width, new PixelPoint(end.Position.X, top), end.Height);
                 }
             }
         }
 
+        // The old limits must not get in the way of the new height.
+        MaxHeight = double.PositiveInfinity;
+        MinHeight = 0;
         Height = height;
+        MinHeight = height;
+        MaxHeight = height;
     }
 
     /// <summary>
@@ -857,6 +873,8 @@ public sealed partial class MainWindow : Window
         var minHeight = WindowHeightRules.MinHeight(layout, viewModel.CardSize, viewModel.Grouping != CardGrouping.None, chrome);
         if (layout == WatchlistLayout.Cards)
         {
+            // The card layout has a free height; the one the list layout fixed is let go of.
+            MaxHeight = double.PositiveInfinity;
             minHeight = WindowHeightRules.RoundUpToPixels(minHeight, RenderScaling);
         }
         else
@@ -867,6 +885,14 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            if (WindowState == WindowState.Normal && !FillsScreen)
+            {
+                ApplyListHeight(content, chrome);
+                return;
+            }
+
+            // A window that fills the screen is as high as the screen, but is kept to the height of the rows once it is back.
+            MaxHeight = double.PositiveInfinity;
             var limit = Screens.ScreenFromWindow(this)?.WorkingArea.Height / ScreenUnitScale ?? double.PositiveInfinity;
             minHeight = WindowHeightRules.ListContentMinHeight(content, chrome, limit);
         }
@@ -890,23 +916,35 @@ public sealed partial class MainWindow : Window
     /// <param name="rule">
     /// The limits to apply at the end.
     /// </param>
-    private void AnimateWidth(double from, double to, WidthRule rule)
+    /// <param name="anchor">
+    /// The edge to keep in place instead of the one the window is docked to, or <see langword="null"/> to follow the dock.
+    /// </param>
+    /// <param name="toHeight">
+    /// The height to reach together with the width, or <see langword="null"/> to leave the height alone.
+    /// </param>
+    private void AnimateWidth(double from, double to, WidthRule rule, DockEdge? anchor = null, double? toHeight = null)
     {
+        var fromHeight = ClientSize.Height;
         var scale = ScreenUnitScale;
         var startLeft = Position.X;
-        var endLeft = WindowWidthRules.LeftForDock(startLeft, from * scale, to * scale, _dock.Edge);
+        var endLeft = WindowWidthRules.LeftForDock(startLeft, from * scale, to * scale, anchor ?? _dock.Edge);
         if (Screens.ScreenFromWindow(this)?.WorkingArea is { } area)
         {
             endLeft = WindowWidthRules.ClampLeft(endLeft, to * scale, area.X, area.Right);
         }
 
         _widthAnimationTop = Position.Y;
-        _widthAnimationEnd = (to, new PixelPoint(endLeft, _widthAnimationTop));
+        _widthAnimationEnd = (to, new PixelPoint(endLeft, _widthAnimationTop), toHeight);
         _widthAnimation.Run(
             WindowWidthRules.AnimationDuration,
             progress =>
             {
                 Width = WindowWidthRules.Animate(from, to, progress);
+                if (toHeight is { } heightTarget)
+                {
+                    Height = WindowWidthRules.Animate(fromHeight, heightTarget, progress);
+                }
+
                 Position = new PixelPoint((int)Math.Round(WindowWidthRules.Animate(startLeft, endLeft, progress)), _widthAnimationTop);
             },
             () => FinishWidthChange(rule));
@@ -947,9 +985,11 @@ public sealed partial class MainWindow : Window
             _cardsWidth = Math.Max(e.ClientSize.Width, WindowWidthRules.CardsMinWidth);
         }
 
+        // Every resize by the user postpones the narrowing until the size stops changing, also when the pointer rested for
+        // longer than the wait and the narrowing already ran during the drag.
         if (e.Reason == WindowResizeReason.User)
         {
-            _fitListPending = false;
+            ScheduleNarrowCards();
         }
 
         // A shown, docked window that the user resized is put flush with its edge once the size stops changing.
@@ -1687,13 +1727,10 @@ public sealed partial class MainWindow : Window
         var height = Math.Max(MinHeight, Math.Min(MaxHeight, drag.Height + (pointer.Y - drag.Pointer.Y)));
         Height = height;
 
-        // The list layout has a fixed width, so there the grip only resizes vertically.
-        if (CurrentLayout() == WatchlistLayout.Cards)
-        {
-            var width = Math.Max(Math.Max(MinWidth, WindowWidthRules.CardsMinWidth), Math.Min(MaxWidth, drag.Width + (pointer.X - drag.Pointer.X)));
-            Width = width;
-            _cardsWidth = width;
-        }
+        // The grip is only shown in the card layout, whose width is free.
+        var width = Math.Max(Math.Max(MinWidth, WindowWidthRules.CardsMinWidth), Math.Min(MaxWidth, drag.Width + (pointer.X - drag.Pointer.X)));
+        Width = width;
+        _cardsWidth = width;
 
         RaiseGeometryChanged();
     }
@@ -1740,6 +1777,7 @@ public sealed partial class MainWindow : Window
 
         _gripDrag = null;
         _dock.SetDragging(false);
+        NarrowCardsToContent();
         if (_dock.ShouldWaitToHide)
         {
             ScheduleDockSettle(realign: true);

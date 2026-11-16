@@ -24,9 +24,10 @@ internal static class WindowWidthRules
     public const double ListWidth = 360;
 
     /// <summary>
-    /// The smallest width of the card layout: just wide enough for one large card, so that no space is left beside it.
+    /// The smallest width of the card layout: wide enough for one large card and for the header not to overlap, whichever
+    /// is wider.
     /// </summary>
-    public static readonly double CardsMinWidth = CardLayout.OneLargeCardWindowWidth;
+    public static readonly double CardsMinWidth = Math.Max(CardLayout.OneLargeCardWindowWidth, CardLayout.HeaderMinWidth);
 
     /// <summary>
     /// How long the window takes to change its width.

@@ -203,19 +203,11 @@
             </Border>
           </Grid>
         </Button>
-        <!-- The list layout has a fixed width, so there the grip only resizes vertically. -->
-        <Border Classes="grip" Classes.listLayout="{Binding !IsCardLayout}" Grid.Column="1" Width="16" Height="16" Background="Transparent"
+        <!-- The list layout has a fixed size, so only the card layout can be resized. -->
+        <Border Grid.Column="1" Width="16" Height="16" Background="Transparent" Cursor="BottomRightCorner"
+                IsVisible="{Binding IsCardLayout}"
                 PointerPressed="OnResizeGripPressed" PointerMoved="OnResizeGripMoved"
                 PointerReleased="OnResizeGripReleased" PointerCaptureLost="OnResizeGripCaptureLost">
-          <!-- The cursor comes from styles: a value set on the element itself would always win over them. -->
-          <Border.Styles>
-            <Style Selector="Border.grip">
-              <Setter Property="Cursor" Value="BottomRightCorner" />
-            </Style>
-            <Style Selector="Border.grip.listLayout">
-              <Setter Property="Cursor" Value="SizeNorthSouth" />
-            </Style>
-          </Border.Styles>
           <Path Data="M12 4L4 12M12 8l-4 4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.2" StrokeLineCap="Round" />
         </Border>
       </Grid>
