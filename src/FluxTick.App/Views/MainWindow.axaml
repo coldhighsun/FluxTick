@@ -137,6 +137,8 @@
                 <Path Data="M5 6.5V5a2 2 0 0 1 4 0v1.5" />
               </Canvas>
             </Button>
+            <!-- A thin line sets the settings and close buttons apart from the buttons that change the view. -->
+            <Border Width="1" Height="14" Margin="5,0" Background="{DynamicResource BorderBrush}" VerticalAlignment="Center" />
             <!-- A gear: eight teeth around a ring, with a hole in the middle. -->
             <Button Classes="icon" Width="24" ToolTip.Tip="{loc:T Main_Settings}" Command="{Binding ShowSettingsCommand}" Classes.active="{Binding IsSettingsOpen}"
                     AutomationProperties.Name="{loc:T Main_Settings}">
@@ -156,7 +158,7 @@
       <views:WatchlistView Name="Watchlist" Grid.Row="1" />
 
       <!-- The total profit or loss of all holdings, in the base currency. Shown only when there is a holding. -->
-      <TextBlock Grid.Row="2" Text="{Binding PortfolioText}" IsVisible="{Binding HasPortfolio}" ToolTip.Tip="{Binding PortfolioTip}" Classes="mono" FontSize="11"
+      <TextBlock Grid.Row="2" Text="{Binding PortfolioText}" IsVisible="{Binding HasPortfolio}" ToolTip.Tip="{Binding PortfolioTip}" Classes="mono" FontSize="13"
                  FontWeight="SemiBold" HorizontalAlignment="Right" Margin="14,4,14,0" TextTrimming="CharacterEllipsis"
                  Classes.up="{Binding PortfolioIsProfit}" Classes.down="{Binding PortfolioIsLoss}" />
 

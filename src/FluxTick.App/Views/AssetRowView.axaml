@@ -34,11 +34,11 @@
         <!-- The symbol is the one that gives way (with an ellipsis), so that the class and the state always stay in view. -->
         <Grid ColumnDefinitions="*,Auto,Auto">
           <TextBlock Text="{Binding Symbol}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-          <TextBlock Grid.Column="1" Text="{Binding ClassLabel}" Classes="muted" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding ClassLabel}" Classes="muted" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center" />
           <!-- The trading state of the market when it is not the regular session (also while it is shut), or a warning when the
                data is not live. The change in percent on the right always stays in view. -->
           <Border Grid.Column="2" Classes="chip" Classes.warn="{Binding RowBadgeIsWarn}" Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasRowBadge}">
-            <TextBlock Text="{Binding RowBadgeText}" Classes="warn" Classes.muted="{Binding !RowBadgeIsWarn}" FontSize="9" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding RowBadgeText}" Classes="warn" Classes.muted="{Binding !RowBadgeIsWarn}" FontSize="10" FontWeight="SemiBold" />
           </Border>
         </Grid>
       </StackPanel>
@@ -72,15 +72,20 @@
             </TextBlock.RenderTransform>
           </TextBlock>
         </Grid>
-        <TextBlock Text="{Binding ChangeDisplayText}" Classes="mono"
-                   Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" FontSize="11" HorizontalAlignment="Right" />
+        <!-- A small triangle says the direction as well as the color does, for those who cannot tell the colors apart. -->
+        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Right">
+          <Path Classes="arrow up" Data="M0 5L3 0L6 5Z" IsVisible="{Binding IsUp}" />
+          <Path Classes="arrow down" Data="M0 0L6 0L3 5Z" IsVisible="{Binding IsDown}" />
+          <TextBlock Text="{Binding ChangeDisplayText}" Classes="mono"
+                     Classes.up="{Binding IsUp}" Classes.down="{Binding IsDown}" FontSize="11" />
+        </StackPanel>
       </StackPanel>
 
       <!-- The holding: what is held and at what price on the left, the profit or loss in money and percent on the right.
            It has a line of its own, so that its length never widens the price column and squeezes the name and the chart.
            Only rows with a holding have it, so rows differ in height. -->
       <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnDefinitions="*,Auto" IsVisible="{Binding HasHolding}" Margin="0,2,0,0">
-        <TextBlock Text="{Binding HoldingText}" Classes="muted mono" FontSize="10" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{Binding HoldingText}" Classes="muted mono" FontSize="11" TextTrimming="CharacterEllipsis" />
         <TextBlock Grid.Column="1" Text="{Binding PnlText}" Classes="mono" FontSize="11" Margin="8,0,0,0"
                    Classes.up="{Binding IsProfit}" Classes.down="{Binding IsLoss}" />
       </Grid>

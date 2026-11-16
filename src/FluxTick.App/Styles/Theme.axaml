@@ -17,7 +17,7 @@
           <Color x:Key="PopupBgColor">#0E1116</Color>
           <Color x:Key="TextColor">#E6EDF3</Color>
           <Color x:Key="MutedColor">#7D8590</Color>
-          <Color x:Key="AccentColor">#2EE59D</Color>
+          <Color x:Key="AccentColor">#4C9AFF</Color>
           <Color x:Key="WarnColor">#F5B94A</Color>
           <Color x:Key="GainColor">#2EE59D</Color>
           <Color x:Key="LossColor">#FF5C7A</Color>
@@ -31,7 +31,7 @@
           <Color x:Key="PopupBgColor">#FFFFFF</Color>
           <Color x:Key="TextColor">#1F2328</Color>
           <Color x:Key="MutedColor">#656D76</Color>
-          <Color x:Key="AccentColor">#12A66D</Color>
+          <Color x:Key="AccentColor">#2F81F7</Color>
           <Color x:Key="WarnColor">#B7791F</Color>
           <Color x:Key="GainColor">#12A66D</Color>
           <Color x:Key="LossColor">#E0405E</Color>
@@ -103,6 +103,23 @@
     <Setter Property="Foreground" Value="{DynamicResource DownBrush}" />
   </Style>
 
+  <!-- The triangle beside a change: up or down, in the color of the move; gray while the prices are stopped. -->
+  <Style Selector="Path.arrow">
+    <Setter Property="Width" Value="6" />
+    <Setter Property="Height" Value="5" />
+    <Setter Property="Stretch" Value="Fill" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Path.arrow.up">
+    <Setter Property="Fill" Value="{DynamicResource UpBrush}" />
+  </Style>
+  <Style Selector="Path.arrow.down">
+    <Setter Property="Fill" Value="{DynamicResource DownBrush}" />
+  </Style>
+  <Style Selector="Border.row.dimmed Path.arrow, Border.tile.dimmed Path.arrow">
+    <Setter Property="Fill" Value="{DynamicResource MutedBrush}" />
+  </Style>
+
   <Style Selector="controls|SparklineControl">
     <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
     <Setter Property="StoppedStroke" Value="{DynamicResource MutedBrush}" />
@@ -137,6 +154,14 @@
     <Setter Property="StrokeJoin" Value="Round" />
   </Style>
   <Style Selector="Button.icon:pointerover Path">
+    <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <!-- The keyboard focus ring, shown only when the focus came by key (not by a click): a thin ring in the accent color. -->
+  <Style Selector="Button.icon:focus-visible /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Button.icon:focus-visible Path">
     <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
   </Style>
   <Style Selector="Button.icon.active Path">
@@ -183,6 +208,15 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Opacity" Value="0.55" />
   </Style>
+  <!-- The keyboard focus ring of the other kinds of buttons, which shows only when the focus came by key. The outline
+       button has a border already, so only its color changes; the others get a thin ring. -->
+  <Style Selector="Button.status:focus-visible /template/ ContentPresenter, Button.link:focus-visible /template/ ContentPresenter, ToggleButton.filter:focus-visible /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Button.outline:focus-visible /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
   <Style Selector="FlyoutPresenter.status">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
@@ -212,6 +246,11 @@
   </Style>
   <Style Selector="ToggleButton.disclosure:checked:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ToggleButton.disclosure:focus-visible /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
   </Style>
   <Style Selector="Path.chevron">
     <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
@@ -498,10 +537,10 @@
     <Setter Property="FontSize" Value="15" />
   </Style>
   <Style Selector="Border.tile TextBlock.name">
-    <Setter Property="FontSize" Value="10" />
+    <Setter Property="FontSize" Value="11" />
   </Style>
   <Style Selector="Border.tile.large TextBlock.name">
-    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontSize" Value="12" />
   </Style>
   <Style Selector="Border.tile TextBlock.price">
     <Setter Property="FontSize" Value="14" />
@@ -528,7 +567,12 @@
        among it as it says why, and so do the alert levels of the chart. These rules come after the card rules that color
        the price by the move (price.tickup, price.tickdown) so that the gray wins over them. -->
   <Style Selector="Border.row.dimmed > Grid, Border.tile.dimmed > Grid, Grid.stopped">
-    <Setter Property="Opacity" Value="0.55" />
+    <Setter Property="Opacity" Value="0.8" />
+  </Style>
+  <!-- The price of a shut market is still read (it is the closing price), so the whole row is only slightly faded and the
+       chart, which has nothing live to show, is faded further. -->
+  <Style Selector="Border.row.dimmed controls|SparklineControl, Border.tile.dimmed controls|SparklineControl, Grid.stopped controls|SparklineControl">
+    <Setter Property="Opacity" Value="0.6" />
   </Style>
   <Style Selector="Border.row.dimmed TextBlock.up, Border.row.dimmed TextBlock.down, Border.row.dimmed TextBlock.tickup, Border.row.dimmed TextBlock.tickdown, Border.tile.dimmed TextBlock.up, Border.tile.dimmed TextBlock.down, Border.tile.dimmed TextBlock.tickup, Border.tile.dimmed TextBlock.tickdown, Grid.stopped TextBlock.up, Grid.stopped TextBlock.down, Grid.stopped TextBlock.tickup, Grid.stopped TextBlock.tickdown">
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />

@@ -8,8 +8,8 @@
   <Application.Styles>
     <FluentTheme>
       <FluentTheme.Palettes>
-        <ColorPaletteResources x:Key="Dark" Accent="#2EE59D" />
-        <ColorPaletteResources x:Key="Light" Accent="#12A66D" />
+        <ColorPaletteResources x:Key="Dark" Accent="#4C9AFF" />
+        <ColorPaletteResources x:Key="Light" Accent="#2F81F7" />
       </FluentTheme.Palettes>
     </FluentTheme>
     <StyleInclude Source="avares://FluxTick/Styles/Theme.axaml" />

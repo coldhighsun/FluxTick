@@ -17,7 +17,7 @@
               <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 <Border Classes="chip" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding ProviderName}" Classes="muted" FontSize="9" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding ProviderName}" Classes="muted" FontSize="10" FontWeight="SemiBold" />
                 </Border>
               </StackPanel>
               <Grid Grid.Row="1" Grid.ColumnSpan="4" ColumnDefinitions="*,8,100,8,Auto" Margin="0,6,0,0">
