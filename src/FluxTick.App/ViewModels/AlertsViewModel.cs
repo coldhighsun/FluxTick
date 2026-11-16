@@ -294,9 +294,10 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     public IReadOnlyList<AlertCondition> Conditions { get; } = Enum.GetValues<AlertCondition>();
 
     /// <summary>
-    /// Gets the title of the window of an instrument.
+    /// Gets the title of the window of an instrument, which names it as the holding window does: by its name, or by its
+    /// symbol when it has none.
     /// </summary>
-    public string Title => Loc.Get("Alert_EditorTitle", Subject?.Symbol);
+    public string Title => Loc.Get("Alert_EditorTitle", Subject is { DisplayName.Length: > 0 } ? Subject.DisplayName : Subject?.Symbol);
 
     /// <summary>
     /// Gets a value indicating whether there is no rule to show.

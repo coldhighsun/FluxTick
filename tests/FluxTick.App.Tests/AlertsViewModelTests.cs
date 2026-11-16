@@ -21,6 +21,19 @@ public class AlertsViewModelTests
     private static readonly Asset Aapl = new(Harness.Stocks, "AAPL", "Apple", AssetClass.Equity);
 
     /// <summary>
+    /// Verifies that the window is titled with the name of the instrument and not its symbol, as the holding window is.
+    /// </summary>
+    [Fact]
+    public async Task Begin_Subject_TitlesTheWindowWithTheName()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+
+        h.Alerts.Begin(Btc);
+
+        h.Alerts.Title.Should().Contain("Bitcoin").And.NotContain("BTC");
+    }
+
+    /// <summary>
     /// Verifies a valid form adds a persisted rule for the instrument of the editor and clears the form.
     /// </summary>
     [Fact]
