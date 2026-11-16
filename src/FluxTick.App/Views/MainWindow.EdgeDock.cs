@@ -601,9 +601,9 @@ public sealed partial class MainWindow
     /// Lists the buttons whose menu or flyout must keep the docked window out while it is open.
     /// </summary>
     /// <returns>
-    /// The sort, group, card size, chart range and status buttons.
+    /// The sort, group, view and status buttons.
     /// </returns>
-    private Button[] DockFlyoutButtons() => [SortButton, GroupButton, CardSizeButton, ChartRangeButton, StatusButton];
+    private Button[] DockFlyoutButtons() => [SortButton, GroupButton, ViewButton, StatusButton];
 
     /// <summary>
     /// Slides the window to its hidden or its shown position.

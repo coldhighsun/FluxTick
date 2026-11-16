@@ -76,9 +76,10 @@ internal static class CardLayout
     public static readonly Thickness WindowFrameMargin = new(WindowFrame);
 
     /// <summary>
-    /// The smallest width at which the header of the card layout, with its ten buttons, the icon and the title, does not
-    /// overlap: 14 of padding, 16 for the icon, 8 of space, about 60 for the title, 240 for the buttons and 8 of padding,
-    /// the frame, and some room between the title and the buttons.
+    /// The smallest width at which the header of the card layout, with its eight buttons and a divider, the icon and the
+    /// title, does not overlap: 14 of padding, 16 for the icon, 8 of space, about 60 for the title, 192 for the buttons,
+    /// 11 for the divider and 8 of padding, the frame, and some room between the title and the buttons. It was set for ten
+    /// buttons and is kept, so that a window does not get narrower than it could be before.
     /// </summary>
     public const double HeaderMinWidth = 376;
 
