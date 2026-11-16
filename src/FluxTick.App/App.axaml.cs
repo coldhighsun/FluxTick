@@ -268,7 +268,15 @@ public sealed partial class App : Application
             _window.FullScreenChanged += OnFullScreenChanged;
             _window.Closed += OnWindowClosed;
 
+            // A window left at a screen edge opens there and hides itself, so it stays in reach as a thin strip instead of
+            // being kept away from the screen altogether.
             var startHidden = TrayPolicy.StartHidden(_settings.Current.General, desktop.Args ?? [], () => HasTrayIcon);
+            if (startHidden && _window.RestsAtDockEdge())
+            {
+                startHidden = false;
+                _window.HideToTrayIfNotDocked();
+            }
+
             if (startHidden)
             {
                 ShowFromTrayLater(desktop, _window);

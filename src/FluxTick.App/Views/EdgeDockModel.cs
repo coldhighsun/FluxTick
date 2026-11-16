@@ -383,16 +383,7 @@ internal sealed class EdgeDockModel
             return null;
         }
 
-        var edge = EdgeDockRules.DetectEdge(window, area, snap, _refused);
-        if (edge != DockEdge.None)
-        {
-            var hidden = new PixelRect(EdgeDockRules.HiddenPosition(window, area, edge, sliver), window.Size);
-            if (!EdgeDockRules.StaysOffOtherScreens(hidden, otherScreens))
-            {
-                edge = DockEdge.None;
-            }
-        }
-
+        var edge = EdgeDockRules.Decide(window, area, otherScreens, snap, sliver, _refused);
         Edge = edge;
         Area = area;
         return edge == DockEdge.None ? null : EdgeDockRules.ShownPosition(window, area, edge);
