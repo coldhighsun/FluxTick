@@ -23,7 +23,7 @@ public class WindowWidthRulesTests
     [Fact]
     public void For_CardLayout_IsFreeAboveMinimum()
     {
-        WindowWidthRules.For(WatchlistLayout.Cards).Should().Be(new WidthRule(328, double.PositiveInfinity));
+        WindowWidthRules.For(WatchlistLayout.Cards).Should().Be(new WidthRule(WindowWidthRules.CardsMinWidth, double.PositiveInfinity));
     }
 
     /// <summary>
@@ -46,8 +46,8 @@ public class WindowWidthRulesTests
     /// </param>
     [Theory]
     [InlineData(555, 555)]
-    [InlineData(328, 328)]
-    [InlineData(100, 328)]
+    [InlineData(376, 376)]
+    [InlineData(100, 376)]
     public void TargetWidth_CardLayout_UsesRememberedWidthAboveMinimum(double remembered, double expected)
     {
         WindowWidthRules.TargetWidth(WatchlistLayout.Cards, remembered).Should().Be(expected);
@@ -160,15 +160,16 @@ public class WindowWidthRulesTests
     }
 
     /// <summary>
-    /// Verifies that the minimum width of the card layout fits one large card exactly, with the same space left and right.
+    /// Verifies that the minimum width of the card layout holds one large card with equal sides and the whole header.
     /// </summary>
     [Fact]
-    public void CardsMinWidth_OneLargeCard_FitsExactlyWithEqualSides()
+    public void CardsMinWidth_HoldsOneLargeCardAndTheHeader()
     {
         var space = CardLayout.ListPadding.Left + CardLayout.ListPadding.Right + (2 * CardLayout.WindowFrame);
 
         CardLayout.ListPadding.Left.Should().Be(CardLayout.ListPadding.Right);
-        WindowWidthRules.CardsMinWidth.Should().Be(CardLayout.LargeCardWidth + (2 * CardLayout.CardMargin) + space);
-        WindowWidthRules.CardsMinWidth.Should().Be(328);
+        WindowWidthRules.CardsMinWidth.Should().BeGreaterThanOrEqualTo(CardLayout.LargeCardWidth + (2 * CardLayout.CardMargin) + space);
+        WindowWidthRules.CardsMinWidth.Should().BeGreaterThanOrEqualTo(CardLayout.HeaderMinWidth);
+        WindowWidthRules.CardsMinWidth.Should().Be(376);
     }
 }

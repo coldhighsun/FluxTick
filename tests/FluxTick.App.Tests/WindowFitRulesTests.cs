@@ -14,6 +14,89 @@ public class WindowFitRulesTests
     private const double Chrome = 80;
 
     /// <summary>
+    /// Verifies a window wider than the columns its cards fill is narrowed to those columns.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsWidth_FewerCardsThanColumns_DropsEmptyColumns()
+    {
+        var width = WindowFitRules.NarrowedCardsWidth([new(3, false)], CardSize.Medium, 1000);
+
+        // Three columns of 182 plus 22.
+        width.Should().BeApproximately(568, 0.001);
+    }
+
+    /// <summary>
+    /// Verifies the space left over beside full rows is taken away too.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsWidth_FullRowsWithSpareSpace_SnapsToWholeColumns()
+    {
+        var width = WindowFitRules.NarrowedCardsWidth([new(12, false)], CardSize.Medium, 1000);
+
+        // Five columns fit; five times 182 plus 22.
+        width.Should().BeApproximately(932, 0.001);
+    }
+
+    /// <summary>
+    /// Verifies a window higher than its rows is lowered to the rows.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsHeight_SpaceBelowRows_ShrinksToRows()
+    {
+        var height = WindowFitRules.NarrowedCardsHeight([new(12, false)], false, CardSize.Medium, Chrome, 932, 900);
+
+        // Three rows of 130 plus the chrome and the padding, and the pixel the window keeps to avoid a scroll bar.
+        height.Should().BeApproximately(481, 0.001);
+    }
+
+    /// <summary>
+    /// Verifies a window that is not higher than its rows is left alone.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsHeight_NoSpareSpace_ReturnsNull() =>
+        WindowFitRules.NarrowedCardsHeight([new(12, false)], false, CardSize.Medium, Chrome, 932, 481).Should().BeNull();
+
+    /// <summary>
+    /// Verifies the height never drops below the smallest height of the card layout.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsHeight_OneCard_StopsAtMinimumHeight()
+    {
+        var height = WindowFitRules.NarrowedCardsHeight([new(1, false)], false, CardSize.Medium, Chrome, 300, 900);
+
+        height.Should().BeGreaterThanOrEqualTo(WindowHeightRules.MinHeight(WatchlistLayout.Cards, CardSize.Medium, false, Chrome));
+    }
+
+    /// <summary>
+    /// Verifies a window that already fits its cards is left alone.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsWidth_NoSpareSpace_ReturnsNull() =>
+        WindowFitRules.NarrowedCardsWidth([new(12, false)], CardSize.Medium, 932).Should().BeNull();
+
+    /// <summary>
+    /// Verifies the width never drops below the smallest width of the card layout.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsWidth_OneCard_StopsAtMinimumWidth()
+    {
+        var width = WindowFitRules.NarrowedCardsWidth([new(1, false)], CardSize.Medium, 1000);
+
+        width.Should().Be(WindowWidthRules.CardsMinWidth);
+    }
+
+    /// <summary>
+    /// Verifies collapsed sections do not keep columns open.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsWidth_CollapsedWideSection_IsIgnored()
+    {
+        var width = WindowFitRules.NarrowedCardsWidth([new(2, false), new(10, true)], CardSize.Medium, 1000);
+
+        width.Should().BeApproximately(Math.Max((2 * 182) + 22, WindowWidthRules.CardsMinWidth), 0.001);
+    }
+
+    /// <summary>
     /// Verifies a single card gets one column, the smallest width and a height that holds the card.
     /// </summary>
     [Fact]
