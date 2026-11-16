@@ -46,7 +46,7 @@ commodities side by side, from the data sources *you* choose.
   reorder them or move them between groups.
 - **Live prices**: sparklines drawn along the time (a dashed line where no price came in), change vs.
   previous close / 24h open, and an optional rolling animation of the price number (off by default).
-- **Chart time span**: the sparkline shows the last hour by default; the header's chart button switches it to one day,
+- **Chart time span**: the sparkline shows the last hour by default; the header's *View* button (two sliders) switches it to one day,
   five days, one month, six months or one year, with a percentage axis, a hover tooltip and the change over the span.
   A source that cannot serve a longer span keeps showing its last hour.
 - **Sort the list**: order the list layout by daily change or holding profit/loss %; rows whose market is shut follow
@@ -199,9 +199,9 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Tray list | Windows only; click the tray icon to see up to five instruments with price and change, without opening the window. Right-click an instrument and choose *Add to tray list* (or *Remove from tray list*); reorder under Settings → Tray. Stopped prices are dimmed and show why. Esc or a click elsewhere closes it; double-click the icon to open the window |
 | Restore a data source | *Restore defaults* in its expanded card resets its options (secret values such as keys are kept) |
 | Data source status | The footer shows one dot per data source in use (green connected, orange off or failing, grey idle or reconnecting), problems first, with a **+N** chip when not all fit. Click the footer for every source's state and error message |
-| Full screen | Double-click the header to fill the screen; double-click again or press Esc to go back to the previous size and position. Dragging the header in full screen leaves it and carries on dragging. If you quit in full screen, the next start is full screen again |
+| Full screen | Double-click the header (or choose *Full screen* in the header's *View* menu, card layout only) to fill the screen; double-click again or press Esc to go back to the previous size and position. Dragging the header in full screen leaves it and carries on dragging. If you quit in full screen, the next start is full screen again |
 | Card layout | The grid button in the header switches between list and cards (also in the right-click menu and Settings → Appearance) |
-| Card size | In card layout, pick *Small*, *Medium* or *Large* from the header, the right-click menu or Settings → Appearance. Small shows only symbol and price (the rest is in the tooltip); large adds a taller chart, the change in amount and percent, the reference price and the 60-minute low and high |
+| Card size | In card layout, pick *Small*, *Medium* or *Large* from the header's *View* menu, the right-click menu or Settings → Appearance. Small shows only symbol and price (the rest is in the tooltip); large adds a taller chart, the change in amount and percent, the reference price and the 60-minute low and high |
 | Group cards | In card layout the header's grouping button (or the right-click menu, or Settings → Appearance) picks *No grouping*, *By type*, *By data source* or *Custom groups*. Click a group header to collapse or expand it; drag a type or custom group header to reorder |
 | Custom groups | A *Default* group exists from the start, and new instruments join the first group. Create a group from the grouping button → *New group…*, the right-click menu, or a card's *Move to new group…*. Double-click a group header to rename it; right-click for *Rename…* and *Delete group* (only while it is empty and not the last group). Move cards by right-click → *Move to group* or by dragging. Settings → Groups reorders and deletes groups (deleting there moves the instruments to the first remaining group) |
 | Price roll | Off by default; *Roll the price on change* in the right-click menu or Settings → Appearance. Only the price number rolls; the flashing card or row marks an alert that fired and does not depend on this setting |
