@@ -294,7 +294,7 @@
   "Settings_BossKeyHint": "點擊輸入框後按下組合鍵；退格鍵清除",
   "Settings_BossKeyNone": "無",
   "Settings_BossKeyPress": "請按鍵",
-  "Status_Delayed": "報價延遲",
+  "Status_Delayed": "延遲",
   "Status_NoSource": "無資料來源",
   "Status_SourceError": "資料來源錯誤",
   "Status_SourceOff": "資料來源已關閉",

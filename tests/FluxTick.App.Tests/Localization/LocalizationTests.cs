@@ -140,7 +140,7 @@ public class LocalizationTests
         loc.Select(Loc.TraditionalChinese).Should().BeTrue();
 
         loc["Status_Stale"].Should().Be("資料過期");
-        loc["Status_Delayed"].Should().Be("報價延遲");
+        loc["Status_Delayed"].Should().Be("延遲");
         loc["LanguageMode_ZhTW"].Should().Be("繁體中文");
         loc.Language.Should().Be(Loc.TraditionalChinese);
     }
@@ -162,7 +162,7 @@ public class LocalizationTests
         loc.Select(Loc.SimplifiedChinese).Should().BeFalse();
 
         loc["Status_Stale"].Should().Be("数据过期");
-        loc["Status_Delayed"].Should().Be("报价延迟");
+        loc["Status_Delayed"].Should().Be("延迟");
         loc.Language.Should().Be(Loc.SimplifiedChinese);
         properties.Should().Contain("Item[]");
         changes.Should().Be(1);
