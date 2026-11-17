@@ -179,6 +179,88 @@ internal static class WindowFitRules
         double height,
         double renderScaling = 1)
     {
+        var needed = NeededCardsHeight(sections, grouped, size, chrome, width, renderScaling);
+        return needed < height - 0.5 ? needed : null;
+    }
+
+    /// <summary>
+    /// Gets the height a card window needs to show every row of its cards at a width, for a window that is lower than
+    /// that after cards were added: the window grows, but never above the height of the work area.
+    /// </summary>
+    /// <param name="sections">
+    /// The sections in display order.
+    /// </param>
+    /// <param name="grouped">
+    /// Whether the sections have a header above their cards.
+    /// </param>
+    /// <param name="size">
+    /// The card size.
+    /// </param>
+    /// <param name="chrome">
+    /// The height of the window around the list of cards: the header, the footer and the frame.
+    /// </param>
+    /// <param name="width">
+    /// The current width of the window, which decides how many cards a row holds.
+    /// </param>
+    /// <param name="height">
+    /// The current height of the window in device independent pixels.
+    /// </param>
+    /// <param name="maxHeight">
+    /// The height of the work area in device independent pixels, which the window does not grow beyond.
+    /// </param>
+    /// <param name="renderScaling">
+    /// The number of screen pixels in one device independent pixel.
+    /// </param>
+    /// <returns>
+    /// The higher height, at most <paramref name="maxHeight"/>; <see langword="null"/> when the window already shows every
+    /// row or has no room left to grow.
+    /// </returns>
+    public static double? GrownCardsHeight(
+        IReadOnlyList<FitSection> sections,
+        bool grouped,
+        CardSize size,
+        double chrome,
+        double width,
+        double height,
+        double maxHeight,
+        double renderScaling = 1)
+    {
+        var needed = Math.Min(NeededCardsHeight(sections, grouped, size, chrome, width, renderScaling), maxHeight);
+        return needed > height + 0.5 ? needed : null;
+    }
+
+    /// <summary>
+    /// Gets the height that shows every row of the cards at a width, rounded up to whole screen pixels.
+    /// </summary>
+    /// <param name="sections">
+    /// The sections in display order.
+    /// </param>
+    /// <param name="grouped">
+    /// Whether the sections have a header above their cards.
+    /// </param>
+    /// <param name="size">
+    /// The card size.
+    /// </param>
+    /// <param name="chrome">
+    /// The height of the window around the list of cards: the header, the footer and the frame.
+    /// </param>
+    /// <param name="width">
+    /// The width of the window, which decides how many cards a row holds.
+    /// </param>
+    /// <param name="renderScaling">
+    /// The number of screen pixels in one device independent pixel.
+    /// </param>
+    /// <returns>
+    /// The height of the window in device independent pixels, never below the smallest height of the card layout.
+    /// </returns>
+    private static double NeededCardsHeight(
+        IReadOnlyList<FitSection> sections,
+        bool grouped,
+        CardSize size,
+        double chrome,
+        double width,
+        double renderScaling)
+    {
         var cardWidth = Pixels(WindowHeightRules.CardWidth(size), renderScaling) + (2 * Pixels(CardLayout.CardMargin, renderScaling));
         var cardHeight = Pixels(WindowHeightRules.CardHeight(size), renderScaling) + (2 * Pixels(CardLayout.CardMargin, renderScaling));
         var sideSpace = Pixels(CardLayout.ListPadding.Left, renderScaling) + Pixels(CardLayout.ListPadding.Right, renderScaling)
@@ -191,8 +273,7 @@ internal static class WindowFitRules
         var perRow = Math.Max(1, (int)Math.Floor(((width - sideSpace) / cardWidth) + 1e-6));
         var rows = sections.Where(section => !section.IsCollapsed).Sum(section => Math.Max(1, (section.Count + perRow - 1) / perRow));
         var minHeight = WindowHeightRules.MinHeight(WatchlistLayout.Cards, size, grouped, chrome);
-        var needed = WindowHeightRules.RoundUpToPixels(Math.Max(fixedHeight + (rows * cardHeight), minHeight), renderScaling);
-        return needed < height - 0.5 ? needed : null;
+        return WindowHeightRules.RoundUpToPixels(Math.Max(fixedHeight + (rows * cardHeight), minHeight), renderScaling);
     }
 
     /// <summary>

@@ -83,6 +83,78 @@ public class WindowFitRulesTests
     }
 
     /// <summary>
+    /// Verifies a window lower than its rows is raised to the rows.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_NewRowNeeded_GrowsToRows()
+    {
+        var height = WindowFitRules.GrownCardsHeight([new(12, false)], false, CardSize.Medium, Chrome, 932, 400, 2000);
+
+        height.Should().BeApproximately(481, 0.001);
+    }
+
+    /// <summary>
+    /// Verifies a window that already shows every row is left alone.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_RowsAlreadyFit_ReturnsNull() =>
+        WindowFitRules.GrownCardsHeight([new(12, false)], false, CardSize.Medium, Chrome, 932, 481, 2000).Should().BeNull();
+
+    /// <summary>
+    /// Verifies the window never grows above the height of the work area.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_MoreRowsThanWorkArea_StopsAtWorkAreaHeight()
+    {
+        var height = WindowFitRules.GrownCardsHeight([new(100, false)], false, CardSize.Medium, Chrome, 932, 400, 700);
+
+        height.Should().Be(700);
+    }
+
+    /// <summary>
+    /// Verifies a window that is already as high as the work area cannot grow.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_AlreadyAtWorkAreaHeight_ReturnsNull() =>
+        WindowFitRules.GrownCardsHeight([new(100, false)], false, CardSize.Medium, Chrome, 932, 700, 700).Should().BeNull();
+
+    /// <summary>
+    /// Verifies every header of a grouped window takes room of its own.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_Grouped_AddsRoomForHeaders()
+    {
+        var plain = WindowFitRules.GrownCardsHeight([new(5, false), new(5, false)], false, CardSize.Medium, Chrome, 932, 100, 3000);
+        var grouped = WindowFitRules.GrownCardsHeight([new(5, false), new(5, false)], true, CardSize.Medium, Chrome, 932, 100, 3000);
+
+        grouped.Should().BeGreaterThan(plain!.Value);
+    }
+
+    /// <summary>
+    /// Verifies a collapsed section adds only its header, not its cards.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_CollapsedSection_AddsNoRows()
+    {
+        var open = WindowFitRules.GrownCardsHeight([new(5, false), new(20, false)], true, CardSize.Medium, Chrome, 932, 100, 3000);
+        var collapsed = WindowFitRules.GrownCardsHeight([new(5, false), new(20, true)], true, CardSize.Medium, Chrome, 932, 100, 3000);
+
+        collapsed.Should().BeLessThan(open!.Value);
+    }
+
+    /// <summary>
+    /// Verifies the height is a whole number of screen pixels at a fractional render scaling.
+    /// </summary>
+    [Fact]
+    public void GrownCardsHeight_FractionalScale_RoundsUpToWholePixels()
+    {
+        var height = WindowFitRules.GrownCardsHeight([new(12, false)], false, CardSize.Medium, Chrome, 932, 100, 2000, 1.5);
+
+        var pixels = height!.Value * 1.5;
+        pixels.Should().BeApproximately(Math.Round(pixels), 0.001);
+    }
+
+    /// <summary>
     /// Verifies a window that already fits its cards is left alone.
     /// </summary>
     [Fact]

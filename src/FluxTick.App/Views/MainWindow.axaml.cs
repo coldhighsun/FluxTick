@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
@@ -5,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using FluxTick.Abstractions;
 using FluxTick.App.Localization;
 using FluxTick.App.Services;
 using FluxTick.App.ViewModels;
@@ -55,6 +57,22 @@ public sealed partial class MainWindow : Window
     /// The view model whose window requests are being observed.
     /// </summary>
     private MainViewModel? _observed;
+
+    /// <summary>
+    /// The ids of the assets the watchlist had when the window last looked, to tell added assets from removed ones.
+    /// </summary>
+    private HashSet<AssetId> _rowIds = [];
+
+    /// <summary>
+    /// Whether the assets of the start are loaded. Until then the rows that come in are the saved watchlist, not assets
+    /// the user added, and must not change the size the window was saved with.
+    /// </summary>
+    private bool _rowsSettled;
+
+    /// <summary>
+    /// Whether a look at the number of assets is already waiting to run.
+    /// </summary>
+    private bool _rowCountCheckPending;
 
     /// <summary>
     /// Steps the width animation.
@@ -356,11 +374,14 @@ public sealed partial class MainWindow : Window
             _observed.FullScreenExitRequested -= OnFullScreenExitRequested;
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged -= OnLayoutPropertyChanged;
+            _observed.Rows.CollectionChanged -= OnRowsChanged;
         }
 
         _observed = DataContext as MainViewModel;
+        _rowIds = _observed is null ? [] : AssetIdsOf(_observed);
         if (_observed is not null)
         {
+            _observed.Rows.CollectionChanged += OnRowsChanged;
             _observed.SettingsRequested += OnSettingsRequested;
             _observed.AddAssetRequested += OnAddAssetRequested;
             _observed.AlertsRequested += OnAlertsRequested;
@@ -699,7 +720,11 @@ public sealed partial class MainWindow : Window
     /// <param name="viewModel">
     /// The view model that holds the sections.
     /// </param>
-    private void FitCards(MainViewModel viewModel)
+    /// <param name="animateWidth">
+    /// Whether the window moves to the new width and height itself. The width rule does not do it for a window that is
+    /// already in the card layout, because its limits do not change.
+    /// </param>
+    private void FitCards(MainViewModel viewModel, bool animateWidth = false)
     {
         if (Screens.ScreenFromWindow(this)?.WorkingArea is not { } area)
         {
@@ -713,10 +738,117 @@ public sealed partial class MainWindow : Window
         var fit = WindowFitRules.CardsSize(sections, viewModel.Grouping != CardGrouping.None, viewModel.CardSize, chrome, area.Width / scale, maxHeight, RenderScaling);
         var height = Math.Min(WindowHeightRules.RoundUpToPixels(fit.Height, RenderScaling), maxHeight);
 
-        // The width follows from the remembered one; the animation of the width rule takes the window there.
+        // The width follows from the remembered one; the window goes there through the width rule's animation, or by the
+        // animation below when it is in the card layout already and the rule has nothing to change.
         _cardsWidth = fit.Width;
         Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+        if (animateWidth)
+        {
+            var anchor = _dock.Edge == DockEdge.Right ? DockEdge.Right : DockEdge.Left;
+            _widthAnimation.Stop();
+            AnimateWidth(ClientSize.Width, fit.Width, WindowWidthRules.For(WatchlistLayout.Cards), anchor, height);
+            return;
+        }
+
         Height = height;
+    }
+
+    /// <summary>
+    /// Looks at the number of assets once the sections are rebuilt, so that a burst of changes (a reorder removes and
+    /// inserts rows) is looked at once.
+    /// </summary>
+    /// <param name="sender">
+    /// The collection of rows.
+    /// </param>
+    /// <param name="e">
+    /// The change data.
+    /// </param>
+    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_rowCountCheckPending)
+        {
+            return;
+        }
+
+        _rowCountCheckPending = true;
+        Dispatcher.UIThread.Post(OnAssetCountChanged, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Resizes the card window to the assets it has after some were added or removed. Removed assets take the empty space
+    /// away; added ones fit the window like a switch to the card layout does when the cards are not grouped, and only
+    /// make a grouped window higher, up to the height of the work area. An asset that was replaced does both.
+    /// </summary>
+    private void OnAssetCountChanged()
+    {
+        _rowCountCheckPending = false;
+        if (_observed is not { } viewModel)
+        {
+            return;
+        }
+
+        var ids = AssetIdsOf(viewModel);
+        var added = ids.Any(id => !_rowIds.Contains(id));
+        var removed = _rowIds.Any(id => !ids.Contains(id));
+        _rowIds = ids;
+        if (!_rowsSettled || (!added && !removed) || !viewModel.IsCardLayout || !IsLoaded || !IsVisible
+            || WindowState != WindowState.Normal || FillsScreen || Watchlist is null || Watchlist.Bounds.Height <= 0)
+        {
+            return;
+        }
+
+        if (added && viewModel.Grouping == CardGrouping.None)
+        {
+            FitCards(viewModel, animateWidth: true);
+        }
+        else if (!(added && GrowCardsHeight(viewModel)))
+        {
+            NarrowCardsToContent();
+        }
+    }
+
+    /// <summary>
+    /// Gets the ids of the assets the watchlist shows.
+    /// </summary>
+    /// <param name="viewModel">
+    /// The view model that holds the rows.
+    /// </param>
+    /// <returns>
+    /// The ids.
+    /// </returns>
+    private static HashSet<AssetId> AssetIdsOf(MainViewModel viewModel) => viewModel.Rows.Select(row => row.Asset.Id).ToHashSet();
+
+    /// <summary>
+    /// Makes the window of grouped cards higher so that every row of the cards shows, without going beyond the work area.
+    /// The width and the top stay unless the window would reach below the work area.
+    /// </summary>
+    /// <param name="viewModel">
+    /// The view model that holds the sections.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the window was made higher; <see langword="false"/> when it already shows every row or
+    /// cannot grow.
+    /// </returns>
+    private bool GrowCardsHeight(MainViewModel viewModel)
+    {
+        if (Screens.ScreenFromWindow(this)?.WorkingArea is not { } area)
+        {
+            return false;
+        }
+
+        var scale = ScreenUnitScale;
+        var sections = viewModel.Sections.Select(section => new FitSection(section.Count, section.IsCollapsed)).ToList();
+        var chrome = ClientSize.Height - Watchlist.Bounds.Height;
+        var maxHeight = area.Height / scale;
+        if (WindowFitRules.GrownCardsHeight(
+                sections, viewModel.Grouping != CardGrouping.None, viewModel.CardSize, chrome, ClientSize.Width, ClientSize.Height, maxHeight, RenderScaling) is not { } height)
+        {
+            return false;
+        }
+
+        Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+        Height = height;
+        return true;
     }
 
     /// <summary>
@@ -737,6 +869,10 @@ public sealed partial class MainWindow : Window
             }
 
             timer.Stop();
+
+            // The saved watchlist is in by now; assets that come after this are the user's doing.
+            _rowIds = _observed is null ? [] : AssetIdsOf(_observed);
+            _rowsSettled = true;
             if (ready)
             {
                 NarrowCardsToContent();
