@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 
 namespace FluxTick.Providers.Yahoo;
@@ -185,12 +186,28 @@ internal static class YahooStreamParser
 
         quote = new YahooStreamQuote(
             symbol,
-            (decimal)last,
+            ToDecimal(last),
             ToTime(time),
-            change is { } delta && float.IsFinite(delta) ? (decimal)delta : null,
+            change is { } delta && float.IsFinite(delta) ? ToDecimal(delta) : null,
             quoteType,
             marketHours);
         return true;
+    }
+
+    /// <summary>
+    /// Converts a single-precision value to the decimal the source meant.
+    /// </summary>
+    /// <param name="value">
+    /// A finite value read from the stream.
+    /// </param>
+    /// <returns>
+    /// The shortest decimal that reads back as <paramref name="value"/>, such as <c>80824.91</c>. The cast
+    /// <c>(decimal)value</c> is not used because .NET 11 keeps the binary expansion (<c>80824.90625</c>) where
+    /// earlier versions rounded to seven digits.
+    /// </returns>
+    private static decimal ToDecimal(float value)
+    {
+        return decimal.Parse(value.ToString("R", CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
