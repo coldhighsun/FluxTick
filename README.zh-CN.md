@@ -1,4 +1,4 @@
-# FluxTick
+# <img src="src/FluxTick.App/Assets/fluxtick.png" alt="" width="40" height="40" align="absmiddle" /> FluxTick
 
 [![CI](https://github.com/coldhighsun/FluxTick/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/FluxTick/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/coldhighsun/FluxTick/graph/badge.svg)](https://codecov.io/gh/coldhighsun/FluxTick)
