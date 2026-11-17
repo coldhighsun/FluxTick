@@ -7,7 +7,6 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <Authors>coldhighsun</Authors>
     <Product>FluxTick</Product>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <UseArtifactsOutput>true</UseArtifactsOutput>
     <DebugType>embedded</DebugType>
   </PropertyGroup>

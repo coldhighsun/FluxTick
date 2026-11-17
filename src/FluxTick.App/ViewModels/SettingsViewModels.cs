@@ -1676,6 +1676,21 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial CardSize SelectedCardSize { get; set; }
 
     /// <summary>
+    /// Gets the folder that holds the settings file, as shown on the About page.
+    /// </summary>
+    public string SettingsFolderPath => AppPaths.DataDirectory;
+
+    /// <summary>
+    /// Gets the folder that holds the log files, as shown on the About page.
+    /// </summary>
+    public string LogFolderPath => AppPaths.LogDirectory;
+
+    /// <summary>
+    /// Gets the folder that the program is installed in, as shown on the About page.
+    /// </summary>
+    public string ProgramFolderPath => AppContext.BaseDirectory;
+
+    /// <summary>
     /// Opens the folder that holds the settings file.
     /// </summary>
     /// <returns>
@@ -1692,6 +1707,15 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// </returns>
     [RelayCommand]
     private Task OpenLogFolderAsync() => OpenFolderAsync(AppPaths.LogDirectory);
+
+    /// <summary>
+    /// Opens the folder that the program itself is installed in.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the file manager was asked and the outcome is shown.
+    /// </returns>
+    [RelayCommand]
+    private Task OpenProgramFolderAsync() => OpenFolderAsync(AppContext.BaseDirectory);
 
     /// <summary>
     /// Opens a folder off the UI thread, as making it and starting the file manager can take a moment on a redirected
