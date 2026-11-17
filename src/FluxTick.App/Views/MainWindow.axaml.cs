@@ -173,6 +173,15 @@ public sealed partial class MainWindow : Window
             RaiseGeometryChanged();
             if (_dock.IsUserMove(Position))
             {
+                // A hidden window that was moved by something else (the system, a size rule) is in sight: it is judged
+                // again, which hides it anew when it still rests at an edge.
+                // While the check after hiding is waiting, the move is its to judge: it gives the edge up when the system
+                // keeps pulling the window back.
+                if (!_hiddenVerifyPending)
+                {
+                    _dock.SurfaceIfMovedWhileHidden(Position);
+                }
+
                 ScheduleDockSettle();
             }
         };
@@ -944,7 +953,9 @@ public sealed partial class MainWindow : Window
         {
             // A window that grows must not reach below the work area, and the width animation, if it still runs, keeps the top it has.
             _widthAnimationTop = Position.Y;
-            var top = WindowFitRules.ClampTop(Position.Y, height * scale, work.Y, work.Bottom);
+            // A window hidden beyond its edge lies outside the work area on purpose: clamping would pull it into sight,
+            // so it is sent to its hidden position for the new height below.
+            var top = _dock.Hidden ? Position.Y : WindowFitRules.ClampTop(Position.Y, height * scale, work.Y, work.Bottom);
             if (top != Position.Y)
             {
                 Position = new PixelPoint(Position.X, top);
@@ -962,6 +973,21 @@ public sealed partial class MainWindow : Window
         Height = height;
         MinHeight = height;
         MaxHeight = height;
+
+        // The hidden position depends on the height: beyond the top edge it lies above the window, at the sides the
+        // window is kept inside the work area on the other axis.
+        if (_dock.Hidden && EnsureDockArea())
+        {
+            var size = PixelSize.FromSize(new Size(ClientSize.Width, height), ScreenUnitScale);
+            var hiddenAt = _dock.HiddenPosition(new PixelRect(Position, size), ScaledPixels(EdgeDockRules.Sliver));
+
+            // A slide that still runs would carry the window to its old target; stopping it skips its completion, so the
+            // window is checked afresh at the new one.
+            _dockSlide.Stop();
+            MoveDock(hiddenAt);
+            RaiseGeometryChanged();
+            VerifyHidden(hiddenAt);
+        }
     }
 
     /// <summary>

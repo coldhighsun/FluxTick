@@ -222,6 +222,60 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
+    /// A hidden window that something else moved is in sight, so it is no longer taken for hidden and can hide anew.
+    /// </summary>
+    [Fact]
+    public void SurfaceIfMovedWhileHidden_MovedAwayFromTheHiddenPosition_NoLongerHidden()
+    {
+        var model = DockedAtTop();
+        var hidden = new PixelPoint(600, -96);
+        model.SetHidden(true);
+        model.BeginSlide(hidden);
+        model.EndSlide();
+
+        model.SurfaceIfMovedWhileHidden(hidden).Should().BeFalse();
+        model.Hidden.Should().BeTrue();
+
+        model.SurfaceIfMovedWhileHidden(new PixelPoint(600, 40)).Should().BeTrue();
+        model.Hidden.Should().BeFalse();
+        model.ShouldWaitToHide.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The window's own slide, a drag by the user and a window that is shown are not an outside move of a hidden window.
+    /// </summary>
+    [Fact]
+    public void SurfaceIfMovedWhileHidden_OwnSlideDragOrShown_ChangesNothing()
+    {
+        var model = DockedAtTop();
+        model.SurfaceIfMovedWhileHidden(new PixelPoint(0, 0)).Should().BeFalse();
+
+        model.SetHidden(true);
+        model.BeginSlide(new PixelPoint(600, -96));
+        model.SurfaceIfMovedWhileHidden(new PixelPoint(600, 40)).Should().BeFalse();
+        model.EndSlide();
+
+        model.SetDragging(true);
+        model.SurfaceIfMovedWhileHidden(new PixelPoint(600, 40)).Should().BeFalse();
+        model.Hidden.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Creates a model with edge hiding on and a window docked to the top edge of <see cref="Area"/>.
+    /// </summary>
+    /// <returns>
+    /// The model.
+    /// </returns>
+    private static EdgeDockModel DockedAtTop()
+    {
+        var model = new EdgeDockModel();
+        model.SetEnabled(true);
+        model.Settle(new PixelRect(600, 40, 400, 100), Area, [], 8, 4).Should().NotBeNull();
+        model.Edge.Should().Be(DockEdge.Top);
+        return model;
+    }
+
+    /// <summary>
     /// Nothing is decided while the window slides or the user drags it, or when edge hiding is off.
     /// </summary>
     [Fact]

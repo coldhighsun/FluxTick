@@ -69,6 +69,17 @@ public sealed partial class MainWindow
     private bool _hideToTrayIfNotDocked;
 
     /// <summary>
+    /// Counts the checks of a hidden window that were scheduled, so that only the latest one acts.
+    /// </summary>
+    private int _hiddenVerifyGeneration;
+
+    /// <summary>
+    /// Gets whether a check of the hidden window is waiting. A move of the window meanwhile is the check's to judge,
+    /// so the window is not taken for shown before it ran.
+    /// </summary>
+    private bool _hiddenVerifyPending;
+
+    /// <summary>
     /// Whether the wait for the position to settle follows a resize: the window then keeps the edge it is docked to and
     /// is only put flush with it again, because a smaller window is not moved away from its edge by the user.
     /// </summary>
@@ -688,10 +699,20 @@ public sealed partial class MainWindow
     /// <param name="target">
     /// The hidden position the window was sent to.
     /// </param>
-    private void VerifyHidden(PixelPoint target) =>
+    private void VerifyHidden(PixelPoint target)
+    {
+        var generation = ++_hiddenVerifyGeneration;
+        _hiddenVerifyPending = true;
         DispatcherTimer.RunOnce(
             () =>
             {
+                if (generation != _hiddenVerifyGeneration)
+                {
+                    // A newer check, for a newer target, took over.
+                    return;
+                }
+
+                _hiddenVerifyPending = false;
                 // The check ends the start's wait whatever it finds: a window that came out again is in sight by its own
                 // doing, and a stale flag must not send it to the tray at some later time.
                 var hideToTray = _hideToTrayIfNotDocked;
@@ -726,6 +747,7 @@ public sealed partial class MainWindow
                 }
             },
             DockVerifyDelay);
+    }
 
     /// <summary>
     /// Gets the bounds of the window in screen pixels.

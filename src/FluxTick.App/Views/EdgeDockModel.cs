@@ -205,6 +205,28 @@ internal sealed class EdgeDockModel
     public bool IsUserMove(PixelPoint position) => Enabled && !Sliding && position != Expected;
 
     /// <summary>
+    /// Takes in that something other than the dock moved a window that rests hidden beyond its edge, so it is no longer
+    /// hidden: it has to be judged again like a window the user dropped, which hides it anew when it still rests at an
+    /// edge. Without this the window stays in sight although the model takes it for hidden, and then never slides back.
+    /// </summary>
+    /// <param name="position">
+    /// The position the window has now.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the window was hidden and moved away from where the dock sent it.
+    /// </returns>
+    public bool SurfaceIfMovedWhileHidden(PixelPoint position)
+    {
+        if (!Hidden || !IsUserMove(position) || Dragging)
+        {
+            return false;
+        }
+
+        Hidden = false;
+        return true;
+    }
+
+    /// <summary>
     /// Stops using an edge, because the platform did not keep the window beyond it where it was sent; some systems
     /// refuse one edge, such as the top one, and keep the others. The window is in plain sight then, so the dock ends.
     /// Edge hiding is off once every edge was refused.
