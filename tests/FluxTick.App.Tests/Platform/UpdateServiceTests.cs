@@ -715,7 +715,15 @@ public sealed class UpdateServiceTests : IDisposable
     {
         var service = await CreateDownloadedAsync();
 
-        await Task.WhenAll(service.InstallAsync(), service.InstallAsync());
+        // Hold the first installation in its preparation so the second call really overlaps it; a fake launcher alone
+        // can finish the first call synchronously, which makes the second one a separate, later installation.
+        var gate = new TaskCompletionSource();
+        service.PrepareForInstallAsync = () => gate.Task;
+
+        var first = service.InstallAsync();
+        var second = service.InstallAsync();
+        gate.SetResult();
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10));
 
         _launcher.Started.Should().ContainSingle();
     }
