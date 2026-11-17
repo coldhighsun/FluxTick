@@ -1,17 +1,29 @@
-# <img src="src/FluxTick.App/Assets/fluxtick.png" alt="" width="40" height="40" align="absmiddle" /> FluxTick
+<div align="center">
+
+<img src="src/FluxTick.App/Assets/fluxtick.png" alt="FluxTick icon" width="128">
+
+# FluxTick
 
 [![CI](https://github.com/coldhighsun/FluxTick/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/FluxTick/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/coldhighsun/FluxTick/graph/badge.svg)](https://codecov.io/gh/coldhighsun/FluxTick)
-[![Release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?sort=semver&label=release)](https://github.com/coldhighsun/FluxTick/releases/latest)
-[![Pre-release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?include_prereleases&filter=*-*&sort=semver&label=pre-release)](https://github.com/coldhighsun/FluxTick/releases)
+[![Coverage](https://codecov.io/gh/coldhighsun/FluxTick/graph/badge.svg)](https://codecov.io/gh/coldhighsun/FluxTick)
+[![Tests](https://img.shields.io/badge/tests-2331-brightgreen?logo=xunit)](tests)
+[![Latest Release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?sort=semver)](https://github.com/coldhighsun/FluxTick/releases/latest)
+[![Latest Pre-release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?include_prereleases&sort=semver&label=pre-release)](https://github.com/coldhighsun/FluxTick/releases)
 [![Downloads](https://img.shields.io/github/downloads/coldhighsun/FluxTick/total)](https://github.com/coldhighsun/FluxTick/releases)
+[![Open Issues](https://img.shields.io/github/issues/coldhighsun/FluxTick)](https://github.com/coldhighsun/FluxTick/issues)
+[![Open PRs](https://img.shields.io/github/issues-pr/coldhighsun/FluxTick)](https://github.com/coldhighsun/FluxTick/pulls)
+[![Last Commit](https://img.shields.io/github/last-commit/coldhighsun/FluxTick)](https://github.com/coldhighsun/FluxTick/commits/main)
+[![GitHub Stars](https://img.shields.io/github/stars/coldhighsun/FluxTick?style=flat)](https://github.com/coldhighsun/FluxTick/stargazers)
 [![License: MIT](https://img.shields.io/github/license/coldhighsun/FluxTick)](LICENSE)
 [![.NET 11](https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
 [![Avalonia](https://img.shields.io/badge/UI-Avalonia-8B44AC)](https://avaloniaui.net/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#快速開始)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#參與貢獻)
 
-[English](README.md) | [简体中文](README.zh-CN.md) | **繁體中文**
+[English](README.md) | [简体中文](README.zh-CN.md) | 繁體中文
+
+</div>
+
+---
 
 **每個市場，每一次跳動。**
 
