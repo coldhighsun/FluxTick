@@ -9,6 +9,10 @@
              x:DataType="vm:SettingsViewModel">
 
   <UserControl.Styles>
+    <!-- The content of every page: one margin, so the space under the last card is the same on each tab. -->
+    <Style Selector="StackPanel.settingsPage">
+      <Setter Property="Margin" Value="14,10,14,14" />
+    </Style>
     <Style Selector="Grid.dependent:disabled">
       <Setter Property="Opacity" Value="0.45" />
     </Style>
@@ -101,7 +105,7 @@
 
       <TabItem Header="{loc:T Settings_TabGeneral}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
+          <StackPanel Classes="settingsPage">
             <TextBlock Text="{loc:T Settings_SectionLanguage}" Classes="section" Margin="2,0,0,6" />
             <Border Classes="card">
               <StackPanel Spacing="8">
@@ -197,7 +201,7 @@
 
       <TabItem Header="{loc:T Settings_TabAppearance}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
+          <StackPanel Classes="settingsPage">
             <Border Classes="card">
               <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="Auto,*,Auto">
@@ -272,7 +276,7 @@
 
       <TabItem Header="{loc:T Settings_TabGroups}">
         <ScrollViewer Name="GroupsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
+          <StackPanel Classes="settingsPage">
             <Border Classes="card">
               <StackPanel Spacing="8">
                 <TextBlock Text="{loc:T Settings_GroupsHelp}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
@@ -298,7 +302,7 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
             <!-- The dashed "New group" button; it asks for the name next to it. -->
-            <views:NewGroupPlaceholder Name="NewGroupButton" Margin="0,6,0,6" Click="OnNewGroupClicked" />
+            <views:NewGroupPlaceholder Name="NewGroupButton" Margin="0,6,0,0" Click="OnNewGroupClicked" />
           </StackPanel>
         </ScrollViewer>
       </TabItem>
@@ -306,7 +310,7 @@
       <!-- Only Windows lists instruments when the pointer rests on the tray icon. -->
       <TabItem Header="{loc:T Settings_TabTray}" IsVisible="{Binding IsTrayListSupported}">
         <ScrollViewer Name="TrayAssetsScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
+          <StackPanel Classes="settingsPage">
             <Border Classes="card">
               <StackPanel Spacing="8">
                 <TextBlock Text="{Binding TrayAssetsHelp}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
@@ -343,7 +347,7 @@
 
       <TabItem Header="{loc:T Settings_TabAlerts}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
+          <StackPanel Classes="settingsPage">
             <Border Classes="card">
               <TextBlock Text="{loc:T Settings_AlertsHelp}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
             </Border>
@@ -356,7 +360,7 @@
         <Grid>
           <!-- The list: search, filters, a count, and one compact row per data source. A row opens the detail page. -->
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding !IsProviderDetailOpen}">
-            <StackPanel Margin="14,10,14,4">
+            <StackPanel Classes="settingsPage">
               <TextBox Text="{Binding ProviderSearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="{loc:T Settings_SearchSources}"
                        AutomationProperties.Name="{loc:T Settings_SearchSources}" Margin="0,0,0,6" />
               <TextBlock Text="{Binding ProvidersSummary}" Classes="muted" FontSize="11" Margin="2,0,0,8" />
@@ -413,7 +417,7 @@
               </Grid>
 
               <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="14,4,14,8" Spacing="8">
+                <StackPanel Margin="14,4,14,14" Spacing="8">
                   <Border Classes="card">
                     <StackPanel Spacing="6">
                       <TextBlock Text="{Binding Description}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
@@ -472,7 +476,7 @@
               </ScrollViewer>
 
               <!-- Save and revert show while there are edits; restore defaults is always there. -->
-              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="14,4,14,8" IsVisible="{Binding HasOptions}">
+              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="14,0,14,14" IsVisible="{Binding HasOptions}">
                 <Button Classes="primary" Content="{loc:T Settings_Save}" Command="{Binding SaveCommand}" IsVisible="{Binding IsDirty}"
                         FontSize="11" Padding="12,4" />
                 <Button Classes="outline" Content="{loc:T Settings_Revert}" Command="{Binding RevertCommand}" IsVisible="{Binding IsDirty}"
@@ -488,7 +492,7 @@
 
       <TabItem Header="{loc:T Settings_TabAbout}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="14,10,14,4">
+          <StackPanel Classes="settingsPage">
             <!-- The hero, a compact strip in the middle: the icon with the name of the app over its version in a pill; the tag
                  line is in the footer of the window. -->
             <StackPanel Orientation="Horizontal" Spacing="14" HorizontalAlignment="Center" Margin="0,2,0,12">
@@ -526,7 +530,6 @@
             <Border Classes="card" Padding="12" Margin="0,8,0,8" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel"
                     IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}">
               <StackPanel Spacing="10">
-                <TextBlock Text="{loc:T About_UpdatesHeader}" FontWeight="SemiBold" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                   <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Update_AutoCheck}" />
@@ -557,17 +560,36 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </StackPanel>
             </Border>
-            <!-- Where the data is kept: the two folder buttons side by side in a card of their own. -->
-            <Border Classes="card" Padding="12" Margin="0,0,0,8">
-              <StackPanel Spacing="10">
-                <TextBlock Text="{loc:T About_DataHeader}" FontWeight="SemiBold" />
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                  <Button Classes="outline" Content="{loc:T Settings_OpenSettingsFolder}" Command="{Binding OpenSettingsFolderCommand}"
-                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-                  <Button Grid.Column="1" Classes="outline" Content="{loc:T Settings_OpenLogFolder}" Command="{Binding OpenLogFolderCommand}"
-                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+            <!-- Where the data is kept: one row per folder, like the card above: the name, the path and a button that opens it. -->
+            <Border Classes="card" Padding="12,4">
+              <StackPanel>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" Margin="0,4">
+                  <TextBlock Text="{loc:T About_DataSettings}" Classes="muted" VerticalAlignment="Center" />
+                  <!-- The path is the button: a click opens the folder. -->
+                  <Button Grid.Column="1" Classes="link" Command="{Binding OpenSettingsFolderCommand}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                          AutomationProperties.Name="{loc:T About_DataSettings}" ToolTip.Tip="{Binding SettingsFolderPath}">
+                    <TextBlock Text="{Binding SettingsFolderPath}" Classes="mono" FontSize="11" TextTrimming="CharacterEllipsis" />
+                  </Button>
                 </Grid>
-                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap"
+                <Border Height="1" Background="{DynamicResource BorderBrush}" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" Margin="0,4">
+                  <TextBlock Text="{loc:T About_DataLogs}" Classes="muted" VerticalAlignment="Center" />
+                  <!-- The path is the button: a click opens the folder. -->
+                  <Button Grid.Column="1" Classes="link" Command="{Binding OpenLogFolderCommand}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                          AutomationProperties.Name="{loc:T About_DataLogs}" ToolTip.Tip="{Binding LogFolderPath}">
+                    <TextBlock Text="{Binding LogFolderPath}" Classes="mono" FontSize="11" TextTrimming="CharacterEllipsis" />
+                  </Button>
+                </Grid>
+                <Border Height="1" Background="{DynamicResource BorderBrush}" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" Margin="0,4">
+                  <TextBlock Text="{loc:T About_DataProgram}" Classes="muted" VerticalAlignment="Center" />
+                  <!-- The path is the button: a click opens the folder. -->
+                  <Button Grid.Column="1" Classes="link" Command="{Binding OpenProgramFolderCommand}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                          AutomationProperties.Name="{loc:T About_DataProgram}" ToolTip.Tip="{Binding ProgramFolderPath}">
+                    <TextBlock Text="{Binding ProgramFolderPath}" Classes="mono" FontSize="11" TextTrimming="CharacterEllipsis" />
+                  </Button>
+                </Grid>
+                <TextBlock Text="{loc:T Settings_OpenFolderFailed}" Classes="warn" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,8"
                            IsVisible="{Binding FolderOpenFailed}" />
               </StackPanel>
             </Border>
@@ -577,7 +599,8 @@
 
     </TabControl>
 
-    <StackPanel Grid.Row="1" Margin="14,4,14,12">
+    <StackPanel Grid.Row="1" Margin="14,0,14,12">
+      <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,0,0,8" />
       <TextBlock Text="{loc:T Tagline}" Classes="muted" FontSize="11" HorizontalAlignment="Center" Margin="0,0,0,2" />
       <TextBlock Text="{loc:T Settings_Disclaimer}" Classes="muted" FontSize="11"
                  TextWrapping="Wrap" TextAlignment="Center" />
