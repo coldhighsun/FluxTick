@@ -6,7 +6,7 @@
 [![Pre-release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?include_prereleases&filter=*-*&sort=semver&label=pre-release)](https://github.com/coldhighsun/FluxTick/releases)
 [![Downloads](https://img.shields.io/github/downloads/coldhighsun/FluxTick/total)](https://github.com/coldhighsun/FluxTick/releases)
 [![License: MIT](https://img.shields.io/github/license/coldhighsun/FluxTick)](LICENSE)
-[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
+[![.NET 11](https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
 [![Avalonia](https://img.shields.io/badge/UI-Avalonia-8B44AC)](https://avaloniaui.net/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#快速开始)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#参与贡献)
@@ -63,7 +63,7 @@
   过期的价格不计入持仓总额（休市除外），延迟的价格仍会计入；数据源过期、延迟或重连期间报警会等待。
 - **界面语言**：简体中文、繁体中文或英文，可在运行时切换；“自动”跟随系统语言。
 - **涨跌颜色**：绿涨红跌或红涨绿跌，根据界面语言自动选择（中文为红涨绿跌）。
-- **跨平台**：支持 Windows、Linux 和 macOS（基于 [Avalonia](https://avaloniaui.net/) 与 .NET 10 构建）。
+- **跨平台**：支持 Windows、Linux 和 macOS（基于 [Avalonia](https://avaloniaui.net/) 与 .NET 11 构建）。
 - **易于扩展**：新增一个数据源只需一个小型类库和一行注册代码。
   参见 [docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md)（英文）。
 
@@ -143,7 +143,7 @@ Windows 上，FluxTick 在启动时以及运行期间约每天一次检查新版
 
 ### 从源码运行
 
-需要 [.NET 10 SDK](https://dotnet.microsoft.com/download)。
+需要 [.NET 11 SDK](https://dotnet.microsoft.com/download)。
 
 ```bash
 dotnet run --project src/FluxTick.App

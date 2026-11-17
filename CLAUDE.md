@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-The SDK is pinned in `global.json` (.NET 10) and tests use xUnit v3 on Microsoft.Testing.Platform, so the `dotnet test` flags differ from the VSTest ones.
+The SDK is pinned in `global.json` (.NET 11) and tests use xUnit v3 on Microsoft.Testing.Platform, so the `dotnet test` flags differ from the VSTest ones.
 
 ```bash
 dotnet build FluxTick.slnx

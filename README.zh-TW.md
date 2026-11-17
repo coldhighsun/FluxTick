@@ -6,7 +6,7 @@
 [![Pre-release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?include_prereleases&filter=*-*&sort=semver&label=pre-release)](https://github.com/coldhighsun/FluxTick/releases)
 [![Downloads](https://img.shields.io/github/downloads/coldhighsun/FluxTick/total)](https://github.com/coldhighsun/FluxTick/releases)
 [![License: MIT](https://img.shields.io/github/license/coldhighsun/FluxTick)](LICENSE)
-[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
+[![.NET 11](https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
 [![Avalonia](https://img.shields.io/badge/UI-Avalonia-8B44AC)](https://avaloniaui.net/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#快速開始)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#參與貢獻)
@@ -63,7 +63,7 @@
   過期的價格不計入持倉總額（休市除外），延遲的價格仍會計入；資料來源過期、延遲或重新連線期間警示會等待。
 - **介面語言**：簡體中文、繁體中文或英文，可在執行時切換；「自動」跟隨系統語言。
 - **漲跌顏色**：綠漲紅跌或紅漲綠跌，依介面語言自動選擇（中文為紅漲綠跌）。
-- **跨平台**：支援 Windows、Linux 和 macOS（基於 [Avalonia](https://avaloniaui.net/) 與 .NET 10 建置）。
+- **跨平台**：支援 Windows、Linux 和 macOS（基於 [Avalonia](https://avaloniaui.net/) 與 .NET 11 建置）。
 - **易於擴充**：新增一個資料來源只需一個小型類別庫和一行註冊程式碼。
   參見 [docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md)（英文）。
 
@@ -143,7 +143,7 @@ Windows 上，FluxTick 在啟動時以及執行期間約每天一次檢查新版
 
 ### 從原始碼執行
 
-需要 [.NET 10 SDK](https://dotnet.microsoft.com/download)。
+需要 [.NET 11 SDK](https://dotnet.microsoft.com/download)。
 
 ```bash
 dotnet run --project src/FluxTick.App

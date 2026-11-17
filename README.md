@@ -6,7 +6,7 @@
 [![Pre-release](https://img.shields.io/github/v/release/coldhighsun/FluxTick?include_prereleases&filter=*-*&sort=semver&label=pre-release)](https://github.com/coldhighsun/FluxTick/releases)
 [![Downloads](https://img.shields.io/github/downloads/coldhighsun/FluxTick/total)](https://github.com/coldhighsun/FluxTick/releases)
 [![License: MIT](https://img.shields.io/github/license/coldhighsun/FluxTick)](LICENSE)
-[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
+[![.NET 11](https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
 [![Avalonia](https://img.shields.io/badge/UI-Avalonia-8B44AC)](https://avaloniaui.net/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#getting-started)
 
@@ -71,7 +71,7 @@ commodities side by side, from the data sources *you* choose.
   delayed or reconnecting.
 - **Language**: Simplified Chinese, Traditional Chinese or English, switchable at runtime; Auto follows the system language.
 - **Up/down colors**: green-up or red-up, automatic by UI language (red-up for Chinese).
-- **Cross-platform**: Windows, Linux and macOS (built on [Avalonia](https://avaloniaui.net/) and .NET 10).
+- **Cross-platform**: Windows, Linux and macOS (built on [Avalonia](https://avaloniaui.net/) and .NET 11).
 - **Extensible**: adding a data source is one small class library and one line of registration.
   See [docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md).
 
@@ -158,7 +158,7 @@ On Windows, FluxTick looks for a newer release when it starts and about once a d
 
 ### Run from source
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Requires the [.NET 11 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
 dotnet run --project src/FluxTick.App
