@@ -9,7 +9,7 @@ namespace FluxTick.App.Tests;
 public class WindowHeightRulesTests
 {
     /// <summary>
-    /// Verifies the list layout keeps its fixed smallest height whatever the card size.
+    /// Verifies the list layout gives the floor of an empty list whatever the card size.
     /// </summary>
     [Theory]
     [InlineData(CardSize.Small)]
@@ -41,12 +41,48 @@ public class WindowHeightRulesTests
     }
 
     /// <summary>
-    /// Verifies a few rows never take the window below the smallest height of the list layout.
+    /// Verifies a single short row shrinks the window to the row and what is around it, with no blank space below.
     /// </summary>
     [Fact]
-    public void ListContentMinHeight_NeverBelowListMinimum()
+    public void ListContentMinHeight_SingleRow_FitsRowWithoutBlankSpace()
     {
-        WindowHeightRules.ListContentMinHeight(content: 40, chrome: 80, limit: 1000).Should().Be(WindowHeightRules.ListMinHeight);
+        WindowHeightRules.ListContentMinHeight(content: 40, chrome: 80, limit: 1000).Should().Be(120);
+    }
+
+    /// <summary>
+    /// Verifies an empty list keeps the smallest height of the list layout.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_NoRows_KeepsListMinimum()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 0, chrome: 80, limit: 1000).Should().Be(WindowHeightRules.ListMinHeight);
+    }
+
+    /// <summary>
+    /// Verifies an empty list on a screen lower than the list minimum is capped by the screen.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_NoRowsOnLowScreen_CappedByScreen()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 0, chrome: 80, limit: 150).Should().Be(150);
+    }
+
+    /// <summary>
+    /// Verifies any positive row height, however small, is not lifted to the empty-list minimum.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_TinyPositiveContent_IsNotRaisedToListMinimum()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 0.5, chrome: 80, limit: 1000).Should().Be(80.5);
+    }
+
+    /// <summary>
+    /// Verifies a few rows on a screen lower than the rows need are capped by the screen too.
+    /// </summary>
+    [Fact]
+    public void ListContentMinHeight_FewRowsOnLowScreen_CappedByScreen()
+    {
+        WindowHeightRules.ListContentMinHeight(content: 60, chrome: 80, limit: 100).Should().Be(100);
     }
 
     /// <summary>
