@@ -3,13 +3,15 @@ using FluxTick.Core.Application;
 namespace FluxTick.App.Views;
 
 /// <summary>
-/// Pure rules for the smallest height of the main window. The list layout has a fixed smallest height; in the card
-/// layout the window is as low as what one card of the shown size needs.
+/// Pure rules for the smallest height of the main window. The list layout is as high as its rows need (and never below
+/// <see cref="ListMinHeight"/> when it has no rows); in the card layout the window is as low as what one card of the shown
+/// size needs.
 /// </summary>
 internal static class WindowHeightRules
 {
     /// <summary>
-    /// The smallest height of the list layout in device independent pixels.
+    /// The smallest height of the list layout in device independent pixels. It is the height of an empty list; a list with
+    /// rows is as high as the rows and what is around them.
     /// </summary>
     public const double ListMinHeight = 180;
 
@@ -67,7 +69,8 @@ internal static class WindowHeightRules
     /// The height of the window around the list of cards: the header, the footer and the frame.
     /// </param>
     /// <returns>
-    /// <see cref="ListMinHeight"/> in the list layout; in the card layout the height that shows one whole card with its
+    /// <see cref="ListMinHeight"/> in the list layout, which is only the floor of an empty list (the height of a list with
+    /// rows comes from <see cref="ListContentMinHeight"/>); in the card layout the height that shows one whole card with its
     /// margin, the header of its group and the padding of the list, which for a small card is below
     /// <see cref="ListMinHeight"/>.
     /// </returns>
@@ -110,9 +113,13 @@ internal static class WindowHeightRules
     /// The most the window can be high, which is the height of the screen it is on.
     /// </param>
     /// <returns>
-    /// The height that shows all rows, but at least <see cref="ListMinHeight"/>, and not more than <paramref name="limit"/>
-    /// once there are so many rows that they need a scroll bar anyway.
+    /// The height that shows all rows and nothing below them, and not more than <paramref name="limit"/> once there are
+    /// so many rows that they need a scroll bar anyway. Only when there are no rows (the empty state) it is at least
+    /// <see cref="ListMinHeight"/>; even then it is never more than <paramref name="limit"/>.
     /// </returns>
-    public static double ListContentMinHeight(double content, double chrome, double limit) =>
-        Math.Max(ListMinHeight, Math.Min(chrome + content, limit));
+    public static double ListContentMinHeight(double content, double chrome, double limit)
+    {
+        var fit = chrome + content;
+        return Math.Min(content > 0 ? fit : Math.Max(ListMinHeight, fit), limit);
+    }
 }
