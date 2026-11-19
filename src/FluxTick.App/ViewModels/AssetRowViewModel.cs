@@ -277,6 +277,41 @@ public sealed partial class AssetRowViewModel : ObservableObject
     public partial bool HasAlert { get; set; }
 
     /// <summary>
+    /// The enabled alerts of the instrument. The texts that tell them are built from these when they are asked for, so
+    /// that they follow the language.
+    /// </summary>
+    private IReadOnlyList<AlertRule> _alerts = [];
+
+    /// <summary>
+    /// Gets what the enabled alerts of the instrument wait for, one line for each, or an empty text for none.
+    /// </summary>
+    public string AlertDetails => AlertText.Details(_alerts, Asset.AssetClass);
+
+    /// <summary>
+    /// Gets the tooltip of the alert mark: that alerts are on, and what each of them waits for.
+    /// </summary>
+    public string AlertTip => _alerts.Count == 0 ? Loc.Get("Row_AlertTip") : $"{Loc.Get("Row_AlertTip")}\n{AlertDetails}";
+
+    /// <summary>
+    /// Takes over the enabled alerts of the instrument. Nothing is announced when they are as they were.
+    /// </summary>
+    /// <param name="alerts">
+    /// The enabled alerts of the instrument.
+    /// </param>
+    public void SetAlerts(IReadOnlyList<AlertRule> alerts)
+    {
+        if (_alerts.Count == alerts.Count && _alerts.Zip(alerts).All(pair => pair.First.SameAs(pair.Second)))
+        {
+            return;
+        }
+
+        _alerts = [.. alerts.Select(a => a.Clone())];
+        OnPropertyChanged(nameof(AlertDetails));
+        OnPropertyChanged(nameof(AlertTip));
+        RefreshTooltip();
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the tray list shows the instrument.
     /// </summary>
     [ObservableProperty]
@@ -634,22 +669,6 @@ public sealed partial class AssetRowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Rebuilds the tooltip, which names the alert levels of a small card.
-    /// </summary>
-    /// <param name="value">
-    /// The new level.
-    /// </param>
-    partial void OnAlertAboveChanged(decimal? value) => RefreshTooltip();
-
-    /// <summary>
-    /// Rebuilds the tooltip, which names the alert levels of a small card.
-    /// </summary>
-    /// <param name="value">
-    /// The new level.
-    /// </param>
-    partial void OnAlertBelowChanged(decimal? value) => RefreshTooltip();
-
-    /// <summary>
     /// Announces that the tooltip changed, after something it tells changed.
     /// </summary>
     private void RefreshTooltip()
@@ -918,6 +937,7 @@ public sealed partial class AssetRowViewModel : ObservableObject
         OnPropertyChanged(nameof(ProviderName));
         ClassLabel = LabelOf(Asset.AssetClass);
         OnPropertyChanged(nameof(ClassLabel));
+        OnPropertyChanged(nameof(AlertTip));
         RaiseChartTextsChanged();
         if (_lastSnapshot is { } snapshot)
         {
@@ -1118,17 +1138,9 @@ public sealed partial class AssetRowViewModel : ObservableObject
             lines.Add(snapshot.HealthDetail);
         }
 
-        if (small)
+        if (small && AlertDetails.Length > 0)
         {
-            if (AlertAbove is { } above)
-            {
-                lines.Add(Loc.Get("Row_AlertAbove", PriceFormatter.FormatPrice(above, Asset.AssetClass)));
-            }
-
-            if (AlertBelow is { } below)
-            {
-                lines.Add(Loc.Get("Row_AlertBelow", PriceFormatter.FormatPrice(below, Asset.AssetClass)));
-            }
+            lines.Add(AlertDetails);
         }
 
         return string.Join('\n', lines);

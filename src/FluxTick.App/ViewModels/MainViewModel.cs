@@ -816,7 +816,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// The alert that fired.
     /// </param>
     public void FlashAlert(AlertTriggeredEventArgs alert) =>
-        Rows.FirstOrDefault(r => r.Asset.Id == alert.Asset.Id)?.FlashAlert(alert.Rule.Condition == AlertCondition.PriceAbove);
+        Rows.FirstOrDefault(r => r.Asset.Id == alert.Asset.Id)?.FlashAlert(alert.Rule.Condition.IsUpward());
 
     /// <summary>
     /// Requests the holding window of an instrument, which is shown by the view.
@@ -1710,6 +1710,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
             row.GroupId = entries[i].GroupId;
             var alerts = _settings.Current.Alerts.Where(a => a.Enabled && a.AssetId == asset.Id).ToList();
             row.HasAlert = alerts.Count > 0;
+            row.SetAlerts(alerts);
             row.AlertAbove = alerts.Find(a => a.Condition == AlertCondition.PriceAbove)?.Threshold;
             row.AlertBelow = alerts.Find(a => a.Condition == AlertCondition.PriceBelow)?.Threshold;
             var entry = entries[i];

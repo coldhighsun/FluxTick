@@ -87,6 +87,49 @@ public class RowAndOptionTests
     }
 
     /// <summary>
+    /// Verifies the tooltip of the alert mark lists what each enabled alert waits for, and is short without any.
+    /// </summary>
+    [Fact]
+    public void AlertTip_ListsEachAlert()
+    {
+        var row = new AssetRowViewModel(Btc, "Crypto Co");
+        var bare = row.AlertTip;
+
+        row.SetAlerts(
+        [
+            new AlertRule { Condition = AlertCondition.ChangePercentBelow, Threshold = 5m },
+            new AlertRule { Condition = AlertCondition.PriceAbove, Threshold = 150m },
+        ]);
+
+        bare.Should().NotContain("150");
+        row.AlertTip.Should().StartWith(bare).And.Contain("150.00").And.Contain("5%");
+        row.AlertTip.IndexOf("150.00", StringComparison.Ordinal).Should().BeLessThan(row.AlertTip.IndexOf("5%", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Verifies the alert tooltip is announced when the alerts change or the language changes, and not when the same
+    /// alerts are set again.
+    /// </summary>
+    [Fact]
+    public void AlertTip_IsAnnouncedOnlyWhenSomethingChanges()
+    {
+        var row = new AssetRowViewModel(Btc, "Crypto Co");
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        var rules = new[] { new AlertRule { Condition = AlertCondition.PriceAbove, Threshold = 150m } };
+
+        row.SetAlerts(rules);
+        raised.Should().Contain(nameof(AssetRowViewModel.AlertTip));
+
+        raised.Clear();
+        row.SetAlerts([rules[0].Clone()]);
+        raised.Should().BeEmpty();
+
+        row.RefreshLanguage("Crypto Co");
+        raised.Should().Contain(nameof(AssetRowViewModel.AlertTip));
+    }
+
+    /// <summary>
     /// Verifies a small card moves what it does not show into the tooltip, and the usual card keeps its short tooltip.
     /// </summary>
     [Fact]
@@ -99,6 +142,11 @@ public class RowAndOptionTests
         row.CardSize = CardSize.Small;
         row.AlertAbove = 150m;
         row.AlertBelow = 90m;
+        row.SetAlerts(
+        [
+            new AlertRule { Condition = AlertCondition.PriceAbove, Threshold = 150m },
+            new AlertRule { Condition = AlertCondition.PriceBelow, Threshold = 90m },
+        ]);
 
         usual.Should().NotContain("BTC").And.NotContain("150");
         row.Tooltip.Should().Contain("Bitcoin (BTC)")

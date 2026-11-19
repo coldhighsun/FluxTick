@@ -9,8 +9,8 @@ namespace FluxTick.Core.Application;
 public static class AlertEvaluator
 {
     /// <summary>
-    /// Determines whether a quote satisfies the condition of a rule. The bounds are exclusive: a price equal to the
-    /// threshold is neither above nor below it.
+    /// Determines whether a quote satisfies the condition of a rule. The bounds are inclusive: a price, or a change,
+    /// that equals the threshold satisfies both the condition above and the one below.
     /// </summary>
     /// <param name="rule">
     /// The rule.
@@ -23,8 +23,10 @@ public static class AlertEvaluator
     /// </returns>
     public static bool IsSatisfied(AlertRule rule, Quote quote) => rule.Condition switch
     {
-        AlertCondition.PriceAbove => quote.Price > rule.Threshold,
-        AlertCondition.PriceBelow => quote.Price < rule.Threshold,
+        AlertCondition.PriceAbove => quote.Price >= rule.Threshold,
+        AlertCondition.PriceBelow => quote.Price <= rule.Threshold,
+        AlertCondition.ChangePercentAbove => quote.ChangePercent >= rule.Threshold,
+        AlertCondition.ChangePercentBelow => quote.ChangePercent <= -rule.Threshold,
         _ => false,
     };
 
