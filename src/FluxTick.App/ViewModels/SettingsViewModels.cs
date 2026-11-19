@@ -1142,6 +1142,9 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <param name="fontFamilies">
     /// Lists the names of the installed font families; by default the system is asked.
     /// </param>
+    /// <param name="filePicker">
+    /// Asks the user for the files of the export and the import; by default the dialogs of the platform are used.
+    /// </param>
     public SettingsViewModel(
         SettingsManager settings,
         ProviderRegistry registry,
@@ -1154,7 +1157,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         Func<string, bool>? openFolder = null,
         Func<string, bool>? openHomepage = null,
         ILogger<SettingsViewModel>? logger = null,
-        Func<IReadOnlyList<string>>? fontFamilies = null)
+        Func<IReadOnlyList<string>>? fontFamilies = null,
+        IFilePicker? filePicker = null)
         : base(ui)
     {
         _settings = settings;
@@ -1169,6 +1173,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         Groups = new GroupsSettingsViewModel(settings);
         TrayAssets = new TrayAssetsSettingsViewModel(settings, registry);
         Alerts = new AlertsViewModel(settings, registry, ui);
+        Transfer = new DataTransferViewModel(settings, registry, ui, filePicker ?? new AvaloniaFilePicker(), timeProvider, logger);
         Providers = new ObservableCollection<ProviderSettingsViewModel>(
             registry.Descriptors.Select(d => new ProviderSettingsViewModel(d, p => _ = SaveProviderAsync(p), ui.PostBackground)));
         foreach (var provider in Providers)
@@ -1206,6 +1211,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
         }
 
         Alerts.Dispose();
+        Transfer.Dispose();
     }
 
     /// <summary>
@@ -1360,6 +1366,11 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// Gets the price alerts of all instruments.
     /// </summary>
     public AlertsViewModel Alerts { get; }
+
+    /// <summary>
+    /// Gets the export and import of the watchlist, the groups, the holdings and the alerts.
+    /// </summary>
+    public DataTransferViewModel Transfer { get; }
 
     /// <summary>
     /// Gets the selectable watchlist layouts.
