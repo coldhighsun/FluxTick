@@ -351,6 +351,15 @@
             <Border Classes="card">
               <TextBlock Text="{loc:T Settings_AlertsHelp}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
             </Border>
+            <Border Classes="card" IsVisible="{Binding IsAlertSoundSupported}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{loc:T Settings_AlertSound}" />
+                  <TextBlock Text="{loc:T Settings_AlertSoundHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlertSound}" />
+              </Grid>
+            </Border>
             <views:AlertRuleListView DataContext="{Binding Alerts}" />
           </StackPanel>
         </ScrollViewer>

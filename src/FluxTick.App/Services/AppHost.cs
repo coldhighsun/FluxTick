@@ -178,6 +178,19 @@ public static class AppHost
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
 
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<IAlertSoundPlayer, WindowsAlertSoundPlayer>();
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            services.AddSingleton<IAlertSoundPlayer>(sp => new MacAlertSoundPlayer(sp.GetRequiredService<ILogger<MacAlertSoundPlayer>>()));
+        }
+        else
+        {
+            services.AddSingleton<IAlertSoundPlayer, NullAlertSoundPlayer>();
+        }
+
         // The entry lives in the machine-wide registry, which the isolated demo mode must not touch.
         if (OperatingSystem.IsWindows() && !demo)
         {

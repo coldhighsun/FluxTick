@@ -448,6 +448,12 @@ public sealed class GeneralSettings
     public bool ShowDockIcon { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether an alert that fires plays a sound along with its notification. Platforms
+    /// without a sound to play ignore it.
+    /// </summary>
+    public bool AlertSound { get; set; }
+
+    /// <summary>
     /// Gets or sets the instruments the tray list shows, as keys made by <see cref="TrayAssetSelection.Key(string, string)"/>
     /// in the order they are listed. It is empty until the user adds instruments.
     /// </summary>

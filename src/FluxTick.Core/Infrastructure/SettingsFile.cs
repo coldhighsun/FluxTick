@@ -519,6 +519,11 @@ internal sealed class GeneralFile
     public bool? ShowDockIcon { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether an alert plays a sound.
+    /// </summary>
+    public bool? AlertSound { get; set; }
+
+    /// <summary>
     /// Gets or sets the instruments the tray list shows.
     /// </summary>
     public List<string?>? TrayAssets { get; set; }
@@ -550,6 +555,7 @@ internal sealed class GeneralFile
             StartMinimized = StartMinimized ?? defaults.StartMinimized,
             CloseToTray = CloseToTray ?? defaults.CloseToTray,
             ShowDockIcon = ShowDockIcon ?? defaults.ShowDockIcon,
+            AlertSound = AlertSound ?? defaults.AlertSound,
             TrayAssets = SettingsFile.NotNull(TrayAssets, ref repaired),
             BaseCurrency = BaseCurrency,
             BossKey = BossKey ?? defaults.BossKey,

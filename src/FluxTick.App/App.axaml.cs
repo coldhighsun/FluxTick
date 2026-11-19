@@ -376,13 +376,18 @@ public sealed partial class App : Application
             // After the notifications exist, so that a key another program holds is reported from the first start.
             ApplyBossKey();
             var alerts = _services.GetRequiredService<AlertService>();
+            var alertSound = new AlertSoundGate(_settings, _services.GetRequiredService<IAlertSoundPlayer>());
             alerts.AlertTriggered += (_, e) => Dispatcher.UIThread.Post(() =>
             {
                 viewModel.FlashAlert(e);
 
                 // A notification would give away that the app is running, and the boss key is meant to hide just that; it
-                // shows when the windows are back.
-                _bossKey.RunOrDefer(e.Rule.Id, () => toasts.Show(e));
+                // shows when the windows are back. So does the sound.
+                _bossKey.RunOrDefer(e.Rule.Id, () =>
+                {
+                    toasts.Show(e);
+                    alertSound.OnAlertShown();
+                });
             });
             alerts.Start();
 

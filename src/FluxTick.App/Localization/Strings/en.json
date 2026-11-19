@@ -177,6 +177,8 @@
   "Settings_CardSizeHint": "Small: name and price only; large: adds range and change",
   "Settings_CloseToTray": "Close button hides to tray",
   "Settings_CloseToTrayHint": "When off, closing the window exits the app",
+  "Settings_AlertSound": "Play a sound when an alert fires",
+  "Settings_AlertSoundHint": "Plays a system sound along with the notification",
   "Settings_ShowDockIcon": "Show icon in the Dock",
   "Settings_ShowDockIconHint": "When off, the icon in the menu bar is the only one",
   "Settings_TabAlerts": "Alerts",

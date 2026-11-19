@@ -228,6 +228,8 @@
   "Settings_CardSizeHint": "小：僅名稱和價格；大：增加區間和漲跌額",
   "Settings_CloseToTray": "關閉按鈕隱藏到系統匣",
   "Settings_CloseToTrayHint": "關閉後，點擊關閉按鈕將結束程式",
+  "Settings_AlertSound": "警示觸發時播放提示音",
+  "Settings_AlertSoundHint": "通知彈出時同時播放一次系統提示音",
   "Settings_ShowDockIcon": "在 Dock 中顯示圖示",
   "Settings_ShowDockIconHint": "關閉後，只在頂部選單列顯示圖示",
   "Settings_TabAlerts": "警示",

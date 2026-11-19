@@ -1513,6 +1513,17 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public bool IsDockSupported => OperatingSystem.IsMacOS();
 
     /// <summary>
+    /// Gets or sets a value indicating whether an alert that fires plays a sound.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool AlertSound { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this platform can play the sound of an alert.
+    /// </summary>
+    public bool IsAlertSoundSupported => AlertSoundAvailability.IsSupported;
+
+    /// <summary>
     /// Gets a value indicating whether this platform has the boss key.
     /// </summary>
     public bool IsBossKeySupported => OperatingSystem.IsWindows();
@@ -1787,6 +1798,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             StartMinimized = current.General.StartMinimized;
             CloseToTray = current.General.CloseToTray;
             ShowDockIcon = current.General.ShowDockIcon;
+            AlertSound = current.General.AlertSound;
             BossKey = _settings.Current.General.BossKey;
             IsRecordingBossKey = false;
             BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.IsChinese(Loc.Instance.Language));
@@ -1936,6 +1948,14 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// The new value.
     /// </param>
     partial void OnShowDockIconChanged(bool value) => SaveSetting(s => s.General.ShowDockIcon = value);
+
+    /// <summary>
+    /// Saves whether an alert plays a sound.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnAlertSoundChanged(bool value) => SaveSetting(s => s.General.AlertSound = value);
 
     /// <summary>
     /// Saves the close-to-tray flag.
