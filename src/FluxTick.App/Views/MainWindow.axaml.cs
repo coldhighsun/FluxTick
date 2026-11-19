@@ -75,6 +75,16 @@ public sealed partial class MainWindow : Window
     private bool _rowCountCheckPending;
 
     /// <summary>
+    /// The number of sections the cards had when the window last looked, to tell when one went away.
+    /// </summary>
+    private int _sectionCount;
+
+    /// <summary>
+    /// Whether a look at the number of sections is already waiting to run.
+    /// </summary>
+    private bool _sectionCountCheckPending;
+
+    /// <summary>
     /// Steps the width animation.
     /// </summary>
     private readonly StepAnimation _widthAnimation = new();
@@ -384,13 +394,16 @@ public sealed partial class MainWindow : Window
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Rows.CollectionChanged -= OnRowsChanged;
+            _observed.Sections.CollectionChanged -= OnSectionsChanged;
         }
 
         _observed = DataContext as MainViewModel;
         _rowIds = _observed is null ? [] : AssetIdsOf(_observed);
+        _sectionCount = _observed?.Sections.Count ?? 0;
         if (_observed is not null)
         {
             _observed.Rows.CollectionChanged += OnRowsChanged;
+            _observed.Sections.CollectionChanged += OnSectionsChanged;
             _observed.SettingsRequested += OnSettingsRequested;
             _observed.AddAssetRequested += OnAddAssetRequested;
             _observed.AlertsRequested += OnAlertsRequested;
@@ -817,6 +830,48 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Looks at the number of sections once they are rebuilt, so that a burst of changes is looked at once.
+    /// </summary>
+    /// <param name="sender">
+    /// The collection of sections.
+    /// </param>
+    /// <param name="e">
+    /// The change data.
+    /// </param>
+    private void OnSectionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_sectionCountCheckPending)
+        {
+            return;
+        }
+
+        _sectionCountCheckPending = true;
+        Dispatcher.UIThread.Post(OnSectionCountChanged, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Takes the space of a section that went away, such as an empty group that was deleted, out of the card window: the
+    /// header of the section and the row its cards took. The window only gets smaller here; the cards, and the
+    /// assets that were added, are looked after elsewhere.
+    /// </summary>
+    private void OnSectionCountChanged()
+    {
+        _sectionCountCheckPending = false;
+        if (_observed is not { } viewModel)
+        {
+            return;
+        }
+
+        var count = viewModel.Sections.Count;
+        var removed = count < _sectionCount;
+        _sectionCount = count;
+        if (_rowsSettled && removed && IsLoaded)
+        {
+            NarrowCardsToContent();
+        }
+    }
+
+    /// <summary>
     /// Gets the ids of the assets the watchlist shows.
     /// </summary>
     /// <param name="viewModel">
@@ -881,6 +936,7 @@ public sealed partial class MainWindow : Window
 
             // The saved watchlist is in by now; assets that come after this are the user's doing.
             _rowIds = _observed is null ? [] : AssetIdsOf(_observed);
+            _sectionCount = _observed?.Sections.Count ?? 0;
             _rowsSettled = true;
             if (ready)
             {

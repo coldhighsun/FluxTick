@@ -72,6 +72,21 @@ public class WindowFitRulesTests
         WindowFitRules.NarrowedCardsHeight([new(12, false)], false, CardSize.Medium, Chrome, 932, 481).Should().BeNull();
 
     /// <summary>
+    /// Verifies a grouped window needs less height once an empty group is gone, as the header of the group and the row its
+    /// empty section takes go with it. This is what lowers the window after a group is deleted.
+    /// </summary>
+    [Fact]
+    public void NarrowedCardsHeight_EmptyGroupRemoved_NeedsLessHeight()
+    {
+        var withGroup = WindowFitRules.NarrowedCardsHeight([new(4, false), new(0, false), new(4, false)], true, CardSize.Medium, Chrome, 932, 2000);
+        var without = WindowFitRules.NarrowedCardsHeight([new(4, false), new(4, false)], true, CardSize.Medium, Chrome, 932, 2000);
+
+        withGroup.Should().NotBeNull();
+        without.Should().NotBeNull();
+        without!.Value.Should().BeLessThan(withGroup!.Value);
+    }
+
+    /// <summary>
     /// Verifies the height never drops below the smallest height of the card layout.
     /// </summary>
     [Fact]
