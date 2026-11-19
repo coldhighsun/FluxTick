@@ -602,6 +602,28 @@
                            IsVisible="{Binding FolderOpenFailed}" />
               </StackPanel>
             </Border>
+            <!-- Backup and transfer: a file of the watchlist, the groups, the holdings and the alerts, which is merged in after a preview. -->
+            <TextBlock Text="{loc:T Transfer_Title}" Classes="section" Margin="2,6,0,6" />
+            <Border Classes="card" DataContext="{Binding Transfer}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{loc:T Transfer_Hint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Classes="outline" Content="{loc:T Transfer_ExportJson}" Command="{Binding ExportJsonCommand}" />
+                  <Button Classes="outline" Content="{loc:T Transfer_ExportCsv}" Command="{Binding ExportCsvCommand}" />
+                  <Button Classes="outline" Content="{loc:T Transfer_Import}" Command="{Binding ImportCommand}" />
+                </StackPanel>
+                <StackPanel Spacing="6" IsVisible="{Binding HasPreview}">
+                  <TextBlock Text="{loc:T Transfer_PreviewTitle}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding PreviewText}" FontSize="11" TextWrapping="Wrap" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="primary" Content="{loc:T Transfer_Confirm}" Command="{Binding ConfirmImportCommand}" />
+                    <Button Classes="outline" Content="{loc:T Transfer_Cancel}" Command="{Binding CancelImportCommand}" />
+                  </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding HasMessage}"
+                           Classes.warn="{Binding MessageIsError}" Classes.muted="{Binding !MessageIsError}" />
+              </StackPanel>
+            </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>

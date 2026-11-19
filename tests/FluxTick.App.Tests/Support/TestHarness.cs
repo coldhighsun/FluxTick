@@ -250,7 +250,10 @@ public sealed class Harness : IAsyncDisposable
     /// <param name="openHomepage">
     /// Opens the project home page and tells whether that worked; defaults to a success, so no test starts the real browser.
     /// </param>
-    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null, Func<bool>? trayProbe = null, Func<string, bool>? openFolder = null, IMarketDataProviderFactory? extraFactory = null, Func<string, bool>? openHomepage = null)
+    /// <param name="filePicker">
+    /// The picker of the files of the export and the import; defaults to a fake that is cancelled, so no test shows a real dialog.
+    /// </param>
+    public Harness(AppSettings? settings = null, IAutoStartService? autoStart = null, Func<bool>? trayProbe = null, Func<string, bool>? openFolder = null, IMarketDataProviderFactory? extraFactory = null, Func<string, bool>? openHomepage = null, FakeFilePicker? filePicker = null)
     {
         CryptoFactory = new FakeFactory(Crypto, [AssetClass.Crypto]);
         StocksFactory = new FakeFactory(Stocks, [AssetClass.Equity, AssetClass.Index]);
@@ -264,7 +267,8 @@ public sealed class Harness : IAsyncDisposable
 
         var ui = new InlineDispatcher();
         AddAsset = new AddAssetViewModel(Settings, Market, Router, ui, Time, NullLogger<AddAssetViewModel>.Instance);
-        SettingsPage = new SettingsViewModel(Settings, registry, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true), openFolder: openFolder ?? (_ => true), openHomepage: openHomepage ?? (_ => true), fontFamilies: () => ["Arial", "Consolas", "Segoe UI"]);
+        FilePicker = filePicker ?? new FakeFilePicker();
+        SettingsPage = new SettingsViewModel(Settings, registry, Market, ui, Time, autoStart: autoStart, trayProbe: trayProbe ?? (() => true), openFolder: openFolder ?? (_ => true), openHomepage: openHomepage ?? (_ => true), fontFamilies: () => ["Arial", "Consolas", "Segoe UI"], filePicker: FilePicker);
         Alerts = new AlertsViewModel(Settings, registry, ui);
         Holding = new HoldingViewModel(Settings, ui);
         Rates = new ExchangeRateService(new FixedRates(), NullLogger<ExchangeRateService>.Instance, Time, new ExchangeRateOptions());
@@ -285,6 +289,11 @@ public sealed class Harness : IAsyncDisposable
     /// Gets the exchange rate service, which fetches fixed rates when told to.
     /// </summary>
     public ExchangeRateService Rates { get; }
+
+    /// <summary>
+    /// Gets the fake that stands in for the file dialogs.
+    /// </summary>
+    public FakeFilePicker FilePicker { get; }
 
     /// <summary>
     /// Gets the clock.

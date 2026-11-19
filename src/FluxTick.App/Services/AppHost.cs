@@ -177,6 +177,7 @@ public static class AppHost
         }
 
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
+        services.AddSingleton<IFilePicker, AvaloniaFilePicker>();
 
         if (OperatingSystem.IsWindows())
         {
