@@ -24,7 +24,7 @@ public class AlertEvaluatorTests
         new(new AssetId("crypto", "BTC"), price, reference, DateTimeOffset.UnixEpoch);
 
     /// <summary>
-    /// Verifies the price conditions: above and below are strict, so a price equal to the threshold is neither.
+    /// Verifies the price conditions: above and below include the threshold.
     /// </summary>
     /// <param name="condition">
     /// The condition.
@@ -37,16 +37,84 @@ public class AlertEvaluatorTests
     /// </param>
     [Theory]
     [InlineData(AlertCondition.PriceAbove, 99.99, false)]
-    [InlineData(AlertCondition.PriceAbove, 100, false)]
+    [InlineData(AlertCondition.PriceAbove, 100, true)]
     [InlineData(AlertCondition.PriceAbove, 100.01, true)]
     [InlineData(AlertCondition.PriceBelow, 100.01, false)]
-    [InlineData(AlertCondition.PriceBelow, 100, false)]
+    [InlineData(AlertCondition.PriceBelow, 100, true)]
     [InlineData(AlertCondition.PriceBelow, 99.99, true)]
-    public void IsSatisfied_PriceCondition_IsStrict(AlertCondition condition, double price, bool expected)
+    public void IsSatisfied_PriceCondition_IncludesTheBound(AlertCondition condition, double price, bool expected)
     {
         var rule = new AlertRule { Condition = condition, Threshold = 100 };
 
         AlertEvaluator.IsSatisfied(rule, QuoteOf((decimal)price)).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the change conditions: the change since the reference price is compared with the threshold, bounds included.
+    /// </summary>
+    /// <param name="condition">
+    /// The condition.
+    /// </param>
+    /// <param name="price">
+    /// The price of the quote, against a reference of 100.
+    /// </param>
+    /// <param name="expected">
+    /// Whether the condition holds.
+    /// </param>
+    [Theory]
+    [InlineData(AlertCondition.ChangePercentAbove, 104.99, false)]
+    [InlineData(AlertCondition.ChangePercentAbove, 105, true)]
+    [InlineData(AlertCondition.ChangePercentAbove, 105.01, true)]
+    [InlineData(AlertCondition.ChangePercentAbove, 80, false)]
+    [InlineData(AlertCondition.ChangePercentBelow, 95.01, false)]
+    [InlineData(AlertCondition.ChangePercentBelow, 95, true)]
+    [InlineData(AlertCondition.ChangePercentBelow, 94.99, true)]
+    [InlineData(AlertCondition.ChangePercentBelow, 120, false)]
+    public void IsSatisfied_ChangeCondition_ComparesThePercentChange(AlertCondition condition, double price, bool expected)
+    {
+        var rule = new AlertRule { Condition = condition, Threshold = 5 };
+
+        AlertEvaluator.IsSatisfied(rule, QuoteOf((decimal)price, reference: 100)).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies a quote without a reference price has no change, so a change condition does not hold.
+    /// </summary>
+    /// <param name="condition">
+    /// The condition.
+    /// </param>
+    [Theory]
+    [InlineData(AlertCondition.ChangePercentAbove)]
+    [InlineData(AlertCondition.ChangePercentBelow)]
+    public void IsSatisfied_ChangeConditionWithoutReference_IsFalse(AlertCondition condition)
+    {
+        var rule = new AlertRule { Condition = condition, Threshold = 1 };
+
+        AlertEvaluator.IsSatisfied(rule, QuoteOf(1000, reference: null)).Should().BeFalse();
+        AlertEvaluator.IsSatisfied(rule, QuoteOf(1000, reference: 0)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies which conditions have a percentage as threshold and which watch for a rise.
+    /// </summary>
+    /// <param name="condition">
+    /// The condition.
+    /// </param>
+    /// <param name="percent">
+    /// Whether the threshold is a percentage.
+    /// </param>
+    /// <param name="upward">
+    /// Whether the condition watches for a rise.
+    /// </param>
+    [Theory]
+    [InlineData(AlertCondition.PriceAbove, false, true)]
+    [InlineData(AlertCondition.PriceBelow, false, false)]
+    [InlineData(AlertCondition.ChangePercentAbove, true, true)]
+    [InlineData(AlertCondition.ChangePercentBelow, true, false)]
+    public void ConditionExtensions_DescribeTheCondition(AlertCondition condition, bool percent, bool upward)
+    {
+        condition.IsPercent().Should().Be(percent);
+        condition.IsUpward().Should().Be(upward);
     }
 
     /// <summary>

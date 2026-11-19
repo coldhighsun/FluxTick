@@ -599,7 +599,7 @@ public sealed class AppSettings
 
         // A rule is dropped when its instrument left the watchlist, when its threshold cannot be used, when its id
         // repeats an earlier one, or when an earlier rule already has the same condition on the same instrument: an
-        // instrument has at most one alert above and one below.
+        // instrument has at most one alert for each condition.
         var ids = new HashSet<string>();
         var conditions = new HashSet<(string, string, AlertCondition)>();
         changed |= Alerts.RemoveAll(rule =>

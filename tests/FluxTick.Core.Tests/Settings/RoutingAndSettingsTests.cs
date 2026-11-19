@@ -1211,6 +1211,28 @@ public sealed class RoutingAndSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies an instrument can have a price alert and a change alert at once, and that a repeated change condition
+    /// is dropped like a repeated price condition.
+    /// </summary>
+    [Fact]
+    public void Normalize_ChangeAndPriceConditions_AreKeptApart()
+    {
+        var settings = new AppSettings();
+        settings.Watchlist.Add(new WatchlistEntry { ProviderId = "p", Symbol = "X" });
+        settings.Alerts.AddRange(
+        [
+            new AlertRule { Id = "1", ProviderId = "p", Symbol = "X", Condition = AlertCondition.PriceAbove, Threshold = 10 },
+            new AlertRule { Id = "2", ProviderId = "p", Symbol = "X", Condition = AlertCondition.ChangePercentAbove, Threshold = 5 },
+            new AlertRule { Id = "3", ProviderId = "p", Symbol = "X", Condition = AlertCondition.ChangePercentAbove, Threshold = 8 },
+            new AlertRule { Id = "4", ProviderId = "p", Symbol = "X", Condition = AlertCondition.ChangePercentBelow, Threshold = 5 },
+        ]);
+
+        settings.Normalize();
+
+        settings.Alerts.Select(a => a.Id).Should().Equal("1", "2", "4");
+    }
+
+    /// <summary>
     /// Verifies the cards are of the usual size by default, also for a settings file from before there was a size, and a
     /// chosen size survives a copy of the settings.
     /// </summary>

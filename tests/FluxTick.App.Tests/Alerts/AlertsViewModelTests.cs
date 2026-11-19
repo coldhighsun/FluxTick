@@ -180,7 +180,8 @@ public class AlertsViewModelTests
         h.Alerts.SelectedCondition.Should().Be(AlertCondition.PriceBelow);
         h.Alerts.HasMessage.Should().BeFalse();
 
-        await h.Settings.UpdateAsync(s => s.Alerts.Add(new AlertRule { ProviderId = Btc.ProviderId, Symbol = Btc.Symbol, Condition = AlertCondition.PriceBelow, Threshold = 50 }));
+        await h.Settings.UpdateAsync(s => s.Alerts.AddRange(
+            Enum.GetValues<AlertCondition>().Where(c => c != AlertCondition.PriceAbove).Select(c => new AlertRule { ProviderId = Btc.ProviderId, Symbol = Btc.Symbol, Condition = c, Threshold = 50 })));
         h.Alerts.Begin(Btc);
 
         h.Alerts.HasMessage.Should().BeTrue();
@@ -463,6 +464,43 @@ public class AlertsViewModelTests
         var rule = new AlertRule { Condition = AlertCondition.PriceBelow, Threshold = 1234.5m };
 
         AlertText.Summary(rule).Should().Contain("1234.5").And.Contain("below");
+    }
+
+    /// <summary>
+    /// Verifies the text of a rule on the change shows the threshold as a percentage.
+    /// </summary>
+    [Fact]
+    public void Summary_ChangeCondition_ShowsAPercentage()
+    {
+        var rule = new AlertRule { Condition = AlertCondition.ChangePercentAbove, Threshold = 5m };
+
+        AlertText.Summary(rule).Should().Contain("5%").And.NotContain("(%)");
+    }
+
+    /// <summary>
+    /// Verifies the price that fills the form is taken out for a condition on the change, put back for a price, and
+    /// that a percentage equal to it can be added.
+    /// </summary>
+    [Fact]
+    public async Task SelectedCondition_Change_TakesTheSuggestedPriceOutAndPutsItBack()
+    {
+        await using var h = new Harness(Harness.WatchlistOf(Btc));
+        h.Alerts.Begin(Btc, currentPrice: 5m);
+        h.Alerts.ThresholdText.Should().Be("5");
+
+        h.Alerts.SelectedCondition = AlertCondition.ChangePercentAbove;
+        h.Alerts.ThresholdText.Should().BeEmpty();
+
+        h.Alerts.SelectedCondition = AlertCondition.PriceAbove;
+        h.Alerts.ThresholdText.Should().Be("5");
+
+        h.Alerts.SelectedCondition = AlertCondition.ChangePercentAbove;
+        h.Alerts.ThresholdText = "5";
+        await h.Alerts.AddCommand.ExecuteAsync(null);
+
+        var rule = h.Store.Stored!.Alerts.Should().ContainSingle().Subject;
+        rule.Condition.Should().Be(AlertCondition.ChangePercentAbove);
+        rule.Threshold.Should().Be(5m);
     }
 
     /// <summary>

@@ -20,13 +20,18 @@
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0" VerticalAlignment="Center">
-            <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
-                  StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center"
-                  IsVisible="{Binding HasAlert}" ToolTip.Tip="{loc:T Row_AlertTip}" />
+            <!-- A transparent border around the bell gives the tooltip a larger area to hover than the thin lines of the icon, without moving anything. -->
+            <Border Background="Transparent" Padding="4" Margin="-4" VerticalAlignment="Center"
+                    IsVisible="{Binding HasAlert}" ToolTip.Tip="{Binding AlertTip}">
+              <Path Data="M5 1.5a2.5 2.5 0 0 0-2.5 2.5v2L1.5 8h7L7.5 6V4A2.5 2.5 0 0 0 5 1.5zM4 9.5a1 1 0 0 0 2 0" Stroke="{DynamicResource MutedBrush}"
+                    StrokeThickness="1" StrokeJoin="Round" Width="10" Height="11" Stretch="None" VerticalAlignment="Center" />
+            </Border>
             <!-- The instrument is on the list the tray popup shows. -->
-            <Path Data="M1.5 1.5h7v7h-7zM3 4h4M3 6h3" Stroke="{DynamicResource MutedBrush}"
-                  StrokeThickness="1" StrokeJoin="Round" Width="10" Height="10" Stretch="None" VerticalAlignment="Center"
-                  IsVisible="{Binding ShowTrayMarker}" ToolTip.Tip="{loc:T Row_TrayTip}" />
+            <Border Background="Transparent" Padding="4" Margin="-4" VerticalAlignment="Center"
+                    IsVisible="{Binding ShowTrayMarker}" ToolTip.Tip="{loc:T Row_TrayTip}">
+              <Path Data="M1.5 1.5h7v7h-7zM3 4h4M3 6h3" Stroke="{DynamicResource MutedBrush}"
+                    StrokeThickness="1" StrokeJoin="Round" Width="10" Height="10" Stretch="None" VerticalAlignment="Center" />
+            </Border>
           </StackPanel>
         </Grid>
         <!-- The class is quiet text beside the symbol, not a chip: only the state of the market or of the data has a chip,

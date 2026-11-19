@@ -180,6 +180,24 @@ public sealed class AlertServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// Verifies a change rule fires when the change reaches the threshold, once while it stays there, and again after
+    /// it fell away.
+    /// </summary>
+    [Fact]
+    public async Task ChangePercentAbove_ReachingThreshold_FiresOnceAndRearms()
+    {
+        var provider = await StartAsync(AlertCondition.ChangePercentAbove, 5, repeat: true);
+
+        await EmitAsync(provider, 104, reference: 100);
+        await EmitAsync(provider, 105, reference: 100);
+        await EmitAsync(provider, 106, reference: 100);
+        await EmitAsync(provider, 101, reference: 100);
+        await EmitAsync(provider, 107, reference: 100);
+
+        _fired.Select(f => f.Quote.Price).Should().Equal(105, 107);
+    }
+
+    /// <summary>
     /// Verifies a snapshot that was built before one already evaluated, and is raised after it because snapshots are
     /// raised on several threads, does not take the condition back, so the next price does not fire the rule again.
     /// </summary>

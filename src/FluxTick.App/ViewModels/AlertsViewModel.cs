@@ -105,7 +105,7 @@ public sealed partial class AlertRuleItemViewModel : ObservableObject
     public string Error => Problem is { } key ? Loc.Get(key) : string.Empty;
 
     /// <summary>
-    /// Gets the key of the text that says what is wrong: the threshold is not a price, or the instrument already has
+    /// Gets the key of the text that says what is wrong: the threshold is not a number above 0, or the instrument already has
     /// another alert with this condition. It is <see langword="null"/> when nothing is wrong.
     /// </summary>
     private string? Problem =>
@@ -330,7 +330,25 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
     /// <param name="value">
     /// The new condition.
     /// </param>
-    partial void OnSelectedConditionChanged(AlertCondition value) => CheckForm();
+    partial void OnSelectedConditionChanged(AlertCondition value)
+    {
+        // The form is filled with the current price, which says nothing about a percentage: it is taken out for a
+        // condition on the change, and put back when the user returns to a price.
+        if (_suggestedThreshold is { } suggested)
+        {
+            var suggestedText = NumberText.Format(suggested);
+            if (value.IsPercent() && ThresholdText == suggestedText)
+            {
+                ThresholdText = string.Empty;
+            }
+            else if (!value.IsPercent() && ThresholdText.Length == 0)
+            {
+                ThresholdText = suggestedText;
+            }
+        }
+
+        CheckForm();
+    }
 
     /// <summary>
     /// Sets the message according to what is typed in the form: nothing while it is empty, a warning while it cannot be
@@ -343,7 +361,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
 
     /// <summary>
     /// Determines whether an instrument already has a saved alert with a condition, other than a given one. An instrument
-    /// has at most one alert above and one below.
+    /// has at most one alert for each condition.
     /// </summary>
     /// <param name="asset">
     /// The instrument.
@@ -476,7 +494,7 @@ public sealed partial class AlertsViewModel : LocalizedViewModel
         }
 
         // An alert at the price it was suggested from would fire on the next move; the user has to pick a price of their own.
-        if (threshold == _suggestedThreshold)
+        if (!SelectedCondition.IsPercent() && threshold == _suggestedThreshold)
         {
             Message = Loc.Get("Alert_ThresholdUnchanged");
             return;
