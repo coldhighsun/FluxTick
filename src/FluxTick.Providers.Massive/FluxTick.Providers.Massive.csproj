@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Massive (formerly Polygon.io) US stock data source for FluxTick (REST polling, free API key, end-of-day prices on the free plan).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluxTick.Abstractions\FluxTick.Abstractions.csproj" />
+    <ProjectReference Include="..\FluxTick.Providers.Common\FluxTick.Providers.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluxTick.Providers.Tests" />
+  </ItemGroup>
+
+</Project>

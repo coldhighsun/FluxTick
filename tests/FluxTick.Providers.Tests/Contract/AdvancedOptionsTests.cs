@@ -9,6 +9,7 @@ using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Finnhub;
 using FluxTick.Providers.Kraken;
+using FluxTick.Providers.Massive;
 using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Sina;
@@ -84,5 +85,6 @@ public class AdvancedOptionsTests
         new EulerpoolProviderFactory(),
         new TwelveDataProviderFactory(),
         new FinnhubProviderFactory(),
+        new MassiveProviderFactory(),
     ];
 }

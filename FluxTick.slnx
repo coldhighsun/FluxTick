@@ -35,6 +35,7 @@
     <Project Path="src/FluxTick.Providers.Finnhub/FluxTick.Providers.Finnhub.csproj" />
     <Project Path="src/FluxTick.Providers.KuCoin/FluxTick.Providers.KuCoin.csproj" />
     <Project Path="src/FluxTick.Providers.Kraken/FluxTick.Providers.Kraken.csproj" />
+    <Project Path="src/FluxTick.Providers.Massive/FluxTick.Providers.Massive.csproj" />
     <Project Path="src/FluxTick.Providers.Okx/FluxTick.Providers.Okx.csproj" />
     <Project Path="src/FluxTick.Providers.Simulated/FluxTick.Providers.Simulated.csproj" />
     <Project Path="src/FluxTick.Providers.Sina/FluxTick.Providers.Sina.csproj" />

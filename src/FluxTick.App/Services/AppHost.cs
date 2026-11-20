@@ -15,6 +15,7 @@ using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Finnhub;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.KuCoin;
+using FluxTick.Providers.Massive;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
 using FluxTick.Providers.Sina;
@@ -184,6 +185,7 @@ public static class AppHost
         services.AddMarketDataProvider<EulerpoolProviderFactory>();
         services.AddMarketDataProvider<TwelveDataProviderFactory>();
         services.AddMarketDataProvider<FinnhubProviderFactory>();
+        services.AddMarketDataProvider<MassiveProviderFactory>();
         // The simulated source only exists for the offline demo mode; a normal install does not list it.
         if (demo)
         {

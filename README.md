@@ -99,6 +99,7 @@ commodities side by side, from the data sources *you* choose.
 | **Eastmoney** | A-shares, Hong Kong and US stocks, ETFs, indices | Polling (default 5 s) | Unofficial API; may be delayed or change without notice. No API key. Symbols are `market.code` (`1.600519`, `116.00700`, `105.AAPL`); search by name, code or pinyin fills them in. Off by default. |
 | **Eulerpool** | Stocks and ETFs worldwide (tickers with an exchange suffix, e.g. `AAPL`, `SAP.DE`) | WebSocket stream | Needs an API key (free at eulerpool.com/developers; see [API keys](#api-keys)). A free key only gets delayed one-second prices; live trades need a paid plan. Search by name, ticker or ISIN. Off by default. |
 | **Finnhub** | US stocks and ETFs | WebSocket stream | Needs an API key (free at finnhub.io; see [API keys](#api-keys)). The free key allows 60 REST requests a minute and 50 streamed symbols; the stream delivers live US trades, REST gives the first price and the fallback. No chart history on the free plan, so the chart builds from live prices. Search by name or ticker. Off by default. |
+| **Massive** | US stocks and ETFs | Polling (default 5 min) | Needs an API key (free at massive.com; see [API keys](#api-keys)). Formerly Polygon.io. The free plan gives end-of-day prices only and 5 requests a minute (one per symbol, spaced 13 s apart), so prices show the last close, not live data; a paid plan gives delayed or live data. Sparkline history covers a month and longer. Search by name or ticker. Off by default. |
 | **Twelve Data** | Stocks, ETFs and indices worldwide | Polling (default 60 s) | Needs an API key (free at twelvedata.com; see [API keys](#api-keys)). The free key allows 8 credits a minute and 800 a day, one credit per symbol per refresh, so it suits a short watchlist; prices may be delayed. Search by name or ticker. Off by default. |
 | **OKX** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
 | **Coinbase** | Crypto spot pairs | WebSocket stream | Coinbase Exchange. No API key. Off by default. |
@@ -234,7 +235,7 @@ Options at their built-in default are not written to `settings.json`. Before eac
 
 ### API keys
 
-Some data sources need an API key (today only Eulerpool; such sources are off by default until you enter the key under Settings → Sources). Keys are entered in a masked field and handled like this:
+Some data sources need an API key (Eulerpool, Twelve Data, Finnhub and Massive; such sources are off by default until you enter the key under Settings → Sources). Keys are entered in a masked field and handled like this:
 
 - **Where they are kept:** in `settings.json`, in the same folder as the other settings, and in the copies of it in that folder (`settings.json.bak`, the file before the last save, and `settings.json.bad`, a damaged file set aside). They are not kept anywhere else, never written to the logs and never put in a URL; they are only sent to the data source they belong to.
 - **Windows:** keys are encrypted with the Windows Data Protection API (DPAPI) for your user account and written as `protected:v1:…`. Only the same user on the same machine can open them, and each one is bound to its own data source and option, so it cannot be moved to another. A key from an older version that was stored as plain text is encrypted the first time the app starts. Older copies of the settings file may still hold it as plain text: `settings.json.bak` until the next change of the settings replaces it, and `settings.json.bad` until you delete it.
@@ -264,6 +265,7 @@ src/FluxTick.Providers.Sina      Sina Finance WebSocket source
 src/FluxTick.Providers.Eastmoney Eastmoney polling source
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket source (API key)
 src/FluxTick.Providers.Finnhub   Finnhub WebSocket source (API key)
+src/FluxTick.Providers.Massive   Massive polling source (API key)
 src/FluxTick.Providers.TwelveData Twelve Data polling source (API key)
 src/FluxTick.Providers.Simulated Deterministic demo source
 src/FluxTick.App                 Avalonia desktop app (FluxTick.exe), composition root
