@@ -37,6 +37,15 @@ public sealed class BitgetProvider : CryptoExchangeProvider
     {
     }
 
+    /// <summary>
+    /// The quote currencies of the pairs Bitget lists, longest first, as its symbols have no separator (<c>BTCUSDT</c>).
+    /// </summary>
+    private static readonly string[] QuoteCurrencies = ["USDT", "USDC", "USDE", "EUR", "BTC", "ETH", "BRL"];
+
+    /// <inheritdoc />
+    public override string? QuoteCurrencyOf(Asset asset) =>
+        QuoteCurrencies.FirstOrDefault(c => asset.Symbol.Length > c.Length && asset.Symbol.EndsWith(c, StringComparison.OrdinalIgnoreCase));
+
     /// <inheritdoc />
     protected override TimeSpan? HeartbeatInterval => TimeSpan.FromSeconds(25);
 

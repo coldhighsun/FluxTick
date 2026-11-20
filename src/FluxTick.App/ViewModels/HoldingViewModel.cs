@@ -114,7 +114,10 @@ public sealed partial class HoldingViewModel : LocalizedViewModel
     /// The latest price, which fills the cost price when the instrument has no holding yet, or <see langword="null"/>
     /// when there is no price.
     /// </param>
-    public void Begin(Asset asset, decimal? currentPrice = null)
+    /// <param name="reportedCurrency">
+    /// The currency the provider reports for the instrument, or <see langword="null"/> when it does not.
+    /// </param>
+    public void Begin(Asset asset, decimal? currentPrice = null, string? reportedCurrency = null)
     {
         Subject = asset;
         var entry = _settings.Current.Watchlist.Find(e => e.ProviderId == asset.ProviderId && e.Symbol == asset.Symbol);
@@ -123,7 +126,7 @@ public sealed partial class HoldingViewModel : LocalizedViewModel
             : currentPrice is > 0m ? NumberText.Format(currentPrice.Value)
             : string.Empty;
         QuantityText = entry?.Quantity is { } quantity ? NumberText.Format(quantity) : string.Empty;
-        SelectedCurrency = entry?.HoldingCurrency ?? CurrencyGuesser.Guess(asset.ProviderId, asset.Symbol);
+        SelectedCurrency = entry?.HoldingCurrency ?? CurrencyGuesser.Resolve(reportedCurrency, asset.ProviderId, asset.Symbol);
         Message = string.Empty;
         OnPropertyChanged(nameof(Title));
     }

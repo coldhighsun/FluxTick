@@ -11,7 +11,7 @@ namespace FluxTick.Providers.Massive;
 /// Polls the Massive aggregates service for every subscribed instrument, one request per instrument spaced out to stay
 /// within the request limit of the plan.
 /// </summary>
-public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCurrencyProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -93,6 +93,9 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
         _requestSpacing = requestSpacing;
         _http = http;
     }
+
+    /// <inheritdoc />
+    public string? QuoteCurrencyOf(Asset asset) => "USD";
 
     /// <inheritdoc />
     public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>

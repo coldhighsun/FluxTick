@@ -10,7 +10,7 @@ namespace FluxTick.Providers.TwelveData;
 /// Streams prices from the Twelve Data WebSocket. The REST quote service gives every new instrument its first price and
 /// the previous close the change is measured against, and takes over while the stream is down.
 /// </summary>
-public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCurrencyProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -36,6 +36,11 @@ public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRange
     /// The market identifier code of each symbol, learned from its first quote, which tells its trading hours.
     /// </summary>
     private readonly ConcurrentDictionary<string, string> _exchanges = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The currency of each symbol, learned from its first quote.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, string> _currencies = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The previous close of each symbol, which gives the change; the stream carries prices only.
@@ -166,6 +171,19 @@ public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRange
     }
 
     /// <inheritdoc />
+    public string? QuoteCurrencyOf(Asset asset)
+    {
+        if (_currencies.TryGetValue(asset.Symbol, out var currency))
+        {
+            return currency;
+        }
+
+        // A pair names its quote currency (BTC/USD); a stock tells it with its first quote.
+        var slash = asset.Symbol.LastIndexOf('/');
+        return slash >= 0 && slash < asset.Symbol.Length - 1 ? asset.Symbol[(slash + 1)..] : null;
+    }
+
+    /// <inheritdoc />
     public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null)
     {
         // A pair of currencies or of a cryptocurrency (BTC/USD) trades around the clock; a stock follows its exchange once the
@@ -251,6 +269,11 @@ public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRange
         foreach (var (symbol, mic) in TwelveDataParser.ParseExchanges(json))
         {
             _exchanges[symbol] = mic;
+        }
+
+        foreach (var (symbol, currency) in TwelveDataParser.ParseField(json, "currency"))
+        {
+            _currencies[symbol] = currency;
         }
 
         foreach (var quote in quotes)

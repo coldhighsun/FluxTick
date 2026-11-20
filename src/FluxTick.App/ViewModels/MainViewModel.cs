@@ -833,7 +833,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
         }
 
         // A price that is not coming in any more is no price to suggest as the cost.
-        HoldingEditor.Begin(row.Asset, row.IsPriceOutdated ? null : row.CurrentPrice);
+        HoldingEditor.Begin(row.Asset, row.IsPriceOutdated ? null : row.CurrentPrice, _market.QuoteCurrencyOf(row.Asset));
         HoldingRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1717,7 +1717,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
             row.SetHolding(
                 entry.HasHolding ? entry.CostPrice : null,
                 entry.HasHolding ? entry.Quantity : null,
-                entry.HoldingCurrency ?? CurrencyGuesser.Guess(entry.ProviderId, entry.Symbol));
+                entry.HoldingCurrency ?? CurrencyGuesser.Resolve(_market.QuoteCurrencyOf(asset), entry.ProviderId, entry.Symbol));
 
             if (snapshots.TryGetValue(asset.Id, out var snapshot))
             {

@@ -6,6 +6,41 @@ namespace FluxTick.Core.Application;
 public static class CurrencyGuesser
 {
     /// <summary>
+    /// Gives the quote currency of an instrument: the one its provider reports when that is a currency the application
+    /// converts (a stablecoin counts as US dollars), otherwise the guess from the provider and the symbol.
+    /// </summary>
+    /// <param name="reported">
+    /// The currency the provider reports, or <see langword="null"/> when it does not know it.
+    /// </param>
+    /// <param name="providerId">
+    /// The provider that serves the instrument.
+    /// </param>
+    /// <param name="symbol">
+    /// The provider-native symbol.
+    /// </param>
+    /// <returns>
+    /// An ISO 4217 code.
+    /// </returns>
+    public static string Resolve(string? reported, string providerId, string symbol)
+    {
+        if (reported is { Length: > 0 })
+        {
+            if (CurrencyCodes.NormalizeSupported(reported) is { } supported)
+            {
+                return supported;
+            }
+
+            if (reported.StartsWith("USD", StringComparison.OrdinalIgnoreCase))
+            {
+                // USDT, USDC and the other dollar stablecoins.
+                return CurrencyCodes.Pivot;
+            }
+        }
+
+        return Guess(providerId, symbol);
+    }
+
+    /// <summary>
     /// Guesses the quote currency of an instrument from its provider and symbol.
     /// </summary>
     /// <param name="providerId">
@@ -27,10 +62,7 @@ public static class CurrencyGuesser
             "tencent" when text.StartsWith("us", StringComparison.OrdinalIgnoreCase) => "USD",
             "tencent" => "CNY",
             "yahoo" => GuessYahoo(text),
-            "eastmoney" when text.StartsWith("116.", StringComparison.Ordinal) => "HKD",
-            "eastmoney" when text.StartsWith("105.", StringComparison.Ordinal) || text.StartsWith("106.", StringComparison.Ordinal) || text.StartsWith("107.", StringComparison.Ordinal) => "USD",
-            "eastmoney" => "CNY",
-            "binance" or "bybit" or "okx" or "coinbase" or "kraken" or "gateio" or "bitget" or "cryptocom" or "kucoin" => GuessFromPair(text),
+            "binance" or "bybit" or "okx" or "coinbase" or "kraken" => GuessFromPair(text),
             _ => CurrencyCodes.Pivot,
         };
     }

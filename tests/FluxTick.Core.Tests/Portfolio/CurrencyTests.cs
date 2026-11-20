@@ -24,9 +24,6 @@ public class CurrencyTests
     [InlineData("tencent", "hk00700", "HKD")]
     [InlineData("tencent", "usAAPL", "USD")]
     [InlineData("sina", "sz000001", "CNY")]
-    [InlineData("eastmoney", "1.600519", "CNY")]
-    [InlineData("eastmoney", "116.00700", "HKD")]
-    [InlineData("eastmoney", "105.AAPL", "USD")]
     [InlineData("yahoo", "0700.HK", "HKD")]
     [InlineData("yahoo", "600519.SS", "CNY")]
     [InlineData("yahoo", "AAPL", "USD")]
@@ -39,6 +36,33 @@ public class CurrencyTests
     public void Guess_KnownProviders_ReturnsQuoteCurrency(string provider, string symbol, string expected)
     {
         CurrencyGuesser.Guess(provider, symbol).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Verifies the currency a provider reports wins over the guess, with stablecoins counted as US dollars, and that a
+    /// currency the application does not convert falls back to the guess.
+    /// </summary>
+    /// <param name="reported">
+    /// The currency the provider reports.
+    /// </param>
+    /// <param name="provider">
+    /// The provider id.
+    /// </param>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <param name="expected">
+    /// The expected currency.
+    /// </param>
+    [Theory]
+    [InlineData("HKD", "newsource", "x", "HKD")]
+    [InlineData("USDT", "newsource", "x", "USD")]
+    [InlineData("usdc", "newsource", "x", "USD")]
+    [InlineData("XYZ", "binance", "BTCEUR", "EUR")]
+    [InlineData(null, "binance", "BTCEUR", "EUR")]
+    public void Resolve_ReportedCurrency_WinsOverTheGuess(string? reported, string provider, string symbol, string expected)
+    {
+        CurrencyGuesser.Resolve(reported, provider, symbol).Should().Be(expected);
     }
 
     /// <summary>

@@ -10,7 +10,7 @@ namespace FluxTick.Providers.Eastmoney;
 /// instrument. The batch quote service gives each new instrument its first price and takes over for an instrument whose
 /// stream is down, as the poll of the base class.
 /// </summary>
-public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCurrencyProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -157,6 +157,9 @@ public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHis
 
     /// <inheritdoc />
     protected override bool IsStreamLive(Asset asset) => _streams.TryGetValue(asset.Id, out var running) && running.Stream.IsLive;
+
+    /// <inheritdoc />
+    public string? QuoteCurrencyOf(Asset asset) => EastmoneyParser.CurrencyOf(asset.Symbol);
 
     /// <inheritdoc />
     public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
