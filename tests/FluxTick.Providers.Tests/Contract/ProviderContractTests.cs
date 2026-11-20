@@ -4,6 +4,7 @@ using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.Eastmoney;
 using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
@@ -269,3 +270,8 @@ public sealed class CryptoComProviderContractTests : ProviderContractTests<Crypt
 /// Contract tests for the KuCoin provider.
 /// </summary>
 public sealed class KuCoinProviderContractTests : ProviderContractTests<KuCoinProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Eastmoney provider.
+/// </summary>
+public sealed class EastmoneyProviderContractTests : ProviderContractTests<EastmoneyProviderFactory>;

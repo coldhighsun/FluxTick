@@ -30,6 +30,7 @@
     <Project Path="src/FluxTick.Providers.Common/FluxTick.Providers.Common.csproj" />
     <Project Path="src/FluxTick.Providers.CryptoCom/FluxTick.Providers.CryptoCom.csproj" />
     <Project Path="src/FluxTick.Providers.GateIo/FluxTick.Providers.GateIo.csproj" />
+    <Project Path="src/FluxTick.Providers.Eastmoney/FluxTick.Providers.Eastmoney.csproj" />
     <Project Path="src/FluxTick.Providers.Eulerpool/FluxTick.Providers.Eulerpool.csproj" />
     <Project Path="src/FluxTick.Providers.KuCoin/FluxTick.Providers.KuCoin.csproj" />
     <Project Path="src/FluxTick.Providers.Kraken/FluxTick.Providers.Kraken.csproj" />
