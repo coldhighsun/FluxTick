@@ -3,3 +3,10 @@ ignore:
   - "src/FluxTick.App/**"
   # Generated sources.
   - "**/obj/**"
+
+coverage:
+  status:
+    patch:
+      default:
+        # Report the coverage of a change in the pull request without failing the check.
+        informational: true
