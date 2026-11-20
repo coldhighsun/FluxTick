@@ -100,7 +100,7 @@ commodities side by side, from the data sources *you* choose.
 | **Eulerpool** | Stocks and ETFs worldwide (tickers with an exchange suffix, e.g. `AAPL`, `SAP.DE`) | WebSocket stream | Needs an API key (free at eulerpool.com/developers; see [API keys](#api-keys)). A free key only gets delayed one-second prices; live trades need a paid plan. Search by name, ticker or ISIN. Off by default. |
 | **Finnhub** | US stocks and ETFs | WebSocket stream | Needs an API key (free at finnhub.io; see [API keys](#api-keys)). The free key allows 60 REST requests a minute and 50 streamed symbols; the stream delivers live US trades, REST gives the first price and the fallback. No chart history on the free plan, so the chart builds from live prices. Search by name or ticker. Off by default. |
 | **Massive** | US stocks and ETFs | Polling (default 5 min) | Needs an API key (free at massive.com; see [API keys](#api-keys)). Formerly Polygon.io. The free plan has no WebSocket or snapshot, so the app polls delayed one-minute bars at 5 requests a minute (one or two per symbol, spaced 13 s apart): not live, and suited to a few symbols. A paid plan adds a stream. Sparkline history covers the last hour, and a month and longer. Search by name or ticker. Off by default. |
-| **Twelve Data** | Stocks, ETFs and indices worldwide | Polling (default 60 s) | Needs an API key (free at twelvedata.com; see [API keys](#api-keys)). The free key allows 8 credits a minute and 800 a day, one credit per symbol per refresh, so it suits a short watchlist; prices may be delayed. Search by name or ticker. Off by default. |
+| **Twelve Data** | Stocks, ETFs and indices worldwide | WebSocket stream | Needs an API key (free at twelvedata.com; see [API keys](#api-keys)). Prices are pushed over a WebSocket; REST (8 credits a minute and 800 a day on the free key, one credit per symbol) gives the first price and the fallback while the stream is down. Prices may be delayed. Search by name or ticker. Off by default. |
 | **OKX** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
 | **Coinbase** | Crypto spot pairs | WebSocket stream | Coinbase Exchange. No API key. Off by default. |
 | **Kraken** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
@@ -266,7 +266,7 @@ src/FluxTick.Providers.Eastmoney Eastmoney polling source
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket source (API key)
 src/FluxTick.Providers.Finnhub   Finnhub WebSocket source (API key)
 src/FluxTick.Providers.Massive   Massive polling source (API key)
-src/FluxTick.Providers.TwelveData Twelve Data polling source (API key)
+src/FluxTick.Providers.TwelveData Twelve Data WebSocket source (API key)
 src/FluxTick.Providers.Simulated Deterministic demo source
 src/FluxTick.App                 Avalonia desktop app (FluxTick.exe), composition root
 tests/                           xUnit v3 + AwesomeAssertions

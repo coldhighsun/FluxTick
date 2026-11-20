@@ -91,7 +91,7 @@
 | **Eulerpool** | 全球股票和 ETF（代码带交易所后缀，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免费申请，详见 [API Key](#api-key)）。免费 Key 只能收到延迟的 1 秒行情，实时成交需要付费套餐。支持按名称、代码或 ISIN 搜索。默认关闭。 |
 | **Finnhub** | 美股和 ETF | WebSocket 推送 | 需要 API Key（在 finnhub.io 免费申请，详见 [API Key](#api-key)）。免费 Key 每分钟 60 次 REST 请求、可推送 50 个代码；推送提供美股实时成交，REST 提供首个价格和备用行情。免费套餐没有走势图历史，走势图由实时价格累积。支持按名称或代码搜索。默认关闭。 |
 | **Massive** | 美股和 ETF | 轮询（默认 5 分钟） | 需要 API Key（在 massive.com 免费申请，详见 [API Key](#api-key)）。前身为 Polygon.io。免费套餐没有 WebSocket 和快照，因此应用轮询延迟的 1 分钟 K 线，每分钟 5 次请求（每个代码一到两次，间隔 13 秒）：不是实时行情，适合少量代码；付费套餐才有推送。走势图历史覆盖最近一小时，以及一个月及更长区间。支持按名称或代码搜索。默认关闭。 |
-| **Twelve Data** | 全球股票、ETF 和指数 | 轮询（默认 60 秒） | 需要 API Key（在 twelvedata.com 免费申请，详见 [API Key](#api-key)）。免费 Key 每分钟 8 点、每天 800 点，每次刷新每个代码耗 1 点，适合较短的自选列表；行情可能有延迟。支持按名称或代码搜索。默认关闭。 |
+| **Twelve Data** | 全球股票、ETF 和指数 | WebSocket 推送 | 需要 API Key（在 twelvedata.com 免费申请，详见 [API Key](#api-key)）。行情通过 WebSocket 推送；REST（免费 Key 每分钟 8 点、每天 800 点，每个代码耗 1 点）提供首个价格，并在推送中断时作为备用。行情可能有延迟。支持按名称或代码搜索。默认关闭。 |
 | **OKX** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
 | **Coinbase** | 加密货币现货交易对 | WebSocket 推送 | Coinbase Exchange。无需 API Key。默认关闭。 |
 | **Kraken** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
@@ -249,7 +249,7 @@ src/FluxTick.Providers.Eastmoney 东方财富轮询数据源
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket 数据源（需 API Key）
 src/FluxTick.Providers.Finnhub   Finnhub WebSocket 数据源（需 API Key）
 src/FluxTick.Providers.Massive   Massive 轮询数据源（需 API Key）
-src/FluxTick.Providers.TwelveData Twelve Data 轮询数据源（需 API Key）
+src/FluxTick.Providers.TwelveData Twelve Data WebSocket 数据源（需 API Key）
 src/FluxTick.Providers.Simulated 确定性的演示数据源
 src/FluxTick.App                 Avalonia 桌面应用（FluxTick.exe），组合根
 tests/                           xUnit v3 + AwesomeAssertions

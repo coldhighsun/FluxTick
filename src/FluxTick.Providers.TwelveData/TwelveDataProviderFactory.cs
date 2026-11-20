@@ -25,6 +25,11 @@ public sealed class TwelveDataProviderFactory : IMarketDataProviderFactory
     public const string PollIntervalKey = ProviderOptionDefinition.PollIntervalKey;
 
     /// <summary>
+    /// The key of the WebSocket endpoint option.
+    /// </summary>
+    public const string WebSocketUrlKey = ExchangeEndpoints.WebSocketUrlKey;
+
+    /// <summary>
     /// The key of the API endpoint option.
     /// </summary>
     public const string BaseUrlKey = "BaseUrl";
@@ -33,9 +38,9 @@ public sealed class TwelveDataProviderFactory : IMarketDataProviderFactory
     public ProviderDescriptor Descriptor { get; } = new(
         ProviderId,
         "Twelve Data",
-        "Stocks and ETFs worldwide from the Twelve Data API, by polling. Needs an API key; a free key allows 8 credits a minute and 800 a day, and a request costs one credit per symbol, so the default interval suits about 8 symbols. Free prices may be delayed.",
+        "Stocks, ETFs and indices worldwide from Twelve Data: prices pushed over a WebSocket, with the REST API as the first price and as a fallback while the stream is down. Needs an API key; a free key allows 8 credits a minute and 800 a day for REST, and a WebSocket with a few symbols. Free prices may be delayed.",
         [AssetClass.Equity, AssetClass.Index],
-        ProviderUpdateMode.Polling,
+        ProviderUpdateMode.Streaming,
         Homepage: new Uri("https://twelvedata.com/"),
         Options:
         [
@@ -48,18 +53,26 @@ public sealed class TwelveDataProviderFactory : IMarketDataProviderFactory
                 Required: true),
             new ProviderOptionDefinition(
                 PollIntervalKey,
-                "Poll interval",
+                "Fallback poll interval",
                 ProviderOptionType.Duration,
                 "00:01:00",
-                "How often prices are refreshed. With the free key, keep (symbols x 60 seconds / 8) below this value to stay within the per-minute limit.",
+                "While the live stream is down, how often prices are fetched from the API instead. A request costs one credit per symbol; with the free key, keep (symbols x 60 seconds / 8) below this value.",
                 Min: 5,
                 Max: 3600),
+            StreamingOptions.QuietPollInterval with { DefaultValue = "00:30:00" },
+            new ProviderOptionDefinition(
+                WebSocketUrlKey,
+                "WebSocket endpoint",
+                ProviderOptionType.String,
+                "wss://ws.twelvedata.com/v1/quotes/price",
+                "Used for live prices. The key is added to the address when connecting.",
+                Advanced: true),
             new ProviderOptionDefinition(
                 BaseUrlKey,
                 "API endpoint",
                 ProviderOptionType.String,
                 "https://api.twelvedata.com",
-                "Used for prices, history and symbol search.",
+                "Used for first prices, history, symbol search and as a fallback.",
                 Advanced: true),
         ],
         EnabledByDefault: false);
@@ -69,9 +82,11 @@ public sealed class TwelveDataProviderFactory : IMarketDataProviderFactory
         new TwelveDataProvider(
             Descriptor,
             EndpointOptions.GetHttpUri(context.Options, Descriptor, BaseUrlKey),
+            EndpointOptions.GetWebSocketUri(context.Options, Descriptor, WebSocketUrlKey),
             context.Options.GetString(ApiKeyKey).Trim(),
             context.Options.GetDuration(PollIntervalKey),
             AppHttpClient.Create(decompress: true, logger: context.LoggerFactory.CreateLogger<TwelveDataProvider>()),
             context.TimeProvider,
-            context.LoggerFactory.CreateLogger<TwelveDataProvider>());
+            context.LoggerFactory.CreateLogger<TwelveDataProvider>(),
+            context.Options.GetDuration(ProviderOptionDefinition.QuietPollIntervalKey));
 }

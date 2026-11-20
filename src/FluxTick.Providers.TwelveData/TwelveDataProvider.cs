@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
@@ -6,9 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace FluxTick.Providers.TwelveData;
 
 /// <summary>
-/// Polls the Twelve Data quote service for every subscribed instrument, one request per batch of instruments.
+/// Streams prices from the Twelve Data WebSocket. The REST quote service gives every new instrument its first price and
+/// the previous close the change is measured against, and takes over while the stream is down.
 /// </summary>
-public sealed class TwelveDataProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider
+public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -21,9 +23,19 @@ public sealed class TwelveDataProvider : BatchQuotePollingProviderBase, IRangeHi
     private readonly Uri _apiBase;
 
     /// <summary>
+    /// The stream endpoint without the key.
+    /// </summary>
+    private readonly Uri _streamBase;
+
+    /// <summary>
     /// The API key.
     /// </summary>
     private readonly string _apiKey;
+
+    /// <summary>
+    /// The previous close of each symbol, which gives the change; the stream carries prices only.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, decimal> _previousCloses = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The HTTP client; owned by the provider.
@@ -39,11 +51,14 @@ public sealed class TwelveDataProvider : BatchQuotePollingProviderBase, IRangeHi
     /// <param name="apiBase">
     /// The API endpoint.
     /// </param>
+    /// <param name="streamUri">
+    /// The stream endpoint; the key is added when connecting.
+    /// </param>
     /// <param name="apiKey">
     /// The API key; blank until the user has entered one.
     /// </param>
     /// <param name="interval">
-    /// The poll interval.
+    /// How often the REST API is polled while the stream is down.
     /// </param>
     /// <param name="http">
     /// The HTTP client; the provider takes ownership.
@@ -54,17 +69,23 @@ public sealed class TwelveDataProvider : BatchQuotePollingProviderBase, IRangeHi
     /// <param name="logger">
     /// The logger.
     /// </param>
+    /// <param name="quietInterval">
+    /// How long a connected stream may stay quiet before REST is polled as well, or <see langword="null"/> for the default.
+    /// </param>
     internal TwelveDataProvider(
         ProviderDescriptor descriptor,
         Uri apiBase,
+        Uri streamUri,
         string apiKey,
         TimeSpan interval,
         HttpClient http,
         TimeProvider timeProvider,
-        ILogger logger)
-        : base(descriptor, interval, timeProvider, logger)
+        ILogger logger,
+        TimeSpan? quietInterval = null)
+        : base(descriptor, streamUri, interval, timeProvider, logger, quietInterval)
     {
         _apiBase = apiBase;
+        _streamBase = streamUri;
         _apiKey = apiKey;
         _http = http;
     }
@@ -140,20 +161,88 @@ public sealed class TwelveDataProvider : BatchQuotePollingProviderBase, IRangeHi
     }
 
     /// <inheritdoc />
-    protected override string ToRequestCode(string symbol) => symbol.Trim();
+    protected override Uri BuildConnectionUri(IReadOnlyCollection<Asset> assets) =>
+        new UriBuilder(_streamBase) { Query = $"apikey={Uri.EscapeDataString(_apiKey)}" }.Uri;
 
     /// <inheritdoc />
-    protected override async Task<IReadOnlyList<ParsedQuote>> RequestQuotesAsync(string[] codes, CancellationToken cancellationToken)
+    protected override TimeSpan? HeartbeatInterval => TimeSpan.FromSeconds(10);
+
+    /// <inheritdoc />
+    protected override string? HeartbeatMessage => TwelveDataParser.Heartbeat;
+
+    /// <inheritdoc />
+    protected override IEnumerable<string> BuildSubscribeMessages(IReadOnlyCollection<Asset> assets) =>
+        TwelveDataParser.ControlMessages("subscribe", assets.Select(a => a.Symbol));
+
+    /// <inheritdoc />
+    protected override IEnumerable<string> BuildUnsubscribeMessages(IReadOnlyCollection<Asset> assets)
     {
-        var uri = EndpointOptions.Combine(_apiBase, $"/quote?symbol={Uri.EscapeDataString(string.Join(',', codes))}");
-        return TwelveDataParser.ParseQuotes(await GetStringAsync(uri, cancellationToken).ConfigureAwait(false));
+        // Symbols are told apart without regard to case by the stream; one that goes must not take the stream of another
+        // subscription that stays under the same symbol.
+        var kept = CurrentSubscriptions.Select(a => a.Symbol).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return TwelveDataParser.ControlMessages("unsubscribe", assets.Select(a => a.Symbol).Where(s => !kept.Contains(s)));
     }
 
     /// <inheritdoc />
-    protected override ValueTask DisposeResourcesAsync()
+    protected override void HandleMessage(string text)
     {
+        if (TwelveDataParser.TryParsePrice(text, out var price))
+        {
+            PublishToSubscribers(
+                price.Symbol,
+                price.Price,
+                _previousCloses.TryGetValue(price.Symbol, out var previous) ? previous : null,
+                price.Time);
+        }
+        else if (TwelveDataParser.TryParseStreamError(text) is { } error)
+        {
+            Logger.LogWarning("Twelve Data reported a problem: {Error}", error);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override Task<PollOutcome> FetchQuotesAsync(IReadOnlyCollection<Asset> assets, CancellationToken cancellationToken) =>
+        BatchQuoteFetcher.FetchAsync(
+            assets,
+            symbol => symbol.Trim(),
+            RequestQuotesAsync,
+            Publish,
+            Logger,
+            Descriptor.DisplayName,
+            cancellationToken);
+
+    /// <summary>
+    /// Fetches the latest prices of a batch of symbols, and keeps the previous close of each for the stream.
+    /// </summary>
+    /// <param name="codes">
+    /// The symbols.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels the request.
+    /// </param>
+    /// <returns>
+    /// The prices the service has.
+    /// </returns>
+    private async Task<IReadOnlyList<ParsedQuote>> RequestQuotesAsync(string[] codes, CancellationToken cancellationToken)
+    {
+        var uri = EndpointOptions.Combine(_apiBase, $"/quote?symbol={Uri.EscapeDataString(string.Join(',', codes))}");
+        var quotes = TwelveDataParser.ParseQuotes(await GetStringAsync(uri, cancellationToken).ConfigureAwait(false));
+        foreach (var quote in quotes)
+        {
+            if (quote.PreviousClose is { } previous)
+            {
+                _previousCloses[quote.Key] = previous;
+            }
+        }
+
+        return quotes;
+    }
+
+    /// <inheritdoc />
+    protected override async ValueTask DisposeResourcesAsync()
+    {
+        await base.DisposeResourcesAsync().ConfigureAwait(false);
         _http.Dispose();
-        return ValueTask.CompletedTask;
     }
 
     /// <summary>
