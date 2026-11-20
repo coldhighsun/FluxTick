@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Twelve Data market data source for FluxTick (REST polling, free API key).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluxTick.Abstractions\FluxTick.Abstractions.csproj" />
+    <ProjectReference Include="..\FluxTick.Providers.Common\FluxTick.Providers.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluxTick.Providers.Tests" />
+  </ItemGroup>
+
+</Project>

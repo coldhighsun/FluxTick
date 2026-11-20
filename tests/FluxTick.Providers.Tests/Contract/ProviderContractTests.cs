@@ -13,6 +13,7 @@ using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
 using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
+using FluxTick.Providers.TwelveData;
 using FluxTick.Providers.Yahoo;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -275,3 +276,8 @@ public sealed class KuCoinProviderContractTests : ProviderContractTests<KuCoinPr
 /// Contract tests for the Eastmoney provider.
 /// </summary>
 public sealed class EastmoneyProviderContractTests : ProviderContractTests<EastmoneyProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Twelve Data provider.
+/// </summary>
+public sealed class TwelveDataProviderContractTests : ProviderContractTests<TwelveDataProviderFactory>;

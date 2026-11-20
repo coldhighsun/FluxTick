@@ -10,6 +10,7 @@ using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
+using FluxTick.Providers.TwelveData;
 
 namespace FluxTick.Providers.Tests;
 
@@ -44,5 +45,6 @@ public class NewProvidersDefaultTests
         new BitgetProviderFactory(),
         new CryptoComProviderFactory(),
         new KuCoinProviderFactory(),
+        new TwelveDataProviderFactory(),
     ];
 }

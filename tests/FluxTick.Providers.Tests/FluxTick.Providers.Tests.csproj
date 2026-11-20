@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\src\FluxTick.Providers.CryptoCom\FluxTick.Providers.CryptoCom.csproj" />
     <ProjectReference Include="..\..\src\FluxTick.Providers.KuCoin\FluxTick.Providers.KuCoin.csproj" />
     <ProjectReference Include="..\..\src\FluxTick.Providers.Eastmoney\FluxTick.Providers.Eastmoney.csproj" />
+    <ProjectReference Include="..\..\src\FluxTick.Providers.TwelveData\FluxTick.Providers.TwelveData.csproj" />
     <ProjectReference Include="..\..\src\FluxTick.Providers.Eulerpool\FluxTick.Providers.Eulerpool.csproj" />
     <ProjectReference Include="..\..\src\FluxTick.Providers.Simulated\FluxTick.Providers.Simulated.csproj" />
   </ItemGroup>
