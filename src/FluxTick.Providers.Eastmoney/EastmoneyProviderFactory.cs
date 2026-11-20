@@ -24,30 +24,42 @@ public sealed class EastmoneyProviderFactory : IMarketDataProviderFactory
     /// </summary>
     public const string QuoteUrlKey = "QuoteUrl";
 
+    /// <summary>
+    /// The option key of the stream endpoint.
+    /// </summary>
+    public const string StreamUrlKey = "StreamUrl";
+
     /// <inheritdoc />
     public ProviderDescriptor Descriptor { get; } = new(
         ProviderId,
         "Eastmoney",
-        "A-shares, Hong Kong and US stocks, ETFs and indices by polling Eastmoney's public quote service. No API key required. Unofficial; data may be delayed. Symbols are written as market.code, for example 1.600519 (Shanghai), 0.000001 (Shenzhen), 116.00700 (Hong Kong) or 105.AAPL (US); symbol search fills them in.",
+        "A-shares, Hong Kong and US stocks, ETFs and indices from Eastmoney's public quote service: prices are pushed over one event stream per instrument, with the batch quote service as the first price and as a fallback. No API key required. Unofficial; data may be delayed. Symbols are written as market.code, for example 1.600519 (Shanghai), 0.000001 (Shenzhen), 116.00700 (Hong Kong) or 105.AAPL (US); symbol search fills them in.",
         [AssetClass.Equity, AssetClass.Index],
-        ProviderUpdateMode.Polling,
+        ProviderUpdateMode.Streaming,
         Homepage: new Uri("https://quote.eastmoney.com/"),
         Options:
         [
             new ProviderOptionDefinition(
                 PollIntervalKey,
-                "Poll interval",
+                "Fallback poll interval",
                 ProviderOptionType.Duration,
                 "00:00:05",
-                "How often prices are refreshed.",
+                "How often prices are fetched for an instrument whose live stream is down. Nothing is fetched for a market that is shut.",
                 Min: 2,
                 Max: 300),
+            new ProviderOptionDefinition(
+                StreamUrlKey,
+                "Stream endpoint",
+                ProviderOptionType.String,
+                "https://push2.eastmoney.com",
+                "Used for the live price streams, one connection per instrument.",
+                Advanced: true),
             new ProviderOptionDefinition(
                 QuoteUrlKey,
                 "Quote endpoint",
                 ProviderOptionType.String,
                 "https://push2delay.eastmoney.com",
-                "Used for prices. Symbol search and history use searchadapter.eastmoney.com and push2his.eastmoney.com.",
+                "Used for first prices and as a fallback. Symbol search and history use searchadapter.eastmoney.com and push2his.eastmoney.com.",
                 Advanced: true),
         ],
         EnabledByDefault: false);
@@ -60,6 +72,7 @@ public sealed class EastmoneyProviderFactory : IMarketDataProviderFactory
         return new EastmoneyProvider(
             Descriptor,
             quoteUri,
+            EndpointOptions.GetHttpUri(context.Options, Descriptor, StreamUrlKey),
             context.Options.GetDuration(PollIntervalKey),
             http,
             context.TimeProvider,

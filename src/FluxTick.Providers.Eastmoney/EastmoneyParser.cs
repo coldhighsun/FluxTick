@@ -127,6 +127,41 @@ internal static class EastmoneyParser
     }
 
     /// <summary>
+    /// Parses the data of a message of the instrument stream. The first message holds every field, the later ones only
+    /// those that changed.
+    /// </summary>
+    /// <param name="json">
+    /// The JSON text after the <c>data:</c> prefix.
+    /// </param>
+    /// <param name="symbol">
+    /// The symbol of the instrument, which tells the exchange a trade time is clamped to.
+    /// </param>
+    /// <returns>
+    /// The fields the message carries, or <see langword="null"/> when it is not a message of the instrument.
+    /// </returns>
+    public static StreamUpdate? ParseStreamUpdate(string json, string symbol)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object
+            || !document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        decimal? price = JsonValues.TryGetDecimal(data, "f43", out var last) && last > 0 ? last : null;
+        decimal? previous = JsonValues.TryGetPositiveDecimal(data, "f60", out var close) ? close : null;
+        DateTimeOffset? time = data.TryGetProperty("f86", out var stamp) && stamp.ValueKind == JsonValueKind.Number && stamp.TryGetInt64(out var seconds) && seconds > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
+        if (time is { } traded && ExchangeOf(symbol) is { } exchange)
+        {
+            time = exchange.ClampToSessionEnd(traded);
+        }
+
+        return new StreamUpdate(price, previous, time);
+    }
+
+    /// <summary>
     /// Reads a market id that the service sends as a number.
     /// </summary>
     /// <param name="element">
@@ -293,3 +328,17 @@ internal static class EastmoneyParser
         return assets;
     }
 }
+
+/// <summary>
+/// The fields of one message of the instrument stream.
+/// </summary>
+/// <param name="Price">
+/// The latest price, or <see langword="null"/> when the message does not carry it.
+/// </param>
+/// <param name="PreviousClose">
+/// The previous close, or <see langword="null"/> when the message does not carry it.
+/// </param>
+/// <param name="Time">
+/// When the instrument last traded, or <see langword="null"/> when the message does not carry it.
+/// </param>
+internal sealed record StreamUpdate(decimal? Price, decimal? PreviousClose, DateTimeOffset? Time);

@@ -87,7 +87,7 @@
 | **Yahoo Finance** | 股票、ETF、指数、外汇、期货、加密货币 | WebSocket 推送 | 非官方 API，可能被限流或无通知变更。无需 API Key。**A 股和港股行情有 15 分钟延迟**，因此会显示为报价延迟；需要 A 股实时行情请使用新浪或腾讯。推送中断期间改为轮询图表 API（默认 5 秒）。 |
 | **Tencent Finance（腾讯财经）** | A 股、港股、美股、ETF、指数 | 轮询（默认 5 秒） | 非官方 API，可能延迟或无通知变更。无需 API Key。支持按名称、代码或拼音搜索。走势图历史仅覆盖 A 股和港股。默认关闭。 |
 | **Sina Finance（新浪财经）** | A 股、ETF、指数、外汇、国际商品期货 | WebSocket 推送 | 非官方 API，可能被限流、延迟或无通知变更。无需 API Key。代码格式与腾讯相同（如 `sh600000`），但自选标的会固定在添加时的数据源。可搜索股票、主要指数和常用外汇、期货；ETF 需直接输入代码，其他外汇（`fx_seurusd`）和期货（`hf_GC`）输入新浪的代码。走势图历史覆盖 A 股、基金和外汇。默认关闭。 |
-| **Eastmoney（东方财富）** | A 股、港股、美股、ETF、指数 | 轮询（默认 5 秒） | 非官方接口，可能延迟或随时变动。无需 API Key。代码写作 `市场.代码`（`1.600519`、`116.00700`、`105.AAPL`），可通过名称、代码或拼音搜索自动填入。默认关闭。 |
+| **Eastmoney（东方财富）** | A 股、港股、美股、ETF、指数 | 事件流推送（每个品种一条连接） | 非官方接口，可能延迟或随时变动。推送中断期间由批量行情接口提供首个价格和备用行情（默认 5 秒）。无需 API Key。代码写作 `市场.代码`（`1.600519`、`116.00700`、`105.AAPL`），可通过名称、代码或拼音搜索自动填入。默认关闭。 |
 | **Eulerpool** | 全球股票和 ETF（代码带交易所后缀，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免费申请，详见 [API Key](#api-key)）。免费 Key 只能收到延迟的 1 秒行情，实时成交需要付费套餐。支持按名称、代码或 ISIN 搜索。默认关闭。 |
 | **Finnhub** | 美股和 ETF | WebSocket 推送 | 需要 API Key（在 finnhub.io 免费申请，详见 [API Key](#api-key)）。免费 Key 每分钟 60 次 REST 请求、可推送 50 个代码；推送提供美股实时成交，REST 提供首个价格和备用行情。免费套餐没有走势图历史，走势图由实时价格累积。支持按名称或代码搜索。默认关闭。 |
 | **Massive** | 美股和 ETF | 轮询（默认 5 分钟） | 需要 API Key（在 massive.com 免费申请，详见 [API Key](#api-key)）。前身为 Polygon.io。免费套餐没有 WebSocket 和快照，因此应用轮询延迟的 1 分钟 K 线，每分钟 5 次请求（每个代码一到两次，间隔 13 秒）：不是实时行情，适合少量代码；付费套餐才有推送。走势图历史覆盖最近一小时，以及一个月及更长区间。支持按名称或代码搜索。默认关闭。 |
@@ -245,7 +245,7 @@ src/FluxTick.Providers.KuCoin    KuCoin WebSocket 数据源
 src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket 数据源
 src/FluxTick.Providers.Tencent   腾讯财经轮询数据源
 src/FluxTick.Providers.Sina      新浪财经 WebSocket 数据源
-src/FluxTick.Providers.Eastmoney 东方财富轮询数据源
+src/FluxTick.Providers.Eastmoney 东方财富事件流数据源
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket 数据源（需 API Key）
 src/FluxTick.Providers.Finnhub   Finnhub WebSocket 数据源（需 API Key）
 src/FluxTick.Providers.Massive   Massive 轮询数据源（需 API Key）

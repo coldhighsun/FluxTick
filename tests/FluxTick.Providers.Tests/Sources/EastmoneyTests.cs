@@ -159,7 +159,7 @@ public class EastmoneyTests
 
         quotes.Select(q => q.AssetId).Should().BeEquivalentTo([maotai.Id, tencent.Id]);
         quotes.Single(q => q.AssetId == maotai.Id).Price.Should().Be(1446.7m);
-        var uri = handler.Requests.First().RequestUri!.AbsoluteUri;
+        var uri = handler.Requests.First(r => !r.RequestUri!.AbsolutePath.EndsWith("/sse", StringComparison.Ordinal)).RequestUri!.AbsoluteUri;
         uri.Should().Contain("secids=1.600519,116.00700").And.Contain("fltt=2");
     }
 
@@ -215,6 +215,83 @@ public class EastmoneyTests
     }
 
     /// <summary>
+    /// Verifies a stream message that carries only the price keeps the previous close and time of the first message.
+    /// </summary>
+    [Fact]
+    public void TryApply_PartialMessages_MergeIntoTheState()
+    {
+        var published = new List<Quote>();
+        var stream = CreateStream(published.Add);
+
+        stream.TryApply("""data: {"rc":0,"data":{"f43":1455.0,"f57":"600519","f59":2,"f60":1460.21,"f86":1795156391}}""", out var first).Should().BeTrue();
+        stream.TryApply("""data: {"rc":0,"data":{"f43":1455.45}}""", out var second).Should().BeTrue();
+        stream.TryApply("""data: {"rc":0,"data":{"f86":1795156400}}""", out _).Should().BeFalse("a message without a price publishes nothing");
+
+        first!.Price.Should().Be(1455.0m);
+        second!.Price.Should().Be(1455.45m);
+        second.Reference.Should().Be(1460.21m);
+        second.Timestamp.Should().Be(first.Timestamp);
+    }
+
+    /// <summary>
+    /// Verifies lines that are not data of the instrument are ignored.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(": keep-alive")]
+    [InlineData("event: message")]
+    [InlineData("""data: {"rc":0,"data":null}""")]
+    public void TryApply_OtherLines_AreIgnored(string line)
+    {
+        CreateStream(_ => { }).TryApply(line, out _).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies a stream that answers prices makes the instrument live, and that the poll then leaves it alone.
+    /// </summary>
+    [Fact]
+    public async Task Provider_LiveStream_PublishesAndStopsThePoll()
+    {
+        const string sse = """
+            data: {"rc":0,"data":{"f43":1455.45,"f60":1460.21,"f86":1795156391}}
+
+
+            """;
+        var handler = new StubHttpHandler(request => request.RequestUri!.AbsolutePath.EndsWith("/sse", StringComparison.Ordinal)
+            ? new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(sse) }
+            : StubHttpHandler.Json(QuoteResponse));
+        await using var provider = CreateProvider(handler);
+        var maotai = new Asset("eastmoney", "1.600519", "Kweichow Moutai", AssetClass.Equity);
+
+        await provider.SetSubscriptionsAsync([maotai]);
+        var quotes = await TestWait.ReadQuotesAsync(provider, 2);
+
+        quotes.Should().Contain(q => q.Price == 1455.45m && q.Reference == 1460.21m);
+        handler.Requests.Should().Contain(r => r.RequestUri!.AbsolutePath.EndsWith("/sse", StringComparison.Ordinal))
+            .Which.RequestUri!.Query.Should().Contain("secid=1.600519");
+    }
+
+    /// <summary>
+    /// Creates the stream of an instrument that is never connected.
+    /// </summary>
+    /// <param name="publish">
+    /// Receives the quotes.
+    /// </param>
+    /// <returns>
+    /// The stream.
+    /// </returns>
+    private static EastmoneyStream CreateStream(Action<Quote> publish) =>
+        new(
+            new Asset("eastmoney", "1.600519", "Kweichow Moutai", AssetClass.Equity),
+            new Uri("https://stream.example.test/sse"),
+            new HttpClient(new StubHttpHandler(_ => StubHttpHandler.Json("{}"))),
+            new FakeTimeProvider(TradingHoursStart),
+            NullLogger.Instance,
+            publish,
+            () => false,
+            () => { });
+
+    /// <summary>
     /// Creates a provider with the clock at the start of the trading hours.
     /// </summary>
     /// <param name="handler">
@@ -227,6 +304,7 @@ public class EastmoneyTests
         new(
             new EastmoneyProviderFactory().Descriptor,
             new Uri("https://quote.example.test"),
+            new Uri("https://stream.example.test"),
             TimeSpan.FromSeconds(5),
             new HttpClient(handler),
             new FakeTimeProvider(TradingHoursStart),
