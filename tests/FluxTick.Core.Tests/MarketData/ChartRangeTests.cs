@@ -707,8 +707,22 @@ public class ChartRangeTests
         await WaitUntilAsync(() => Volatile.Read(ref loads) == 2);
         service.GetSnapshots().Single().Timeline!.Window.Should().Be(TimeSpan.FromHours(1), "an empty answer is asked again");
 
+        // The second load reports itself before its answer is dealt with, and the wait for the next retry is counted from the
+        // moment the answer is dealt with. A step of the clock taken too early is therefore lost, so it is taken again until
+        // the third load starts.
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (Volatile.Read(ref loads) < 3)
+        {
+            if (DateTimeOffset.UtcNow > deadline)
+            {
+                throw new TimeoutException("The third load did not start in time.");
+            }
+
+            _time.Advance(TimeSpan.FromSeconds(31));
+            await Task.Delay(50);
+        }
+
         // The third empty answer is the answer, so the chart is released as it is dealt with.
-        _time.Advance(TimeSpan.FromSeconds(31));
         await WaitUntilAsync(() => service.GetSnapshots().Single().Timeline!.Window == TimeSpan.FromHours(24));
         service.GetSnapshots().Single().Timeline!.CoversRange.Should().BeFalse();
     }
