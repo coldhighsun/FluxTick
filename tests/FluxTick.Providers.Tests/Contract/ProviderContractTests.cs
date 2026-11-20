@@ -7,6 +7,7 @@ using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Eastmoney;
 using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Eulerpool;
+using FluxTick.Providers.Finnhub;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
@@ -281,3 +282,8 @@ public sealed class EastmoneyProviderContractTests : ProviderContractTests<Eastm
 /// Contract tests for the Twelve Data provider.
 /// </summary>
 public sealed class TwelveDataProviderContractTests : ProviderContractTests<TwelveDataProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Finnhub provider.
+/// </summary>
+public sealed class FinnhubProviderContractTests : ProviderContractTests<FinnhubProviderFactory>;
