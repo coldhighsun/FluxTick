@@ -4,6 +4,7 @@ using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
 using FluxTick.Core.Infrastructure;
 using FluxTick.Providers.Binance;
+using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Common;
@@ -171,6 +172,7 @@ public static class AppHost
         services.AddMarketDataProvider<KrakenProviderFactory>();
         services.AddMarketDataProvider<BybitProviderFactory>();
         services.AddMarketDataProvider<GateIoProviderFactory>();
+        services.AddMarketDataProvider<BitgetProviderFactory>();
         services.AddMarketDataProvider<EulerpoolProviderFactory>();
         // The simulated source only exists for the offline demo mode; a normal install does not list it.
         if (demo)

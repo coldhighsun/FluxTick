@@ -1,5 +1,6 @@
 using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
+using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
@@ -97,6 +98,22 @@ public class CryptoProviderWiringTests
         """[["1792683480","1","81641.1","1","1","1","1","true"]]""",
         "/api/v4/spot/currency_pairs",
         """[{"id":"BTC_USDT","base":"BTC","quote":"USDT","trade_status":"tradable"},{"id":"ETH_USDT","base":"ETH","quote":"USDT","trade_status":"tradable"}]"""));
+
+    /// <summary>
+    /// Verifies the Bitget provider.
+    /// </summary>
+    [Fact]
+    public Task Bitget_IsWiredCorrectly() => VerifyAsync(new Wiring(
+        (descriptor, endpoints, http) => new BitgetProvider(descriptor, endpoints, http, TimeProvider.System, NullLogger.Instance),
+        new BitgetProviderFactory().Descriptor,
+        "BTCUSDT",
+        """{"op":"subscribe","args":[{"instType":"SPOT","channel":"ticker","instId":"BTCUSDT"}]}""",
+        """{"action":"snapshot","arg":{"instType":"SPOT","channel":"ticker","instId":"BTCUSDT"},"data":[{"instId":"BTCUSDT","lastPr":"81513.7","open24h":"84625.6","ts":"1792683284127"}]}""",
+        81513.7m,
+        "/api/v2/spot/market/candles?symbol=BTCUSDT&granularity=1min&limit=60",
+        """{"code":"00000","msg":"success","data":[["1792683480000","1","1","1","81641.1","1"]]}""",
+        "/api/v2/spot/public/symbols",
+        """{"code":"00000","msg":"success","data":[{"symbol":"BTCUSDT","baseCoin":"BTC","quoteCoin":"USDT","status":"online"},{"symbol":"ETHUSDT","baseCoin":"ETH","quoteCoin":"USDT","status":"online"}]}"""));
 
     /// <summary>
     /// Verifies the Binance provider.

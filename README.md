@@ -102,6 +102,7 @@ commodities side by side, from the data sources *you* choose.
 | **Kraken** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
 | **Bybit** | Crypto spot pairs | WebSocket stream | No API key. Not served in some regions. Off by default. |
 | **Gate.io** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
+| **Bitget** | Crypto spot pairs | WebSocket stream | No API key. Not served in some regions. Off by default. |
 | **Simulated** | Anything | Local random walk | For demos, screenshots and offline development. Off by default. |
 
 Sources that are off by default are enabled in **Settings → Sources**. To show an instrument from one of them,
@@ -249,6 +250,7 @@ src/FluxTick.Providers.Coinbase  Coinbase WebSocket source
 src/FluxTick.Providers.Kraken    Kraken WebSocket source
 src/FluxTick.Providers.Bybit     Bybit WebSocket source
 src/FluxTick.Providers.GateIo    Gate.io WebSocket source
+src/FluxTick.Providers.Bitget    Bitget WebSocket source
 src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket source
 src/FluxTick.Providers.Tencent   Tencent Finance polling source
 src/FluxTick.Providers.Sina      Sina Finance WebSocket source

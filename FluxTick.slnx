@@ -24,6 +24,7 @@
   </Folder>
   <Folder Name="/src/providers/">
     <Project Path="src/FluxTick.Providers.Binance/FluxTick.Providers.Binance.csproj" />
+    <Project Path="src/FluxTick.Providers.Bitget/FluxTick.Providers.Bitget.csproj" />
     <Project Path="src/FluxTick.Providers.Bybit/FluxTick.Providers.Bybit.csproj" />
     <Project Path="src/FluxTick.Providers.Coinbase/FluxTick.Providers.Coinbase.csproj" />
     <Project Path="src/FluxTick.Providers.Common/FluxTick.Providers.Common.csproj" />

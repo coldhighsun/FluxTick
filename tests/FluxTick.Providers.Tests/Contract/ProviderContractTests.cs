@@ -1,5 +1,6 @@
 using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
+using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
@@ -251,3 +252,8 @@ public sealed class GateIoProviderContractTests : ProviderContractTests<GateIoPr
 /// Contract tests for the Eulerpool provider.
 /// </summary>
 public sealed class EulerpoolProviderContractTests : ProviderContractTests<EulerpoolProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Bitget provider.
+/// </summary>
+public sealed class BitgetProviderContractTests : ProviderContractTests<BitgetProviderFactory>;
