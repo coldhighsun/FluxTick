@@ -172,6 +172,25 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
     protected virtual string? HeartbeatMessage => null;
 
     /// <summary>
+    /// Gets how long to wait after connecting before the first subscribe message is sent, for servers that reject or
+    /// rate-limit requests that arrive at once. The default is no wait.
+    /// </summary>
+    protected virtual TimeSpan SubscribeDelay => TimeSpan.Zero;
+
+    /// <summary>
+    /// Gives the reply a received message asks for, such as the answer to a server-initiated heartbeat that has to
+    /// echo the id of the request. It is called for every message after <see cref="HandleMessage"/>; the default
+    /// replies to nothing.
+    /// </summary>
+    /// <param name="text">
+    /// The message text.
+    /// </param>
+    /// <returns>
+    /// The text to send back, or <see langword="null"/> when the message needs no reply.
+    /// </returns>
+    protected virtual string? ReplyTo(string text) => null;
+
+    /// <summary>
     /// Sets the options of a new socket before it connects, for example request headers the server insists on. The
     /// default does nothing.
     /// </summary>
@@ -259,6 +278,11 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
                 }
 
                 connectedAt = TimeProvider.GetTimestamp();
+                if (SubscribeDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(SubscribeDelay, TimeProvider, cancellationToken).ConfigureAwait(false);
+                }
+
                 await SubscribeAsync(socket, connectAssets, cancellationToken).ConfigureAwait(false);
                 await ReceiveWithHeartbeatAsync(socket, cancellationToken).ConfigureAwait(false);
                 failure = "Connection closed by server";
