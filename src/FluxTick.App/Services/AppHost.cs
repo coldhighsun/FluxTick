@@ -12,6 +12,7 @@ using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
+using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
 using FluxTick.Providers.Sina;
@@ -175,6 +176,7 @@ public static class AppHost
         services.AddMarketDataProvider<GateIoProviderFactory>();
         services.AddMarketDataProvider<BitgetProviderFactory>();
         services.AddMarketDataProvider<CryptoComProviderFactory>();
+        services.AddMarketDataProvider<KuCoinProviderFactory>();
         services.AddMarketDataProvider<EulerpoolProviderFactory>();
         // The simulated source only exists for the offline demo mode; a normal install does not list it.
         if (demo)

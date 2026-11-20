@@ -95,6 +95,7 @@
 | **Gate.io** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
 | **Bitget** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。部分地区无法访问。默认关闭。 |
 | **Crypto.com** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
+| **KuCoin** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key（每次连接自动获取临时公开令牌）。默认关闭。 |
 | **Simulated（模拟）** | 任意资产 | 本地随机游走 | 用于演示、截图和离线开发。默认关闭。 |
 
 默认关闭的数据源请在**设置 → 数据源**中启用。要显示其中的资产，可以在*添加资产*窗口中选择它，
@@ -236,6 +237,7 @@ src/FluxTick.Providers.Bybit     Bybit WebSocket 数据源
 src/FluxTick.Providers.GateIo    Gate.io WebSocket 数据源
 src/FluxTick.Providers.Bitget    Bitget WebSocket 数据源
 src/FluxTick.Providers.CryptoCom Crypto.com WebSocket 数据源
+src/FluxTick.Providers.KuCoin    KuCoin WebSocket 数据源
 src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket 数据源
 src/FluxTick.Providers.Tencent   腾讯财经轮询数据源
 src/FluxTick.Providers.Sina      新浪财经 WebSocket 数据源
