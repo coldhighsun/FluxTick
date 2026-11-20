@@ -96,6 +96,7 @@ commodities side by side, from the data sources *you* choose.
 | **Yahoo Finance** | Stocks, ETFs, indices, forex, futures, crypto | WebSocket stream | Unofficial API; may be rate limited or change without notice. No API key. **Chinese A-share and Hong Kong prices are 15 minutes old**, so they show as `Delayed`; use Sina or Tencent for live A-share prices. Falls back to polling the chart API (default 5 s) while the stream is down. |
 | **Tencent Finance** | A-shares, Hong Kong and US stocks, ETFs, indices | Polling (default 5 s) | Unofficial API; may be delayed or change without notice. No API key. Search by name, code or pinyin. Sparkline history covers A-shares and Hong Kong only. Off by default. |
 | **Sina Finance** | A-shares, ETFs, indices, currency pairs, international commodity futures | WebSocket stream | Unofficial API; may be rate limited, delayed or change without notice. No API key. Symbols match Tencent's (`sh600000`), but an instrument stays with the source it was added from. Search finds stocks, main indices, and common currency pairs and futures; type ETF codes, and other pairs (`fx_seurusd`) or futures (`hf_GC`) as Sina's codes. Sparkline history covers A-shares, funds and currency pairs. Off by default. |
+| **Eastmoney** | A-shares, Hong Kong and US stocks, ETFs, indices | Polling (default 5 s) | Unofficial API; may be delayed or change without notice. No API key. Symbols are `market.code` (`1.600519`, `116.00700`, `105.AAPL`); search by name, code or pinyin fills them in. Off by default. |
 | **Eulerpool** | Stocks and ETFs worldwide (tickers with an exchange suffix, e.g. `AAPL`, `SAP.DE`) | WebSocket stream | Needs an API key (free at eulerpool.com/developers; see [API keys](#api-keys)). A free key only gets delayed one-second prices; live trades need a paid plan. Search by name, ticker or ISIN. Off by default. |
 | **OKX** | Crypto spot pairs | WebSocket stream | No API key. Off by default. |
 | **Coinbase** | Crypto spot pairs | WebSocket stream | Coinbase Exchange. No API key. Off by default. |
@@ -258,6 +259,7 @@ src/FluxTick.Providers.KuCoin    KuCoin WebSocket source
 src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket source
 src/FluxTick.Providers.Tencent   Tencent Finance polling source
 src/FluxTick.Providers.Sina      Sina Finance WebSocket source
+src/FluxTick.Providers.Eastmoney Eastmoney polling source
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket source (API key)
 src/FluxTick.Providers.Simulated Deterministic demo source
 src/FluxTick.App                 Avalonia desktop app (FluxTick.exe), composition root

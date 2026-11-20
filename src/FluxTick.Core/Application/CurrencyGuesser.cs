@@ -27,6 +27,9 @@ public static class CurrencyGuesser
             "tencent" when text.StartsWith("us", StringComparison.OrdinalIgnoreCase) => "USD",
             "tencent" => "CNY",
             "yahoo" => GuessYahoo(text),
+            "eastmoney" when text.StartsWith("116.", StringComparison.Ordinal) => "HKD",
+            "eastmoney" when text.StartsWith("105.", StringComparison.Ordinal) || text.StartsWith("106.", StringComparison.Ordinal) || text.StartsWith("107.", StringComparison.Ordinal) => "USD",
+            "eastmoney" => "CNY",
             "binance" or "bybit" or "okx" or "coinbase" or "kraken" or "gateio" or "bitget" or "cryptocom" or "kucoin" => GuessFromPair(text),
             _ => CurrencyCodes.Pivot,
         };

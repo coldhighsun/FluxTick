@@ -62,6 +62,7 @@
     <ProjectReference Include="..\FluxTick.Providers.Bitget\FluxTick.Providers.Bitget.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.CryptoCom\FluxTick.Providers.CryptoCom.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.KuCoin\FluxTick.Providers.KuCoin.csproj" />
+    <ProjectReference Include="..\FluxTick.Providers.Eastmoney\FluxTick.Providers.Eastmoney.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Eulerpool\FluxTick.Providers.Eulerpool.csproj" />
     <ProjectReference Include="..\FluxTick.Providers.Simulated\FluxTick.Providers.Simulated.csproj" />
   </ItemGroup>
