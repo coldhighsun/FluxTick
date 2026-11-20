@@ -138,6 +138,79 @@ internal static class TwelveDataParser
     }
 
     /// <summary>
+    /// Reads the market identifier code of each symbol of an answer of the quote service, which tells the exchange of the
+    /// symbol and so its trading hours.
+    /// </summary>
+    /// <param name="json">
+    /// The response body.
+    /// </param>
+    /// <returns>
+    /// The code by symbol, for the symbols that carry one.
+    /// </returns>
+    public static IReadOnlyDictionary<string, string> ParseExchanges(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return codes;
+        }
+
+        if (root.TryGetProperty("symbol", out _))
+        {
+            AddExchange(root, codes);
+        }
+        else
+        {
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    AddExchange(property.Value, codes);
+                }
+            }
+        }
+
+        return codes;
+    }
+
+    /// <summary>
+    /// Finds the trading hours of an exchange by its market identifier code.
+    /// </summary>
+    /// <param name="micCode">
+    /// The code, for example <c>XNGS</c>.
+    /// </param>
+    /// <returns>
+    /// The hours, or <see langword="null"/> for an exchange that is not known.
+    /// </returns>
+    public static ExchangeHours? ExchangeOf(string micCode) => micCode.ToUpperInvariant() switch
+    {
+        "XNGS" or "XNMS" or "XNCM" or "XNAS" or "XNYS" or "ARCX" or "XASE" or "BATS" or "IEXG" => ExchangeHours.Us,
+        "XSHG" or "XSHE" => ExchangeHours.ChinaA,
+        "XHKG" => ExchangeHours.HongKong,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Reads the code of one quote object and adds it.
+    /// </summary>
+    /// <param name="item">
+    /// The quote object.
+    /// </param>
+    /// <param name="codes">
+    /// The dictionary to add to.
+    /// </param>
+    private static void AddExchange(JsonElement item, Dictionary<string, string> codes)
+    {
+        if (item.TryGetProperty("symbol", out var symbol) && symbol.GetString() is { Length: > 0 } name
+            && item.TryGetProperty("mic_code", out var mic) && mic.GetString() is { Length: > 0 } code)
+        {
+            codes[name] = code;
+        }
+    }
+
+    /// <summary>
     /// Reads one quote object and adds it when it carries a price.
     /// </summary>
     /// <param name="item">

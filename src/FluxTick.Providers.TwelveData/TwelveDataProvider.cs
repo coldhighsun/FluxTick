@@ -10,7 +10,7 @@ namespace FluxTick.Providers.TwelveData;
 /// Streams prices from the Twelve Data WebSocket. The REST quote service gives every new instrument its first price and
 /// the previous close the change is measured against, and takes over while the stream is down.
 /// </summary>
-public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider
+public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -31,6 +31,11 @@ public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRange
     /// The API key.
     /// </summary>
     private readonly string _apiKey;
+
+    /// <summary>
+    /// The market identifier code of each symbol, learned from its first quote, which tells its trading hours.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, string> _exchanges = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The previous close of each symbol, which gives the change; the stream carries prices only.
@@ -161,6 +166,21 @@ public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRange
     }
 
     /// <inheritdoc />
+    public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null)
+    {
+        // A pair of currencies or of a cryptocurrency (BTC/USD) trades around the clock; a stock follows its exchange once the
+        // first quote has told which it is, and is of unknown state until then.
+        if (asset.Symbol.Contains('/', StringComparison.Ordinal))
+        {
+            return MarketState.Open;
+        }
+
+        return _exchanges.TryGetValue(asset.Symbol, out var mic)
+            ? ExchangeHours.StateOf(TwelveDataParser.ExchangeOf(mic), now, lastTradeTime, holidayGrace)
+            : MarketState.Unknown;
+    }
+
+    /// <inheritdoc />
     protected override Uri BuildConnectionUri(IReadOnlyCollection<Asset> assets) =>
         new UriBuilder(_streamBase) { Query = $"apikey={Uri.EscapeDataString(_apiKey)}" }.Uri;
 
@@ -226,7 +246,13 @@ public sealed class TwelveDataProvider : RestBackedWebSocketProviderBase, IRange
     private async Task<IReadOnlyList<ParsedQuote>> RequestQuotesAsync(string[] codes, CancellationToken cancellationToken)
     {
         var uri = EndpointOptions.Combine(_apiBase, $"/quote?symbol={Uri.EscapeDataString(string.Join(',', codes))}");
-        var quotes = TwelveDataParser.ParseQuotes(await GetStringAsync(uri, cancellationToken).ConfigureAwait(false));
+        var json = await GetStringAsync(uri, cancellationToken).ConfigureAwait(false);
+        var quotes = TwelveDataParser.ParseQuotes(json);
+        foreach (var (symbol, mic) in TwelveDataParser.ParseExchanges(json))
+        {
+            _exchanges[symbol] = mic;
+        }
+
         foreach (var quote in quotes)
         {
             if (quote.PreviousClose is { } previous)
