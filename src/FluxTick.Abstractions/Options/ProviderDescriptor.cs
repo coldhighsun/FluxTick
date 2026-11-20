@@ -43,6 +43,11 @@ public enum ProviderUpdateMode
 /// <param name="EnabledByDefault">
 /// Whether the provider is enabled on first run. Demo or test providers set this to <see langword="false"/>.
 /// </param>
+/// <param name="Recommendation">
+/// The recommendation score from 1 to 5 stars, or <see langword="null"/> when the source is not rated (demo or test
+/// sources). Scored on timeliness, reliability, ease of use, coverage and free-plan limits; see
+/// <c>docs/ADDING_A_PROVIDER.md</c> for the rubric.
+/// </param>
 public sealed record ProviderDescriptor(
     string Id,
     string DisplayName,
@@ -51,7 +56,8 @@ public sealed record ProviderDescriptor(
     ProviderUpdateMode UpdateMode,
     Uri? Homepage = null,
     IReadOnlyList<ProviderOptionDefinition>? Options = null,
-    bool EnabledByDefault = true)
+    bool EnabledByDefault = true,
+    int? Recommendation = null)
 {
     /// <summary>
     /// Gets the option definitions, never <see langword="null"/>.

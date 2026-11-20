@@ -26,7 +26,8 @@ public sealed class GateIoProviderFactory : IMarketDataProviderFactory
             "wss://api.gateio.ws/ws/v4/",
             "Change this if gateio.ws is unreachable from your network.",
             "https://api.gateio.ws"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 4);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

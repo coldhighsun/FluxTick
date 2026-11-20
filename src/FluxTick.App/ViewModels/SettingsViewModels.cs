@@ -601,6 +601,21 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
     public string Description => ProviderText.Description(Descriptor);
 
     /// <summary>
+    /// Gets the recommendation of the data source as stars, or an empty string when it is not rated.
+    /// </summary>
+    public string Stars => RecommendationStars.Format(Descriptor.Recommendation);
+
+    /// <summary>
+    /// Gets a value indicating whether the data source has a recommendation to show.
+    /// </summary>
+    public bool HasStars => Descriptor.Recommendation is not null;
+
+    /// <summary>
+    /// Gets the tooltip of the stars, which says what the score is out of.
+    /// </summary>
+    public string StarsTooltip => Loc.Get("Provider_Recommendation", Descriptor.Recommendation ?? 0, RecommendationStars.MaxStars);
+
+    /// <summary>
     /// Gets the address of the site of the data source, or <see langword="null"/> when it has none or the address is not
     /// one the app opens (see <see cref="ExternalLinks.IsWebUrl"/>).
     /// </summary>
@@ -887,6 +902,7 @@ public sealed partial class ProviderSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(StarsTooltip));
         _assetClassLabels = null;
         OnPropertyChanged(nameof(AssetClassLabels));
         OnPropertyChanged(nameof(ModeLabel));

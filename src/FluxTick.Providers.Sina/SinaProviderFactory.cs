@@ -63,7 +63,8 @@ public sealed class SinaProviderFactory : IMarketDataProviderFactory
                 "Used for prices. Symbol search uses suggest3.sinajs.cn.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 3);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)

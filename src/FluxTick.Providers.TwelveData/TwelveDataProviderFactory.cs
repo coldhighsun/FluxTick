@@ -75,7 +75,8 @@ public sealed class TwelveDataProviderFactory : IMarketDataProviderFactory
                 "Used for first prices, history, symbol search and as a fallback.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 3);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

@@ -62,7 +62,8 @@ public sealed class YahooProviderFactory : IMarketDataProviderFactory
                 "https://query1.finance.yahoo.com",
                 "Alternative: https://query2.finance.yahoo.com",
                 Advanced: true),
-        ]);
+        ],
+        Recommendation: 4);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)

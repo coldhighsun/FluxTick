@@ -207,6 +207,7 @@
   "Provider_NeedsSetup": "需要设置",
   "Provider_Off": "已关闭",
   "Provider_Polling": "轮询",
+  "Provider_Recommendation": "推荐度：{0} / {1} 星",
   "Provider_Reconnecting": "重新连接中",
   "Provider_Streaming": "实时推送",
   "Provider_Unknown": "未知",

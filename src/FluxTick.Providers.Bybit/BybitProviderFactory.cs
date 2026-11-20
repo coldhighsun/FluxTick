@@ -26,7 +26,8 @@ public sealed class BybitProviderFactory : IMarketDataProviderFactory
             "wss://stream.bybit.com/v5/public/spot",
             "Change this if bybit.com is unreachable from your network. Bybit does not serve some regions.",
             "https://api.bybit.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 4);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

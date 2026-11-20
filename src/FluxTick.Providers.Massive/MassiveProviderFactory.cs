@@ -76,7 +76,8 @@ public sealed class MassiveProviderFactory : IMarketDataProviderFactory
                 "Used for prices, history and symbol search.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 2);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

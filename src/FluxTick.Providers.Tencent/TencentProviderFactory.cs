@@ -50,7 +50,8 @@ public sealed class TencentProviderFactory : IMarketDataProviderFactory
                 "Used for prices. Symbol search and history use smartbox.gtimg.cn and web.ifzq.gtimg.cn.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 3);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)
