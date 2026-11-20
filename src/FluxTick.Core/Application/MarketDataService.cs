@@ -1709,6 +1709,21 @@ public sealed class MarketDataService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Gives the currency the provider of an instrument reports for it.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <returns>
+    /// The currency as the provider writes it, or <see langword="null"/> when the provider does not report one or is not
+    /// running.
+    /// </returns>
+    public string? QuoteCurrencyOf(Asset asset) =>
+        _slots.TryGetValue(asset.ProviderId, out var slot) && slot.Provider is IQuoteCurrencyProvider source
+            ? source.QuoteCurrencyOf(asset)
+            : null;
+
+    /// <summary>
     /// Tells whether the market of an instrument was shut at a time, by the regular hours alone: closed, in its midday break,
     /// or outside the regular session. Most sources give candles of the regular session only, so the hours before and after
     /// it are part of the night of the chart. A market whose hours are not known, and one that is always open such as crypto,

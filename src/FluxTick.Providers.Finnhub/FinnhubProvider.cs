@@ -9,7 +9,7 @@ namespace FluxTick.Providers.Finnhub;
 /// Streams US stock trades from Finnhub. The REST API gives every new instrument its first price and the previous close
 /// the change is measured against, and takes over while the stream is down.
 /// </summary>
-public sealed class FinnhubProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider, IMarketHoursProvider
+public sealed class FinnhubProvider : RestBackedWebSocketProviderBase, ISymbolSearchProvider, IMarketHoursProvider, IQuoteCurrencyProvider
 {
     /// <summary>
     /// The number of search results returned.
@@ -89,6 +89,9 @@ public sealed class FinnhubProvider : RestBackedWebSocketProviderBase, ISymbolSe
         _apiKey = apiKey;
         _http = http;
     }
+
+    /// <inheritdoc />
+    public string? QuoteCurrencyOf(Asset asset) => "USD";
 
     /// <inheritdoc />
     public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>

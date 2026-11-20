@@ -7,7 +7,7 @@ namespace FluxTick.Providers.Common;
 /// Base class for crypto exchange sources that stream tickers over a WebSocket and use REST for one-minute history
 /// and for the list of tradable pairs behind symbol search. Derived classes describe the exchange's wire formats.
 /// </summary>
-public abstract class CryptoExchangeProvider : WebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider
+public abstract class CryptoExchangeProvider : WebSocketProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IQuoteCurrencyProvider
 {
     /// <summary>
     /// How long a downloaded pair list stays valid.
@@ -76,6 +76,14 @@ public abstract class CryptoExchangeProvider : WebSocketProviderBase, IRangeHist
                         ex.Message);
                 }
             });
+    }
+
+    /// <inheritdoc />
+    public virtual string? QuoteCurrencyOf(Asset asset)
+    {
+        // The quote currency is the last part of a pair written with a separator: BTC-USD, BTC_USDT, BTC/USD.
+        var separator = asset.Symbol.LastIndexOfAny(['-', '_', '/']);
+        return separator >= 0 && separator < asset.Symbol.Length - 1 ? asset.Symbol[(separator + 1)..] : null;
     }
 
     /// <summary>

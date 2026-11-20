@@ -61,6 +61,25 @@ internal static class EastmoneyParser
     }
 
     /// <summary>
+    /// Gives the currency an instrument is quoted in from its market id: Hong Kong dollars in Hong Kong, US dollars in the
+    /// US and yuan on the mainland.
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol.
+    /// </param>
+    /// <returns>
+    /// The currency code, or <see langword="null"/> when the market is not known.
+    /// </returns>
+    public static string? CurrencyOf(string symbol)
+    {
+        var exchange = ExchangeOf(symbol);
+        return exchange is null ? null
+            : ReferenceEquals(exchange, ExchangeHours.HongKong) ? "HKD"
+            : ReferenceEquals(exchange, ExchangeHours.Us) ? "USD"
+            : "CNY";
+    }
+
+    /// <summary>
     /// Finds the exchange of a market id.
     /// </summary>
     /// <param name="market">

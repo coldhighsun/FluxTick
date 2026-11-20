@@ -147,19 +147,33 @@ internal static class TwelveDataParser
     /// <returns>
     /// The code by symbol, for the symbols that carry one.
     /// </returns>
-    public static IReadOnlyDictionary<string, string> ParseExchanges(string json)
+    public static IReadOnlyDictionary<string, string> ParseExchanges(string json) => ParseField(json, "mic_code");
+
+    /// <summary>
+    /// Reads a text field of each symbol of an answer of the quote service.
+    /// </summary>
+    /// <param name="json">
+    /// The response body.
+    /// </param>
+    /// <param name="field">
+    /// The field, for example <c>currency</c>.
+    /// </param>
+    /// <returns>
+    /// The value by symbol, for the symbols that carry the field.
+    /// </returns>
+    public static IReadOnlyDictionary<string, string> ParseField(string json, string field)
     {
         using var document = JsonDocument.Parse(json);
-        var codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
         {
-            return codes;
+            return values;
         }
 
         if (root.TryGetProperty("symbol", out _))
         {
-            AddExchange(root, codes);
+            AddField(root, field, values);
         }
         else
         {
@@ -167,12 +181,12 @@ internal static class TwelveDataParser
             {
                 if (property.Value.ValueKind == JsonValueKind.Object)
                 {
-                    AddExchange(property.Value, codes);
+                    AddField(property.Value, field, values);
                 }
             }
         }
 
-        return codes;
+        return values;
     }
 
     /// <summary>
@@ -193,20 +207,23 @@ internal static class TwelveDataParser
     };
 
     /// <summary>
-    /// Reads the code of one quote object and adds it.
+    /// Reads a text field of one quote object and adds it.
     /// </summary>
     /// <param name="item">
     /// The quote object.
     /// </param>
-    /// <param name="codes">
+    /// <param name="field">
+    /// The field.
+    /// </param>
+    /// <param name="values">
     /// The dictionary to add to.
     /// </param>
-    private static void AddExchange(JsonElement item, Dictionary<string, string> codes)
+    private static void AddField(JsonElement item, string field, Dictionary<string, string> values)
     {
         if (item.TryGetProperty("symbol", out var symbol) && symbol.GetString() is { Length: > 0 } name
-            && item.TryGetProperty("mic_code", out var mic) && mic.GetString() is { Length: > 0 } code)
+            && item.TryGetProperty(field, out var value) && value.GetString() is { Length: > 0 } text)
         {
-            codes[name] = code;
+            values[name] = text;
         }
     }
 
