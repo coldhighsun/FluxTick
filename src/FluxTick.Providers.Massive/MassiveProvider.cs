@@ -156,8 +156,8 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
     private Uri BarsUri(string symbol, string timespan, TimeSpan window, string sort, int limit)
     {
         var now = TimeProvider.GetUtcNow();
-        var to = DateOnly.FromDateTime(now.UtcDateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var from = DateOnly.FromDateTime((now - window).UtcDateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var to = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var from = (now - window).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         return EndpointOptions.Combine(
             _apiBase,
             $"/v2/aggs/ticker/{Uri.EscapeDataString(symbol)}/range/1/{timespan}/{from}/{to}?adjusted=true&sort={sort}&limit={limit}");

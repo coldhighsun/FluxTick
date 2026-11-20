@@ -256,23 +256,14 @@ internal static class EastmoneyParser
     /// </returns>
     private static bool TryParseTime(string text, ExchangeHours? exchange, out DateTimeOffset time)
     {
-        time = default;
-        if (DateTime.TryParseExact(text, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var minute))
+        // Candles are dated in Beijing time whatever the market, except a daily candle, which is dated at the close of its
+        // day in the time zone of the exchange: mainland markets close at 15:00 local time, the others at 16:00.
+        if (text.Contains(':', StringComparison.Ordinal))
         {
-            time = new DateTimeOffset(minute, AsiaOffset);
-            return true;
+            return ZonedTime.TryParse(text, ["yyyy-MM-dd HH:mm"], null, AsiaOffset, 0, out time);
         }
 
-        if (!DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
-        {
-            return false;
-        }
-
-        // Mainland markets close at 15:00 local time, the others at 16:00.
-        var closeOfDay = day.AddHours(ReferenceEquals(exchange, ExchangeHours.ChinaA) ? 15 : 16);
-        var offset = exchange?.Zone is { } zone ? zone.GetUtcOffset(closeOfDay) : AsiaOffset;
-        time = new DateTimeOffset(closeOfDay, offset);
-        return true;
+        return ZonedTime.TryParse(text, ["yyyy-MM-dd"], exchange?.Zone, AsiaOffset, ReferenceEquals(exchange, ExchangeHours.ChinaA) ? 15 : 16, out time);
     }
 
     /// <summary>

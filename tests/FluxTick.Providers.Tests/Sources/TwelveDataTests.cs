@@ -77,7 +77,7 @@ public class TwelveDataTests
         points.Select(p => p.Price).Should().Equal(349.23m, 349.11m);
 
         // 15:59 Eastern Standard Time on 19 November is 20:59 UTC.
-        points[1].Timestamp.UtcDateTime.Should().Be(new DateTime(2026, 11, 19, 20, 59, 0, DateTimeKind.Utc));
+        points[1].Timestamp.Should().Be(new DateTimeOffset(2026, 11, 19, 20, 59, 0, TimeSpan.Zero));
     }
 
     /// <summary>
@@ -88,8 +88,8 @@ public class TwelveDataTests
     {
         const string json = """{"meta":{"exchange_timezone":"America/New_York"},"values":[{"datetime":"2026-11-19","close":"349.21"}],"status":"ok"}""";
 
-        TwelveDataParser.ParseTimeSeries(json).Single().Timestamp.UtcDateTime
-            .Should().Be(new DateTime(2026, 11, 19, 21, 0, 0, DateTimeKind.Utc));
+        TwelveDataParser.ParseTimeSeries(json).Single().Timestamp
+            .Should().Be(new DateTimeOffset(2026, 11, 19, 21, 0, 0, TimeSpan.Zero));
     }
 
     /// <summary>

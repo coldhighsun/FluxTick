@@ -136,7 +136,11 @@ internal static class MassiveParser
     /// <returns>
     /// The date.
     /// </returns>
-    public static DateOnly EasternDate(DateTimeOffset time) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, Eastern).Date);
+    public static DateOnly EasternDate(DateTimeOffset time)
+    {
+        var local = TimeZoneInfo.ConvertTime(time, Eastern);
+        return new DateOnly(local.Year, local.Month, local.Day);
+    }
 
     /// <summary>
     /// Turns the newest of daily bars into a quote when there are no minute bars: the close of the newest is the price
@@ -167,8 +171,8 @@ internal static class MassiveParser
     /// </returns>
     private static DateTimeOffset CloseOfDay(DateTimeOffset barStart)
     {
-        var day = TimeZoneInfo.ConvertTime(barStart, Eastern).Date.AddHours(16);
-        return new DateTimeOffset(day, Eastern.GetUtcOffset(day));
+        var day = TimeZoneInfo.ConvertTime(barStart, Eastern);
+        return ZonedTime.At(Eastern, TimeSpan.FromHours(-5), day.Year, day.Month, day.Day, 16);
     }
 
     /// <summary>

@@ -68,7 +68,7 @@ public class MassiveTests
         var bars = MassiveParser.ParseDailyBars(TwoBars);
 
         // 16:00 Eastern Standard Time on 19 November is 21:00 UTC.
-        bars[0].Timestamp.UtcDateTime.Should().Be(new DateTime(2026, 11, 19, 21, 0, 0, DateTimeKind.Utc));
+        bars[0].Timestamp.Should().Be(new DateTimeOffset(2026, 11, 19, 21, 0, 0, TimeSpan.Zero));
         MassiveParser.ParseDailyBars("""{"ticker":"ZZZZ","status":"OK","resultsCount":0}""").Should().BeEmpty();
 
         var act = () => MassiveParser.ParseDailyBars("""{"status":"ERROR","request_id":"x","error":"Unknown API Key"}""");
