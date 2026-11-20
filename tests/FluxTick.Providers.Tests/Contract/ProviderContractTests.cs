@@ -108,6 +108,26 @@ public abstract class ProviderContractTests<TFactory>
     }
 
     /// <summary>
+    /// Verifies the recommendation is a score from 1 to 5, and that a source needing an API key never gets the top score.
+    /// </summary>
+    [Fact]
+    public void Descriptor_Recommendation_IsWithinRange()
+    {
+        var descriptor = new TFactory().Descriptor;
+
+        if (descriptor.Recommendation is not { } stars)
+        {
+            return;
+        }
+
+        stars.Should().BeInRange(1, 5);
+        if (descriptor.RequiresApiKey)
+        {
+            stars.Should().BeLessThan(5, "a source that needs a key is capped at 4 stars");
+        }
+    }
+
+    /// <summary>
     /// Verifies garbage option values never prevent a provider from being created.
     /// </summary>
     [Fact]

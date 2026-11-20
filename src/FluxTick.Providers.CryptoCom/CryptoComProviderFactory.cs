@@ -26,7 +26,8 @@ public sealed class CryptoComProviderFactory : IMarketDataProviderFactory
             "wss://stream.crypto.com/exchange/v1/market",
             "Change this if crypto.com is unreachable from your network.",
             "https://api.crypto.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 4);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

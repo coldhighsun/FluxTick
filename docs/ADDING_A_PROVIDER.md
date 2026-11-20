@@ -167,6 +167,21 @@ Optional descriptor arguments:
   (Tencent, OKX and Simulated do this). Use it for demo sources and for sources that only suit some users.
 - `RequiresApiKey` (read-only) is true when the source has a `Required` option, such as a key.
 - `Homepage` is the official site of the data source (an https address). The settings page shows it as a link on the detail page of the source, so the user can open it; leave it out only for a source that makes up its data.
+- `Recommendation` is the recommendation score, 1 to 5 stars, shown next to the name on the list row and the detail page. Leave it `null` only for a demo source (Simulated).
+
+#### Scoring a source
+
+Score five dimensions from 0 to 2 each (total 0 to 10); the stars are the total divided by 2, rounded half up, at least 1.
+
+| Dimension | 2 | 1 | 0 |
+|---|---|---|---|
+| Timeliness | Push stream, live prices | Polling, or a free plan with delay | Delayed more than 15 minutes, or not usable live |
+| Reliability | Official public API | Unofficial but stable | Unofficial and fragile or rate limited |
+| Ease of use | No key, no region block | Free key needed, or a known region block | Needs a paid plan for real use |
+| Coverage | Several markets, with history ranges, search and trading hours | One market, or one capability missing | Few capabilities |
+| Free-plan limits | Hardly any | Tight symbol or request cap | Barely usable |
+
+Two caps apply: an unofficial source gets at most 4 stars, and so does a source that needs an API key. Five stars therefore means official, keyless, streaming and broad.
 
 Option types: `String`, `Secret`, `Int`, `Bool`, `Duration`, `Choice`. The settings page generates the right editor
 and validates input from the definition. `ProviderOptions` always returns a valid value, falling back to the default

@@ -26,7 +26,8 @@ public sealed class BinanceProviderFactory : IMarketDataProviderFactory
             "wss://stream.binance.com:9443/ws",
             "Use wss://data-stream.binance.vision/ws if binance.com is unreachable from your network.",
             "https://api.binance.com",
-            "Used for history and symbol search. Alternative: https://data-api.binance.vision"));
+            "Used for history and symbol search. Alternative: https://data-api.binance.vision"),
+        Recommendation: 5);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

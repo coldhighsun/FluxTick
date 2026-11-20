@@ -26,7 +26,8 @@ public sealed class KrakenProviderFactory : IMarketDataProviderFactory
             "wss://ws.kraken.com/v2",
             "Change this if kraken.com is unreachable from your network.",
             "https://api.kraken.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 3);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

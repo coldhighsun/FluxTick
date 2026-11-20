@@ -26,7 +26,8 @@ public sealed class BitgetProviderFactory : IMarketDataProviderFactory
             "wss://ws.bitget.com/v2/ws/public",
             "Change this if bitget.com is unreachable from your network. Bitget does not serve some regions.",
             "https://api.bitget.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 4);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

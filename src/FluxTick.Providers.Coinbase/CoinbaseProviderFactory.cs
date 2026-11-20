@@ -26,7 +26,8 @@ public sealed class CoinbaseProviderFactory : IMarketDataProviderFactory
             "wss://ws-feed.exchange.coinbase.com",
             "Change this if coinbase.com is unreachable from your network.",
             "https://api.exchange.coinbase.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 2);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

@@ -75,7 +75,8 @@ public sealed class FinnhubProviderFactory : IMarketDataProviderFactory
                 "Used for symbol search, first prices and as a fallback.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 3);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

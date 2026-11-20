@@ -62,7 +62,8 @@ public sealed class EastmoneyProviderFactory : IMarketDataProviderFactory
                 "Used for first prices and as a fallback. Symbol search and history use searchadapter.eastmoney.com and push2his.eastmoney.com.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 3);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)

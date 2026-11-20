@@ -26,7 +26,8 @@ public sealed class KuCoinProviderFactory : IMarketDataProviderFactory
             "wss://ws-api-spot.kucoin.com/",
             "Only used when the server does not name an address itself. KuCoin tells the app where to connect when it hands out the temporary token.",
             "https://api.kucoin.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 4);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>

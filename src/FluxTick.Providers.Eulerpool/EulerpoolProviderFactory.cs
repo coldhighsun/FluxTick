@@ -75,7 +75,8 @@ public sealed class EulerpoolProviderFactory : IMarketDataProviderFactory
                 "Used for symbol search, first prices and as a fallback.",
                 Advanced: true),
         ],
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 2);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context)

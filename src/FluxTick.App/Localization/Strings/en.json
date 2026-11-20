@@ -141,6 +141,7 @@
   "Provider_NeedsSetup": "Needs setup",
   "Provider_Off": "Off",
   "Provider_Polling": "Polling",
+  "Provider_Recommendation": "Recommendation: {0} of {1} stars",
   "Provider_Reconnecting": "Reconnecting",
   "Provider_Streaming": "Streaming",
   "Provider_Unknown": "Unknown",

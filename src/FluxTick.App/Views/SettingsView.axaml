@@ -54,6 +54,8 @@
               <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Stars}" IsVisible="{Binding HasStars}" FontSize="11" VerticalAlignment="Center"
+                             Foreground="{DynamicResource WarnBrush}" ToolTip.Tip="{Binding StarsTooltip}" />
                   <Border Classes="chip warn" IsVisible="{Binding HasMissingRequired}" VerticalAlignment="Center">
                     <TextBlock Text="{loc:T Provider_NeedsSetup}" Classes="warn" FontSize="11" />
                   </Border>
@@ -416,7 +418,11 @@
                   <Path Classes="chevron" Data="M9 3l-4 4 4 4" Width="14" Height="14" />
                 </Button>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Stars}" IsVisible="{Binding HasStars}" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource WarnBrush}" ToolTip.Tip="{Binding StarsTooltip}" />
+                  </StackPanel>
                   <StackPanel Orientation="Horizontal" Spacing="5">
                     <Ellipse Classes="dot" Classes.good="{Binding StatusGood}" Classes.bad="{Binding StatusBad}" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding StatusText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}" />

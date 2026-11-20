@@ -26,7 +26,8 @@ public sealed class OkxProviderFactory : IMarketDataProviderFactory
             "wss://ws.okx.com:8443/ws/v5/public",
             "Change this if okx.com is unreachable from your network.",
             "https://www.okx.com"),
-        EnabledByDefault: false);
+        EnabledByDefault: false,
+        Recommendation: 5);
 
     /// <inheritdoc />
     public IMarketDataProvider Create(ProviderCreationContext context) =>
