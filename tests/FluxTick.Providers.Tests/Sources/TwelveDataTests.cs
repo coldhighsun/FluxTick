@@ -23,7 +23,7 @@ public class TwelveDataTests
     /// A quote answer for several symbols, one of which failed.
     /// </summary>
     private const string BatchQuote =
-        """{"AAPL":{"symbol":"AAPL","close":"349.21","previous_close":"352.45","timestamp":1795098600},"MSFT":{"symbol":"MSFT","close":"410.5","previous_close":"405.0","last_quote_at":1795121900},"ZZZZ":{"code":400,"message":"symbol not found","status":"error"}}""";
+        """{"AAPL":{"symbol":"AAPL","close":"349.21","previous_close":"352.45","timestamp":1795098600},"MSFT":{"symbol":"MSFT","close":"410.5","previous_close":"405.0","last_quote_at":1795121900},"ZZZZ":{"code":404,"message":"**symbol** not found: ZZZZ.","status":"error","meta":{"symbol":"AAPL,MSFT,ZZZZ","interval":"","exchange":""}}}""";
 
     /// <summary>
     /// Verifies the answer for one symbol is read as the quote itself, dated at the last quote.
