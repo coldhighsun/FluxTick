@@ -87,7 +87,7 @@
 | **Yahoo Finance** | 股票、ETF、指數、外匯、期貨、加密貨幣 | WebSocket 推送 | 非官方 API，可能被限流或無通知變更。無需 API Key。**A 股和港股行情有 15 分鐘延遲**，因此會顯示為報價延遲；需要 A 股即時行情請使用新浪或騰訊。推送中斷期間改為輪詢圖表 API（預設 5 秒）。 |
 | **Tencent Finance（騰訊財經）** | A 股、港股、美股、ETF、指數 | 輪詢（預設 5 秒） | 非官方 API，可能延遲或無通知變更。無需 API Key。支援依名稱、代碼或拼音搜尋。走勢圖歷史僅涵蓋 A 股和港股。預設關閉。 |
 | **Sina Finance（新浪財經）** | A 股、ETF、指數、外匯、國際商品期貨 | WebSocket 推送 | 非官方 API，可能被限流、延遲或無通知變更。無需 API Key。代碼格式與騰訊相同（如 `sh600000`），但自選標的會固定在新增時的資料來源。可搜尋股票、主要指數和常用外匯、期貨；ETF 需直接輸入代碼，其他外匯（`fx_seurusd`）和期貨（`hf_GC`）輸入新浪的代碼。走勢圖歷史涵蓋 A 股、基金和外匯。預設關閉。 |
-| **Eastmoney（東方財富）** | A 股、港股、美股、ETF、指數 | 輪詢（預設 5 秒） | 非官方介面，可能延遲或隨時變動。無需 API Key。代碼寫作 `市場.代碼`（`1.600519`、`116.00700`、`105.AAPL`），可透過名稱、代碼或拼音搜尋自動填入。預設關閉。 |
+| **Eastmoney（東方財富）** | A 股、港股、美股、ETF、指數 | 事件流推送（每個品種一條連線） | 非官方介面，可能延遲或隨時變動。推送中斷期間由批量行情介面提供首個價格和備用行情（預設 5 秒）。無需 API Key。代碼寫作 `市場.代碼`（`1.600519`、`116.00700`、`105.AAPL`），可透過名稱、代碼或拼音搜尋自動填入。預設關閉。 |
 | **Eulerpool** | 全球股票和 ETF（代碼帶交易所後綴，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免費申請，詳見 [API Key](#api-key)）。免費 Key 只能收到延遲的 1 秒行情，即時成交需要付費方案。支援依名稱、代碼或 ISIN 搜尋。預設關閉。 |
 | **Finnhub** | 美股和 ETF | WebSocket 推送 | 需要 API Key（在 finnhub.io 免費申請，詳見 [API Key](#api-key)）。免費 Key 每分鐘 60 次 REST 請求、可推送 50 個代碼；推送提供美股即時成交，REST 提供首個價格和備用行情。免費方案沒有走勢圖歷史，走勢圖由即時價格累積。支援依名稱或代碼搜尋。預設關閉。 |
 | **Massive** | 美股和 ETF | 輪詢（預設 5 分鐘） | 需要 API Key（在 massive.com 免費申請，詳見 [API Key](#api-key)）。前身為 Polygon.io。免費方案沒有 WebSocket 和快照，因此應用程式輪詢延遲的 1 分鐘 K 線，每分鐘 5 次請求（每個代碼一到兩次，間隔 13 秒）：不是即時行情，適合少量代碼；付費方案才有推送。走勢圖歷史涵蓋最近一小時，以及一個月及更長區間。支援依名稱或代碼搜尋。預設關閉。 |
@@ -245,7 +245,7 @@ src/FluxTick.Providers.KuCoin    KuCoin WebSocket 資料來源
 src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket 資料來源
 src/FluxTick.Providers.Tencent   騰訊財經輪詢資料來源
 src/FluxTick.Providers.Sina      新浪財經 WebSocket 資料來源
-src/FluxTick.Providers.Eastmoney 東方財富輪詢資料來源
+src/FluxTick.Providers.Eastmoney 東方財富事件流資料來源
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket 資料來源（需 API Key）
 src/FluxTick.Providers.Finnhub   Finnhub WebSocket 資料來源（需 API Key）
 src/FluxTick.Providers.Massive   Massive 輪詢資料來源（需 API Key）

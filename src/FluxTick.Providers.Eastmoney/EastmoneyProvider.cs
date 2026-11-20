@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
 using Microsoft.Extensions.Logging;
@@ -5,7 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace FluxTick.Providers.Eastmoney;
 
 /// <summary>
-/// Polls the Eastmoney quote service for every subscribed instrument, one request per batch of instruments.
+/// Streams the prices of the subscribed instruments over Eastmoney's server-sent event streams, one connection per
+/// instrument. The batch quote service gives each new instrument its first price and takes over for an instrument whose
+/// stream is down, as the poll of the base class.
 /// </summary>
 public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHistoryProvider, ISymbolSearchProvider, IMarketHoursProvider
 {
@@ -30,9 +33,19 @@ public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHis
     private readonly Uri _quoteBase;
 
     /// <summary>
+    /// The host of the instrument streams.
+    /// </summary>
+    private readonly Uri _streamBase;
+
+    /// <summary>
     /// The HTTP client; owned by the provider.
     /// </summary>
     private readonly HttpClient _http;
+
+    /// <summary>
+    /// The running streams by instrument, each with the token that ends it.
+    /// </summary>
+    private readonly ConcurrentDictionary<AssetId, (EastmoneyStream Stream, CancellationTokenSource Cancel, Task Task)> _streams = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EastmoneyProvider"/> class.
@@ -43,8 +56,11 @@ public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHis
     /// <param name="quoteBase">
     /// The quote endpoint.
     /// </param>
+    /// <param name="streamBase">
+    /// The host of the instrument streams.
+    /// </param>
     /// <param name="interval">
-    /// The poll interval.
+    /// How often an instrument without a live stream is polled.
     /// </param>
     /// <param name="http">
     /// The HTTP client; the provider takes ownership.
@@ -58,6 +74,7 @@ public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHis
     internal EastmoneyProvider(
         ProviderDescriptor descriptor,
         Uri quoteBase,
+        Uri streamBase,
         TimeSpan interval,
         HttpClient http,
         TimeProvider timeProvider,
@@ -65,8 +82,81 @@ public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHis
         : base(descriptor, interval, timeProvider, logger)
     {
         _quoteBase = quoteBase;
+        _streamBase = streamBase;
         _http = http;
     }
+
+    /// <inheritdoc />
+    protected override async Task OnSubscriptionsChangedAsync(
+        IReadOnlyCollection<Asset> current,
+        IReadOnlyCollection<Asset> added,
+        IReadOnlyCollection<Asset> removed,
+        CancellationToken cancellationToken)
+    {
+        foreach (var asset in removed)
+        {
+            if (_streams.TryRemove(asset.Id, out var running))
+            {
+                await StopAsync(running).ConfigureAwait(false);
+            }
+        }
+
+        foreach (var asset in added)
+        {
+            StartStream(asset);
+        }
+
+        await base.OnSubscriptionsChangedAsync(current, added, removed, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Starts the stream of an instrument that is not streaming yet. An instrument of a market the service does not
+    /// know has none, and stays with the poll.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    private void StartStream(Asset asset)
+    {
+        if (EastmoneyParser.ExchangeOf(asset.Symbol) is null || _streams.ContainsKey(asset.Id))
+        {
+            return;
+        }
+
+        var uri = EndpointOptions.Combine(
+            _streamBase,
+            $"/api/qt/stock/sse?fields=f43,f57,f60,f86&mpi=1000&invt=2&fltt=2&secid={Uri.EscapeDataString(asset.Symbol)}&ut={EastmoneyParser.PublicToken}");
+        var stream = new EastmoneyStream(
+            asset,
+            uri,
+            _http,
+            TimeProvider,
+            Logger,
+            Publish,
+            () => IsOutsideTrading(asset),
+            () => SetStatus(ProviderConnectionState.Connected));
+        var cancel = CancellationTokenSource.CreateLinkedTokenSource(ShutdownToken);
+        _streams[asset.Id] = (stream, cancel, Task.Run(() => stream.RunAsync(cancel.Token), CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Ends a stream and waits for it to finish.
+    /// </summary>
+    /// <param name="running">
+    /// The stream with its token and task.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the stream has ended.
+    /// </returns>
+    private static async Task StopAsync((EastmoneyStream Stream, CancellationTokenSource Cancel, Task Task) running)
+    {
+        await running.Cancel.CancelAsync().ConfigureAwait(false);
+        await running.Task.ConfigureAwait(false);
+        running.Cancel.Dispose();
+    }
+
+    /// <inheritdoc />
+    protected override bool IsStreamLive(Asset asset) => _streams.TryGetValue(asset.Id, out var running) && running.Stream.IsLive;
 
     /// <inheritdoc />
     public MarketState GetMarketState(Asset asset, DateTimeOffset now, DateTimeOffset? lastTradeTime = null, TimeSpan? holidayGrace = null) =>
@@ -174,10 +264,15 @@ public sealed class EastmoneyProvider : BatchQuotePollingProviderBase, IRangeHis
     }
 
     /// <inheritdoc />
-    protected override ValueTask DisposeResourcesAsync()
+    protected override async ValueTask DisposeResourcesAsync()
     {
+        foreach (var running in _streams.Values)
+        {
+            await StopAsync(running).ConfigureAwait(false);
+        }
+
+        _streams.Clear();
         _http.Dispose();
-        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc />
