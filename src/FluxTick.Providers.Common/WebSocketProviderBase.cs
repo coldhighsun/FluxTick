@@ -172,6 +172,23 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
     protected virtual string? HeartbeatMessage => null;
 
     /// <summary>
+    /// Completes the address of a new connection before it is opened, for servers that hand out a temporary endpoint
+    /// or token over REST. It runs on every connect, so a token is never reused after a drop. A failure ends only this
+    /// attempt; the connection loop retries with backoff. The default returns the address unchanged. The result may
+    /// carry credentials in its query, so it is never logged beyond host and path.
+    /// </summary>
+    /// <param name="uri">
+    /// The address built from the endpoint option and the subscriptions.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that stops the provider.
+    /// </param>
+    /// <returns>
+    /// The address to connect to.
+    /// </returns>
+    protected virtual Task<Uri> ResolveConnectionUriAsync(Uri uri, CancellationToken cancellationToken) => Task.FromResult(uri);
+
+    /// <summary>
     /// Gets how long to wait after connecting before the first subscribe message is sent, for servers that reject or
     /// rate-limit requests that arrive at once. The default is no wait.
     /// </summary>
@@ -256,7 +273,7 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
                 socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(30);
                 ConfigureSocket(socket.Options);
                 var connectAssets = CurrentSubscriptions;
-                var connectUri = BuildConnectionUri(connectAssets);
+                var connectUri = await ResolveConnectionUriAsync(BuildConnectionUri(connectAssets), cancellationToken).ConfigureAwait(false);
 
                 // Host and path only: the query may carry credentials.
                 Logger.LogInformation(
