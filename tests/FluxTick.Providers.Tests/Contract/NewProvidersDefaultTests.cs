@@ -1,4 +1,5 @@
 using FluxTick.Abstractions;
+using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
@@ -36,5 +37,6 @@ public class NewProvidersDefaultTests
         new KrakenProviderFactory(),
         new BybitProviderFactory(),
         new GateIoProviderFactory(),
+        new BitgetProviderFactory(),
     ];
 }
