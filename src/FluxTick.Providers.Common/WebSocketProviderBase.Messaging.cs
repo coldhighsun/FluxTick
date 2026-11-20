@@ -132,6 +132,21 @@ public abstract partial class WebSocketProviderBase
                 Logger.LogDebug(ex, "Ignoring malformed {Provider} message", Descriptor.DisplayName);
             }
 
+            string? reply = null;
+            try
+            {
+                reply = ReplyTo(text);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "Ignoring malformed {Provider} message", Descriptor.DisplayName);
+            }
+
+            if (reply is not null)
+            {
+                await SendAsync(socket, reply, cancellationToken).ConfigureAwait(false);
+            }
+
             if (PublishedByThisThread != publishedBefore)
             {
                 Volatile.Write(ref _lastActivity, TimeProvider.GetTimestamp());
