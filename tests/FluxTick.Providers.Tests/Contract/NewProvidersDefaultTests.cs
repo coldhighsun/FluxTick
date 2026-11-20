@@ -7,6 +7,7 @@ using FluxTick.Providers.Eastmoney;
 using FluxTick.Providers.Finnhub;
 using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Kraken;
+using FluxTick.Providers.Massive;
 using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Sina;
@@ -48,5 +49,6 @@ public class NewProvidersDefaultTests
         new KuCoinProviderFactory(),
         new TwelveDataProviderFactory(),
         new FinnhubProviderFactory(),
+        new MassiveProviderFactory(),
     ];
 }

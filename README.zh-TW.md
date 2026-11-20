@@ -90,6 +90,7 @@
 | **Eastmoney（東方財富）** | A 股、港股、美股、ETF、指數 | 輪詢（預設 5 秒） | 非官方介面，可能延遲或隨時變動。無需 API Key。代碼寫作 `市場.代碼`（`1.600519`、`116.00700`、`105.AAPL`），可透過名稱、代碼或拼音搜尋自動填入。預設關閉。 |
 | **Eulerpool** | 全球股票和 ETF（代碼帶交易所後綴，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免費申請，詳見 [API Key](#api-key)）。免費 Key 只能收到延遲的 1 秒行情，即時成交需要付費方案。支援依名稱、代碼或 ISIN 搜尋。預設關閉。 |
 | **Finnhub** | 美股和 ETF | WebSocket 推送 | 需要 API Key（在 finnhub.io 免費申請，詳見 [API Key](#api-key)）。免費 Key 每分鐘 60 次 REST 請求、可推送 50 個代碼；推送提供美股即時成交，REST 提供首個價格和備用行情。免費方案沒有走勢圖歷史，走勢圖由即時價格累積。支援依名稱或代碼搜尋。預設關閉。 |
+| **Massive** | 美股和 ETF | 輪詢（預設 5 分鐘） | 需要 API Key（在 massive.com 免費申請，詳見 [API Key](#api-key)）。前身為 Polygon.io。免費方案只提供日終價格、每分鐘 5 次請求（每個代碼一次，間隔 13 秒），所以顯示的是最近收盤價而非即時行情；付費方案提供延遲或即時資料。走勢圖歷史涵蓋一個月及更長區間。支援依名稱或代碼搜尋。預設關閉。 |
 | **Twelve Data** | 全球股票、ETF 和指數 | 輪詢（預設 60 秒） | 需要 API Key（在 twelvedata.com 免費申請，詳見 [API Key](#api-key)）。免費 Key 每分鐘 8 點、每天 800 點，每次更新每個代碼耗 1 點，適合較短的自選清單；行情可能有延遲。支援依名稱或代碼搜尋。預設關閉。 |
 | **OKX** | 加密貨幣現貨交易對 | WebSocket 推送 | 無需 API Key。預設關閉。 |
 | **Coinbase** | 加密貨幣現貨交易對 | WebSocket 推送 | Coinbase Exchange。無需 API Key。預設關閉。 |
@@ -217,7 +218,7 @@ dotnet publish src/FluxTick.App -c Release -r win-x64 -o publish
 
 ### API Key
 
-部分資料來源需要 API Key（目前只有 Eulerpool；這類資料來源預設關閉，需要在設定 → 資料來源中填入 Key 後再啟用）。Key 在遮罩輸入框中填寫，處理方式如下：
+部分資料來源需要 API Key（目前有 Eulerpool、Twelve Data、Finnhub 和 Massive；這類資料來源預設關閉，需要在設定 → 資料來源中填入 Key 後再啟用）。Key 在遮罩輸入框中填寫，處理方式如下：
 
 - **儲存位置：** 儲存在 `settings.json` 中，與其他設定在同一資料夾；同一資料夾中的設定檔副本裡也有（`settings.json.bak` 是上次儲存前的檔案，`settings.json.bad` 是被移開的損毀檔案）。不會儲存到其他任何地方，不會寫入記錄檔，也不會拼進 URL；只會傳送給它所屬的資料來源。
 - **Windows：** Key 使用 Windows 資料保護 API（DPAPI）依目前使用者帳戶加密，以 `protected:v1:…` 的形式寫入檔案。只有同一台電腦上的同一使用者才能解開，並且每個 Key 都綁定到各自的資料來源和選項，不能挪給別的選項使用。舊版本以明文儲存的 Key 會在首次啟動時自動加密；設定檔副本裡仍可能是明文：`settings.json.bak` 會保留到下次修改設定時被取代，`settings.json.bad` 會一直保留到你手動刪除。
@@ -247,6 +248,7 @@ src/FluxTick.Providers.Sina      新浪財經 WebSocket 資料來源
 src/FluxTick.Providers.Eastmoney 東方財富輪詢資料來源
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket 資料來源（需 API Key）
 src/FluxTick.Providers.Finnhub   Finnhub WebSocket 資料來源（需 API Key）
+src/FluxTick.Providers.Massive   Massive 輪詢資料來源（需 API Key）
 src/FluxTick.Providers.TwelveData Twelve Data 輪詢資料來源（需 API Key）
 src/FluxTick.Providers.Simulated 確定性的示範資料來源
 src/FluxTick.App                 Avalonia 桌面應用程式（FluxTick.exe），組合根
