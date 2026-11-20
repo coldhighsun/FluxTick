@@ -159,6 +159,21 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
     }
 
     /// <summary>
+    /// Tells whether a stream the derived class runs for an instrument is delivering its prices right now. Such an
+    /// instrument is not polled, as one in a shut market is not: its latest quote is repeated each cycle instead, and it
+    /// is polled again as soon as this returns <see langword="false"/>, which makes the poll the fallback of the stream.
+    /// An instrument without a price yet is polled regardless, so that the first price does not wait for the stream. The
+    /// derived class publishes what the stream delivers with <c>Publish</c>. The default has no stream.
+    /// </summary>
+    /// <param name="asset">
+    /// The instrument.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a stream is connected for the instrument.
+    /// </returns>
+    protected virtual bool IsStreamLive(Asset asset) => false;
+
+    /// <summary>
     /// Tells whether the market of an instrument is known not to be trading, so that polling it is pointless. An
     /// instrument that has not published a price yet is polled regardless. Without a stream nothing else delivers the pre-market and after
     /// hours, so only a shut market or a break is skipped; see <see cref="TradingHoursPolicy"/>.
@@ -250,7 +265,7 @@ public abstract class PollingProviderBase : LoggingProviderBase, IQuoteCadencePr
     /// The instruments to poll.
     /// </returns>
     private Asset[] Split(out Asset[] shut) =>
-        _repeater.Split(CurrentSubscriptions, IsOutsideTrading, askUnpriced: true, out shut);
+        _repeater.Split(CurrentSubscriptions, a => IsOutsideTrading(a) || IsStreamLive(a), askUnpriced: true, out shut);
 
     /// <summary>
     /// Runs one cycle and updates the provider status from its outcome. An unexpected exception is a failed cycle,
