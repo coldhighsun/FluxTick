@@ -139,7 +139,7 @@ public class LocalizationTests
 
         loc.Select(Loc.TraditionalChinese).Should().BeTrue();
 
-        loc["Status_Stale"].Should().Be("資料過期");
+        loc["Status_Stale"].Should().Be("過期");
         loc["Status_Delayed"].Should().Be("延遲");
         loc["LanguageMode_ZhTW"].Should().Be("繁體中文");
         loc.Language.Should().Be(Loc.TraditionalChinese);
@@ -161,7 +161,7 @@ public class LocalizationTests
         loc.Select(Loc.SimplifiedChinese).Should().BeTrue();
         loc.Select(Loc.SimplifiedChinese).Should().BeFalse();
 
-        loc["Status_Stale"].Should().Be("数据过期");
+        loc["Status_Stale"].Should().Be("过期");
         loc["Status_Delayed"].Should().Be("延迟");
         loc.Language.Should().Be(Loc.SimplifiedChinese);
         properties.Should().Contain("Item[]");
@@ -204,7 +204,7 @@ public class LocalizationTests
         InChinese(() =>
         {
             row.Update(new AssetSnapshot(row.Asset, null, [], AssetHealth.Stale));
-            row.StatusText.Should().Be("数据过期");
+            row.StatusText.Should().Be("过期");
             row.RefreshLanguage("p");
             row.ClassLabel.Should().Be("加密");
         });
