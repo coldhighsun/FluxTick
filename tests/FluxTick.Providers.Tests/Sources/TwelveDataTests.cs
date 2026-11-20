@@ -107,6 +107,17 @@ public class TwelveDataTests
     }
 
     /// <summary>
+    /// Verifies a search that fails, for example on the rate limit, raises instead of listing nothing.
+    /// </summary>
+    [Fact]
+    public void ParseSearch_ErrorBody_Throws()
+    {
+        var act = () => TwelveDataParser.ParseSearch("""{"code":429,"message":"limit reached","status":"error"}""", "twelvedata");
+
+        act.Should().Throw<HttpRequestException>().WithMessage("*429*");
+    }
+
+    /// <summary>
     /// Verifies the exchange of each symbol is read from a batch answer and mapped to trading hours.
     /// </summary>
     [Fact]

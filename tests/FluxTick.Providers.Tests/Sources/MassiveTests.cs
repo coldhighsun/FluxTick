@@ -129,6 +129,40 @@ public class MassiveTests
     }
 
     /// <summary>
+    /// Verifies a refresh that hits the request limit part of the way keeps the prices fetched before.
+    /// </summary>
+    [Fact]
+    public async Task Provider_LimitReachedMidRefresh_KeepsTheFirstPrices()
+    {
+        const string limited = """{"status":"ERROR","request_id":"x","error":"You've exceeded the maximum requests per minute"}""";
+        var handler = new StubHttpHandler(request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            return StubHttpHandler.Json(uri.Contains("/ticker/MSFT/", StringComparison.Ordinal) ? limited : uri.Contains("/range/1/minute/", StringComparison.Ordinal) ? TwoMinuteBars : TwoBars);
+        });
+        var time = new FakeTimeProvider(TradingHoursStart);
+        await using var provider = CreateProvider(handler, TimeSpan.FromSeconds(13), time);
+        var apple = new Asset("massive", "AAPL", "Apple", AssetClass.Equity);
+        var msft = new Asset("massive", "MSFT", "Microsoft", AssetClass.Equity);
+
+        await provider.SetSubscriptionsAsync([apple, msft]);
+        using var pump = new CancellationTokenSource();
+        var pumping = Task.Run(async () =>
+        {
+            while (!pump.IsCancellationRequested)
+            {
+                time.Advance(TimeSpan.FromSeconds(1));
+                await Task.Delay(10);
+            }
+        });
+        var quote = (await TestWait.ReadQuotesAsync(provider, 1)).Single();
+        await pump.CancelAsync();
+        await pumping;
+
+        quote.AssetId.Should().Be(apple.Id);
+    }
+
+    /// <summary>
     /// Verifies the last hour is asked for in minute bars, a day is not offered, and a year is told by daily bars.
     /// </summary>
     [Fact]
