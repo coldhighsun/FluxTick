@@ -322,19 +322,8 @@ internal static class TwelveDataParser
     /// </returns>
     private static bool TryParseTime(string text, TimeZoneInfo zone, out DateTimeOffset time)
     {
-        time = default;
-        if (!DateTime.TryParseExact(text, ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
-        {
-            return false;
-        }
-
-        if (text.Length == 10)
-        {
-            local = local.AddHours(16);
-        }
-
-        time = new DateTimeOffset(local, zone.GetUtcOffset(local));
-        return true;
+        // A daily candle is dated at 16:00 of its day.
+        return ZonedTime.TryParse(text, ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"], zone, TimeSpan.Zero, 16, out time);
     }
 
     /// <summary>
