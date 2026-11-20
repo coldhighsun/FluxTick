@@ -356,11 +356,19 @@ internal static class TwelveDataParser
     /// <returns>
     /// The stocks, funds and indices; currencies and cryptocurrencies are left out.
     /// </returns>
+    /// <exception cref="HttpRequestException">
+    /// The answer reports an error, such as a wrong key or the rate limit.
+    /// </exception>
     public static IReadOnlyList<Asset> ParseSearch(string json, string providerId)
     {
         using var document = JsonDocument.Parse(json);
-        if (document.RootElement.ValueKind != JsonValueKind.Object
-            || !document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return [];
+        }
+
+        ThrowIfError(document.RootElement);
+        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
         {
             return [];
         }

@@ -196,8 +196,9 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
 
     /// <summary>
     /// Gives the reply a received message asks for, such as the answer to a server-initiated heartbeat that has to
-    /// echo the id of the request. It is called for every message after <see cref="HandleMessage"/>; the default
-    /// replies to nothing.
+    /// echo the id of the request. It is called for every message after <see cref="HandleMessage"/>, so it has to be cheap
+    /// for the messages it does not answer; the default replies to nothing. A reply that cannot be sent means the socket is
+    /// dead and ends the connection, which is then opened again.
     /// </summary>
     /// <param name="text">
     /// The message text.
@@ -273,7 +274,7 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
                 socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(30);
                 ConfigureSocket(socket.Options);
                 var connectAssets = CurrentSubscriptions;
-                var connectUri = await ResolveConnectionUriAsync(BuildConnectionUri(connectAssets), cancellationToken).ConfigureAwait(false);
+                var connectUri = await ResolveWithinTimeoutAsync(BuildConnectionUri(connectAssets), cancellationToken).ConfigureAwait(false);
 
                 // Host and path only: the query may carry credentials.
                 Logger.LogInformation(
@@ -359,6 +360,33 @@ public abstract partial class WebSocketProviderBase : LoggingProviderBase
             }
 
             backoff = Backoff.Double(backoff, MaxBackoff);
+        }
+    }
+
+    /// <summary>
+    /// Completes the address of a connection with <see cref="ResolveConnectionUriAsync"/>, giving it no more time than
+    /// connecting itself gets: a server that never answers must not stall the loop.
+    /// </summary>
+    /// <param name="uri">
+    /// The address built from the endpoint option and the subscriptions.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that stops the provider.
+    /// </param>
+    /// <returns>
+    /// The address to connect to.
+    /// </returns>
+    private async Task<Uri> ResolveWithinTimeoutAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ConnectTimeout);
+        try
+        {
+            return await ResolveConnectionUriAsync(uri, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ConnectTimeoutException($"Preparing the connection timed out after {ConnectTimeout.TotalSeconds:0} seconds");
         }
     }
 

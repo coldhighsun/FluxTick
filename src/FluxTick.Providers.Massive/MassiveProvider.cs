@@ -196,9 +196,19 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
                 await Task.Delay(_requestSpacing, TimeProvider, cancellationToken).ConfigureAwait(false);
             }
 
-            if (await RequestQuoteAsync(codes[i], cancellationToken).ConfigureAwait(false) is { } quote)
+            try
             {
-                quotes.Add(quote);
+                if (await RequestQuoteAsync(codes[i], cancellationToken).ConfigureAwait(false) is { } quote)
+                {
+                    quotes.Add(quote);
+                }
+            }
+            catch (HttpRequestException ex) when (quotes.Count > 0)
+            {
+                // The limit of the plan was reached part of the way: keep what was fetched, and the rest waits for the next
+                // refresh instead of costing the prices of this one.
+                Logger.LogWarning("Massive stopped a refresh after {Count} of {Total} symbols: {Reason}", quotes.Count, codes.Length, ex.Message);
+                break;
             }
         }
 
