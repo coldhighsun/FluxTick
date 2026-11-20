@@ -4,6 +4,7 @@ using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
@@ -73,6 +74,7 @@ public class AdvancedOptionsTests
         new BybitProviderFactory(),
         new GateIoProviderFactory(),
         new BitgetProviderFactory(),
+        new CryptoComProviderFactory(),
         new EulerpoolProviderFactory(),
     ];
 }
