@@ -52,25 +52,109 @@ internal static class MassiveParser
     }
 
     /// <summary>
-    /// Turns the last two daily bars, newest first, into a quote: the close of the newest is the price and the close of the
-    /// one before it the previous close.
+    /// Parses the one-minute bars of a request.
     /// </summary>
-    /// <param name="symbol">
-    /// The symbol that was asked for.
-    /// </param>
     /// <param name="json">
     /// The response body.
     /// </param>
     /// <returns>
+    /// The close of each bar, dated at the start of the bar, in the order of the answer.
+    /// </returns>
+    /// <exception cref="HttpRequestException">
+    /// The answer reports an error, such as a wrong key or the rate limit.
+    /// </exception>
+    public static IReadOnlyList<PricePoint> ParseMinuteBars(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        ThrowIfError(root);
+        if (!root.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var points = new List<PricePoint>();
+        foreach (var bar in results.EnumerateArray())
+        {
+            if (bar.ValueKind == JsonValueKind.Object
+                && bar.TryGetProperty("t", out var t) && JsonValues.TryGetUnixMilliseconds(t, out var start)
+                && JsonValues.TryGetDecimal(bar, "c", out var close) && close > 0)
+            {
+                points.Add(new PricePoint(start, close));
+            }
+        }
+
+        return points;
+    }
+
+    /// <summary>
+    /// Turns the latest one-minute bar into a quote, measured against the close of the last session before it.
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol that was asked for.
+    /// </param>
+    /// <param name="latest">
+    /// The latest bar.
+    /// </param>
+    /// <param name="previousClose">
+    /// The close of the session before the day of the bar, or <see langword="null"/> when unknown.
+    /// </param>
+    /// <returns>
+    /// The quote.
+    /// </returns>
+    public static ParsedQuote ToQuote(string symbol, PricePoint latest, decimal? previousClose) =>
+        new(symbol, latest.Price, previousClose, latest.Timestamp);
+
+    /// <summary>
+    /// Finds the close of the last session that ended before the day of a time.
+    /// </summary>
+    /// <param name="dailyBars">
+    /// The daily bars, in any order, each dated at the close of its day.
+    /// </param>
+    /// <param name="time">
+    /// The time, whose day in New York is the day to look before.
+    /// </param>
+    /// <returns>
+    /// The close, or <see langword="null"/> when no bar is that old.
+    /// </returns>
+    public static decimal? CloseBefore(IReadOnlyList<PricePoint> dailyBars, DateTimeOffset time)
+    {
+        var day = EasternDate(time);
+        return dailyBars
+            .Where(b => EasternDate(b.Timestamp) < day)
+            .OrderByDescending(b => b.Timestamp)
+            .Select(b => (decimal?)b.Price)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Gets the date of a time in New York.
+    /// </summary>
+    /// <param name="time">
+    /// The time.
+    /// </param>
+    /// <returns>
+    /// The date.
+    /// </returns>
+    public static DateOnly EasternDate(DateTimeOffset time) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, Eastern).Date);
+
+    /// <summary>
+    /// Turns the newest of daily bars into a quote when there are no minute bars: the close of the newest is the price
+    /// and the close of the one before it the previous close.
+    /// </summary>
+    /// <param name="symbol">
+    /// The symbol that was asked for.
+    /// </param>
+    /// <param name="dailyBars">
+    /// The daily bars, newest first.
+    /// </param>
+    /// <returns>
     /// The quote, or <see langword="null"/> when the symbol has no bar.
     /// </returns>
-    public static ParsedQuote? ParseQuote(string symbol, string json)
-    {
-        var bars = ParseDailyBars(json);
-        return bars.Count == 0
+    public static ParsedQuote? ToQuote(string symbol, IReadOnlyList<PricePoint> dailyBars) =>
+        dailyBars.Count == 0
             ? null
-            : new ParsedQuote(symbol, bars[0].Price, bars.Count > 1 ? bars[1].Price : null, bars[0].Timestamp);
-    }
+            : new ParsedQuote(symbol, dailyBars[0].Price, dailyBars.Count > 1 ? dailyBars[1].Price : null, dailyBars[0].Timestamp);
 
     /// <summary>
     /// Dates a daily bar at the close of its day.

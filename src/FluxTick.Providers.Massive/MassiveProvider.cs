@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net.Http.Headers;
 using FluxTick.Abstractions;
 using FluxTick.Providers.Common;
@@ -41,6 +43,12 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
     /// The HTTP client; owned by the provider.
     /// </summary>
     private readonly HttpClient _http;
+
+    /// <summary>
+    /// The close of the session before the day of the latest bar of each symbol, kept for that day: it changes once a day,
+    /// and every request counts against the request limit of the plan.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, (DateOnly Day, decimal? Close)> _previousCloses = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MassiveProvider"/> class.
@@ -91,23 +99,33 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
         ExchangeHours.StateOf(ExchangeHours.Us, now, lastTradeTime, holidayGrace);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<PricePoint>>([]);
+    public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, CancellationToken cancellationToken = default)
+    {
+        // The one-minute bars of the last hour or so, counted back from the last bar: a shut market has its last session.
+        var json = await GetStringAsync(BarsUri(asset.Symbol, "minute", HistoryWindow.LastSessionSpan, "desc", (int)HistoryWindow.Span.TotalMinutes), cancellationToken).ConfigureAwait(false);
+        return [.. MassiveParser.ParseMinuteBars(json).OrderBy(p => p.Timestamp)];
+    }
 
     /// <inheritdoc />
-    public bool SupportsRange(HistoryRange range) => range is HistoryRange.Month or HistoryRange.HalfYear or HistoryRange.Year;
+    public bool SupportsRange(HistoryRange range) => range is HistoryRange.Hour or HistoryRange.Month or HistoryRange.HalfYear or HistoryRange.Year;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<PricePoint>> GetHistoryAsync(Asset asset, HistoryRange range, CancellationToken cancellationToken = default)
     {
-        // Only the daily bars the free plan has; shorter ranges are left to the live prices.
+        if (range == HistoryRange.Hour)
+        {
+            return await GetHistoryAsync(asset, cancellationToken).ConfigureAwait(false);
+        }
+
+        // The service answers bars wider than a minute with nothing on the free plan, so a day and five days are left to the
+        // live prices; a month and longer are told by daily bars.
         if (!SupportsRange(range))
         {
             return [];
         }
 
         var spec = HistoryRangeSpec.For(range);
-        var json = await GetStringAsync(BarsUri(asset.Symbol, spec.Window, "asc", spec.Capacity), cancellationToken).ConfigureAwait(false);
+        var json = await GetStringAsync(BarsUri(asset.Symbol, "day", spec.Window, "asc", spec.Capacity), cancellationToken).ConfigureAwait(false);
 
         // The bar of today is dated at the close, ahead of the clock during the session.
         var now = TimeProvider.GetUtcNow();
@@ -115,16 +133,19 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
     }
 
     /// <summary>
-    /// Builds the address of a request for daily bars that end today.
+    /// Builds the address of a request for bars that end today.
     /// </summary>
     /// <param name="symbol">
     /// The ticker.
+    /// </param>
+    /// <param name="timespan">
+    /// <c>minute</c> or <c>day</c>; the bars are one wide.
     /// </param>
     /// <param name="window">
     /// How far back the bars start.
     /// </param>
     /// <param name="sort">
-    /// <c>asc</c> or <c>desc</c>.
+    /// <c>asc</c> or <c>desc</c>; with a limit, the end that is kept.
     /// </param>
     /// <param name="limit">
     /// The most bars to return.
@@ -132,14 +153,14 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
     /// <returns>
     /// The address.
     /// </returns>
-    private Uri BarsUri(string symbol, TimeSpan window, string sort, int limit)
+    private Uri BarsUri(string symbol, string timespan, TimeSpan window, string sort, int limit)
     {
         var now = TimeProvider.GetUtcNow();
-        var to = DateOnly.FromDateTime(now.UtcDateTime).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-        var from = DateOnly.FromDateTime((now - window).UtcDateTime).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var to = DateOnly.FromDateTime(now.UtcDateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var from = DateOnly.FromDateTime((now - window).UtcDateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         return EndpointOptions.Combine(
             _apiBase,
-            $"/v2/aggs/ticker/{Uri.EscapeDataString(symbol)}/range/1/day/{from}/{to}?adjusted=true&sort={sort}&limit={limit}");
+            $"/v2/aggs/ticker/{Uri.EscapeDataString(symbol)}/range/1/{timespan}/{from}/{to}?adjusted=true&sort={sort}&limit={limit}");
     }
 
     /// <inheritdoc />
@@ -172,15 +193,49 @@ public sealed class MassiveProvider : BatchQuotePollingProviderBase, IRangeHisto
                 await Task.Delay(_requestSpacing, TimeProvider, cancellationToken).ConfigureAwait(false);
             }
 
-            // The newest two bars: the price, and the close the change is measured against.
-            var json = await GetStringAsync(BarsUri(codes[i], QuoteLookBack, "desc", 2), cancellationToken).ConfigureAwait(false);
-            if (MassiveParser.ParseQuote(codes[i], json) is { } quote)
+            if (await RequestQuoteAsync(codes[i], cancellationToken).ConfigureAwait(false) is { } quote)
             {
                 quotes.Add(quote);
             }
         }
 
         return quotes;
+    }
+
+    /// <summary>
+    /// Fetches the latest price of one symbol: the close of its newest one-minute bar, measured against the close of the
+    /// session before it. The plan has no snapshot and no stream. A symbol without minute bars gets its last daily close.
+    /// </summary>
+    /// <param name="symbol">
+    /// The ticker.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token that cancels the requests.
+    /// </param>
+    /// <returns>
+    /// The quote, or <see langword="null"/> when the service has no bar of the symbol.
+    /// </returns>
+    private async Task<ParsedQuote?> RequestQuoteAsync(string symbol, CancellationToken cancellationToken)
+    {
+        var minutes = await GetStringAsync(BarsUri(symbol, "minute", QuoteLookBack, "desc", 1), cancellationToken).ConfigureAwait(false);
+        var bars = MassiveParser.ParseMinuteBars(minutes);
+        if (bars.Count == 0)
+        {
+            var daily = await GetStringAsync(BarsUri(symbol, "day", QuoteLookBack, "desc", 2), cancellationToken).ConfigureAwait(false);
+            return MassiveParser.ToQuote(symbol, MassiveParser.ParseDailyBars(daily));
+        }
+
+        var latest = bars[0];
+        var day = MassiveParser.EasternDate(latest.Timestamp);
+        if (!_previousCloses.TryGetValue(symbol, out var known) || known.Day != day)
+        {
+            await Task.Delay(_requestSpacing, TimeProvider, cancellationToken).ConfigureAwait(false);
+            var daily = await GetStringAsync(BarsUri(symbol, "day", QuoteLookBack, "desc", 3), cancellationToken).ConfigureAwait(false);
+            known = (day, MassiveParser.CloseBefore(MassiveParser.ParseDailyBars(daily), latest.Timestamp));
+            _previousCloses[symbol] = known;
+        }
+
+        return MassiveParser.ToQuote(symbol, latest, known.Close);
     }
 
     /// <inheritdoc />
