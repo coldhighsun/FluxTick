@@ -90,7 +90,7 @@
 | **Eastmoney（东方财富）** | A 股、港股、美股、ETF、指数 | 轮询（默认 5 秒） | 非官方接口，可能延迟或随时变动。无需 API Key。代码写作 `市场.代码`（`1.600519`、`116.00700`、`105.AAPL`），可通过名称、代码或拼音搜索自动填入。默认关闭。 |
 | **Eulerpool** | 全球股票和 ETF（代码带交易所后缀，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免费申请，详见 [API Key](#api-key)）。免费 Key 只能收到延迟的 1 秒行情，实时成交需要付费套餐。支持按名称、代码或 ISIN 搜索。默认关闭。 |
 | **Finnhub** | 美股和 ETF | WebSocket 推送 | 需要 API Key（在 finnhub.io 免费申请，详见 [API Key](#api-key)）。免费 Key 每分钟 60 次 REST 请求、可推送 50 个代码；推送提供美股实时成交，REST 提供首个价格和备用行情。免费套餐没有走势图历史，走势图由实时价格累积。支持按名称或代码搜索。默认关闭。 |
-| **Massive** | 美股和 ETF | 轮询（默认 5 分钟） | 需要 API Key（在 massive.com 免费申请，详见 [API Key](#api-key)）。前身为 Polygon.io。免费套餐只提供日终价格、每分钟 5 次请求（每个代码一次，间隔 13 秒），所以显示的是最近收盘价而非实时行情；付费套餐提供延迟或实时数据。走势图历史覆盖一个月及更长区间。支持按名称或代码搜索。默认关闭。 |
+| **Massive** | 美股和 ETF | 轮询（默认 5 分钟） | 需要 API Key（在 massive.com 免费申请，详见 [API Key](#api-key)）。前身为 Polygon.io。免费套餐没有 WebSocket 和快照，因此应用轮询延迟的 1 分钟 K 线，每分钟 5 次请求（每个代码一到两次，间隔 13 秒）：不是实时行情，适合少量代码；付费套餐才有推送。走势图历史覆盖最近一小时，以及一个月及更长区间。支持按名称或代码搜索。默认关闭。 |
 | **Twelve Data** | 全球股票、ETF 和指数 | 轮询（默认 60 秒） | 需要 API Key（在 twelvedata.com 免费申请，详见 [API Key](#api-key)）。免费 Key 每分钟 8 点、每天 800 点，每次刷新每个代码耗 1 点，适合较短的自选列表；行情可能有延迟。支持按名称或代码搜索。默认关闭。 |
 | **OKX** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
 | **Coinbase** | 加密货币现货交易对 | WebSocket 推送 | Coinbase Exchange。无需 API Key。默认关闭。 |

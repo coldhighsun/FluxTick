@@ -38,7 +38,7 @@ public sealed class MassiveProviderFactory : IMarketDataProviderFactory
     public ProviderDescriptor Descriptor { get; } = new(
         ProviderId,
         "Massive",
-        "US stocks and ETFs from the Massive (formerly Polygon.io) API, by polling. Needs an API key. The free plan gives end-of-day prices only and 5 requests a minute, one per symbol, so it suits a few symbols and shows the last close, not live prices; a paid plan gives delayed or live data.",
+        "US stocks and ETFs from the Massive (formerly Polygon.io) API, by polling. Needs an API key. The free plan has no WebSocket and no snapshot: prices are the delayed one-minute bars, limited to 5 requests a minute (one or two per symbol), so it suits a few symbols and is not live. A paid plan adds a stream.",
         [AssetClass.Equity],
         ProviderUpdateMode.Polling,
         Homepage: new Uri("https://massive.com/"),
@@ -49,14 +49,14 @@ public sealed class MassiveProviderFactory : IMarketDataProviderFactory
                 "API key",
                 ProviderOptionType.Secret,
                 string.Empty,
-                "Create a free key at massive.com. The free plan allows 5 requests a minute and end-of-day prices.",
+                "Create a free key at massive.com. The free plan allows 5 requests a minute and has no WebSocket.",
                 Required: true),
             new ProviderOptionDefinition(
                 PollIntervalKey,
                 "Poll interval",
                 ProviderOptionType.Duration,
                 "00:05:00",
-                "How often prices are refreshed. Free end-of-day prices change once a day, so a long interval is enough.",
+                "How often prices are refreshed. With the free plan, keep (symbols x 13 seconds) below this value.",
                 Min: 5,
                 Max: 3600),
             new ProviderOptionDefinition(
