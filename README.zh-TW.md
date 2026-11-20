@@ -94,6 +94,7 @@
 | **Bybit** | 加密貨幣現貨交易對 | WebSocket 推送 | 無需 API Key。部分地區無法連線。預設關閉。 |
 | **Gate.io** | 加密貨幣現貨交易對 | WebSocket 推送 | 無需 API Key。預設關閉。 |
 | **Bitget** | 加密貨幣現貨交易對 | WebSocket 推送 | 無需 API Key。部分地區無法連線。預設關閉。 |
+| **Crypto.com** | 加密貨幣現貨交易對 | WebSocket 推送 | 無需 API Key。預設關閉。 |
 | **Simulated（模擬）** | 任意資產 | 本機隨機漫步 | 用於示範、截圖和離線開發。預設關閉。 |
 
 預設關閉的資料來源請在**設定 → 資料來源**中啟用。要顯示其中的資產，可以在*新增資產*視窗中選擇它，
@@ -234,6 +235,7 @@ src/FluxTick.Providers.Kraken    Kraken WebSocket 資料來源
 src/FluxTick.Providers.Bybit     Bybit WebSocket 資料來源
 src/FluxTick.Providers.GateIo    Gate.io WebSocket 資料來源
 src/FluxTick.Providers.Bitget    Bitget WebSocket 資料來源
+src/FluxTick.Providers.CryptoCom Crypto.com WebSocket 資料來源
 src/FluxTick.Providers.Yahoo     Yahoo Finance WebSocket 資料來源
 src/FluxTick.Providers.Tencent   騰訊財經輪詢資料來源
 src/FluxTick.Providers.Sina      新浪財經 WebSocket 資料來源

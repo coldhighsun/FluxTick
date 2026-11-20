@@ -4,6 +4,7 @@ using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Common;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
@@ -114,6 +115,22 @@ public class CryptoProviderWiringTests
         """{"code":"00000","msg":"success","data":[["1792683480000","1","1","1","81641.1","1"]]}""",
         "/api/v2/spot/public/symbols",
         """{"code":"00000","msg":"success","data":[{"symbol":"BTCUSDT","baseCoin":"BTC","quoteCoin":"USDT","status":"online"},{"symbol":"ETHUSDT","baseCoin":"ETH","quoteCoin":"USDT","status":"online"}]}"""));
+
+    /// <summary>
+    /// Verifies the Crypto.com provider.
+    /// </summary>
+    [Fact]
+    public Task CryptoCom_IsWiredCorrectly() => VerifyAsync(new Wiring(
+        (descriptor, endpoints, http) => new CryptoComProvider(descriptor, endpoints, http, TimeProvider.System, NullLogger.Instance),
+        new CryptoComProviderFactory().Descriptor,
+        "BTC_USDT",
+        """{"id":1,"method":"subscribe","params":{"channels":["ticker.BTC_USDT"]}}""",
+        """{"id":-1,"method":"subscribe","code":0,"result":{"instrument_name":"BTC_USDT","channel":"ticker","data":[{"i":"BTC_USDT","a":"81513.7","c":"-0.0367","t":1792683284127}]}}""",
+        81513.7m,
+        "/exchange/v1/public/get-candlestick?instrument_name=BTC_USDT&timeframe=1m&count=60",
+        """{"id":-1,"code":0,"result":{"interval":"1m","data":[{"c":"81641.1","t":1792683480000}]}}""",
+        "/exchange/v1/public/get-instruments",
+        """{"code":0,"result":{"data":[{"symbol":"BTC_USDT","inst_type":"CCY_PAIR","base_ccy":"BTC","quote_ccy":"USDT","tradable":true},{"symbol":"ETH_USDT","inst_type":"CCY_PAIR","base_ccy":"ETH","quote_ccy":"USDT","tradable":true}]}}"""));
 
     /// <summary>
     /// Verifies the Binance provider.

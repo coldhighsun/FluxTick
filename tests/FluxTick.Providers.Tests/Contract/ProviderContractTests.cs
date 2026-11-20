@@ -4,6 +4,7 @@ using FluxTick.Providers.Bitget;
 using FluxTick.Providers.Bybit;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
+using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.Okx;
@@ -257,3 +258,8 @@ public sealed class EulerpoolProviderContractTests : ProviderContractTests<Euler
 /// Contract tests for the Bitget provider.
 /// </summary>
 public sealed class BitgetProviderContractTests : ProviderContractTests<BitgetProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Crypto.com provider.
+/// </summary>
+public sealed class CryptoComProviderContractTests : ProviderContractTests<CryptoComProviderFactory>;
