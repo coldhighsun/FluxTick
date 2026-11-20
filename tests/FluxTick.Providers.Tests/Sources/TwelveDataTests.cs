@@ -107,6 +107,41 @@ public class TwelveDataTests
     }
 
     /// <summary>
+    /// Verifies the exchange of each symbol is read from a batch answer and mapped to trading hours.
+    /// </summary>
+    [Fact]
+    public void ParseExchanges_Batch_ReadsMicCodes()
+    {
+        const string json = """{"AAPL":{"symbol":"AAPL","mic_code":"XNGS","close":"1"},"ZZZZ":{"code":404,"status":"error"},"0700":{"symbol":"0700","mic_code":"XHKG","close":"1"}}""";
+
+        var codes = TwelveDataParser.ParseExchanges(json);
+
+        codes.Should().BeEquivalentTo(new Dictionary<string, string> { ["AAPL"] = "XNGS", ["0700"] = "XHKG" });
+        TwelveDataParser.ExchangeOf("XNGS").Should().BeSameAs(ExchangeHours.Us);
+        TwelveDataParser.ExchangeOf("XHKG").Should().BeSameAs(ExchangeHours.HongKong);
+        TwelveDataParser.ExchangeOf("XLON").Should().BeNull();
+    }
+
+    /// <summary>
+    /// Verifies a currency pair is always open, and a stock follows its exchange only once its first quote named it.
+    /// </summary>
+    [Fact]
+    public async Task GetMarketState_PairsAndStocks_FollowWhatIsKnown()
+    {
+        var handler = new StubHttpHandler(_ => StubHttpHandler.Json("""{"symbol":"AAPL","mic_code":"XNGS","close":"349.2","previous_close":"352.4","last_quote_at":1795121940}"""));
+        await using var provider = CreateProvider(handler);
+        var apple = new Asset("twelvedata", "AAPL", "Apple", AssetClass.Equity);
+        // Saturday: the US market is shut.
+        var saturday = new DateTimeOffset(2026, 10, 31, 15, 0, 0, TimeSpan.Zero);
+
+        provider.GetMarketState(new Asset("twelvedata", "BTC/USD", "Bitcoin", AssetClass.Equity), saturday).Should().Be(MarketState.Open);
+        provider.GetMarketState(apple, saturday).Should().Be(MarketState.Unknown);
+
+        await provider.SetSubscriptionsAsync([apple]);
+        await TestWait.EventuallyAsync(() => provider.GetMarketState(apple, saturday) == MarketState.Closed);
+    }
+
+    /// <summary>
     /// Verifies the subscribe message lists the symbols in one request.
     /// </summary>
     [Fact]
