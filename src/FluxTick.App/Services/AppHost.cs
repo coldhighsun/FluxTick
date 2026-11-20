@@ -12,6 +12,7 @@ using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Eastmoney;
 using FluxTick.Providers.Eulerpool;
+using FluxTick.Providers.Finnhub;
 using FluxTick.Providers.Kraken;
 using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
@@ -182,6 +183,7 @@ public static class AppHost
         services.AddMarketDataProvider<EastmoneyProviderFactory>();
         services.AddMarketDataProvider<EulerpoolProviderFactory>();
         services.AddMarketDataProvider<TwelveDataProviderFactory>();
+        services.AddMarketDataProvider<FinnhubProviderFactory>();
         // The simulated source only exists for the offline demo mode; a normal install does not list it.
         if (demo)
         {

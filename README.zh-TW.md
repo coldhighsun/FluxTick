@@ -89,6 +89,7 @@
 | **Sina Finance（新浪財經）** | A 股、ETF、指數、外匯、國際商品期貨 | WebSocket 推送 | 非官方 API，可能被限流、延遲或無通知變更。無需 API Key。代碼格式與騰訊相同（如 `sh600000`），但自選標的會固定在新增時的資料來源。可搜尋股票、主要指數和常用外匯、期貨；ETF 需直接輸入代碼，其他外匯（`fx_seurusd`）和期貨（`hf_GC`）輸入新浪的代碼。走勢圖歷史涵蓋 A 股、基金和外匯。預設關閉。 |
 | **Eastmoney（東方財富）** | A 股、港股、美股、ETF、指數 | 輪詢（預設 5 秒） | 非官方介面，可能延遲或隨時變動。無需 API Key。代碼寫作 `市場.代碼`（`1.600519`、`116.00700`、`105.AAPL`），可透過名稱、代碼或拼音搜尋自動填入。預設關閉。 |
 | **Eulerpool** | 全球股票和 ETF（代碼帶交易所後綴，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免費申請，詳見 [API Key](#api-key)）。免費 Key 只能收到延遲的 1 秒行情，即時成交需要付費方案。支援依名稱、代碼或 ISIN 搜尋。預設關閉。 |
+| **Finnhub** | 美股和 ETF | WebSocket 推送 | 需要 API Key（在 finnhub.io 免費申請，詳見 [API Key](#api-key)）。免費 Key 每分鐘 60 次 REST 請求、可推送 50 個代碼；推送提供美股即時成交，REST 提供首個價格和備用行情。免費方案沒有走勢圖歷史，走勢圖由即時價格累積。支援依名稱或代碼搜尋。預設關閉。 |
 | **Twelve Data** | 全球股票、ETF 和指數 | 輪詢（預設 60 秒） | 需要 API Key（在 twelvedata.com 免費申請，詳見 [API Key](#api-key)）。免費 Key 每分鐘 8 點、每天 800 點，每次更新每個代碼耗 1 點，適合較短的自選清單；行情可能有延遲。支援依名稱或代碼搜尋。預設關閉。 |
 | **OKX** | 加密貨幣現貨交易對 | WebSocket 推送 | 無需 API Key。預設關閉。 |
 | **Coinbase** | 加密貨幣現貨交易對 | WebSocket 推送 | Coinbase Exchange。無需 API Key。預設關閉。 |
@@ -245,6 +246,7 @@ src/FluxTick.Providers.Tencent   騰訊財經輪詢資料來源
 src/FluxTick.Providers.Sina      新浪財經 WebSocket 資料來源
 src/FluxTick.Providers.Eastmoney 東方財富輪詢資料來源
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket 資料來源（需 API Key）
+src/FluxTick.Providers.Finnhub   Finnhub WebSocket 資料來源（需 API Key）
 src/FluxTick.Providers.TwelveData Twelve Data 輪詢資料來源（需 API Key）
 src/FluxTick.Providers.Simulated 確定性的示範資料來源
 src/FluxTick.App                 Avalonia 桌面應用程式（FluxTick.exe），組合根
