@@ -1,6 +1,7 @@
 using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
 using FluxTick.Providers.Bybit;
+using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
@@ -240,6 +241,11 @@ public sealed class KrakenProviderContractTests : ProviderContractTests<KrakenPr
 /// Contract tests for the Bybit provider.
 /// </summary>
 public sealed class BybitProviderContractTests : ProviderContractTests<BybitProviderFactory>;
+
+/// <summary>
+/// Contract tests for the Gate.io provider.
+/// </summary>
+public sealed class GateIoProviderContractTests : ProviderContractTests<GateIoProviderFactory>;
 
 /// <summary>
 /// Contract tests for the Eulerpool provider.

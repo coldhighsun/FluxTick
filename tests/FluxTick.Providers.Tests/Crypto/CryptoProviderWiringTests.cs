@@ -1,6 +1,7 @@
 using FluxTick.Abstractions;
 using FluxTick.Providers.Binance;
 using FluxTick.Providers.Bybit;
+using FluxTick.Providers.GateIo;
 using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.Common;
 using FluxTick.Providers.Kraken;
@@ -80,6 +81,22 @@ public class CryptoProviderWiringTests
         """{"retCode":0,"retMsg":"OK","result":{"list":[["1792683480000","1","1","1","81641.1","1","1"]]}}""",
         "/v5/market/instruments-info?category=spot&limit=1000",
         """{"retCode":0,"retMsg":"OK","result":{"list":[{"symbol":"BTCUSDT","baseCoin":"BTC","quoteCoin":"USDT","status":"Trading"},{"symbol":"ETHUSDT","baseCoin":"ETH","quoteCoin":"USDT","status":"Trading"}]}}"""));
+
+    /// <summary>
+    /// Verifies the Gate.io provider.
+    /// </summary>
+    [Fact]
+    public Task GateIo_IsWiredCorrectly() => VerifyAsync(new Wiring(
+        (descriptor, endpoints, http) => new GateIoProvider(descriptor, endpoints, http, new FakeTimeProvider(new DateTimeOffset(2026, 10, 22, 16, 0, 0, TimeSpan.Zero)), NullLogger.Instance),
+        new GateIoProviderFactory().Descriptor,
+        "BTC_USDT",
+        """{"time":1792684800,"channel":"spot.tickers","event":"subscribe","payload":["BTC_USDT"]}""",
+        """{"time":1792683284,"time_ms":1792683284127,"channel":"spot.tickers","event":"update","result":{"currency_pair":"BTC_USDT","last":"81513.7","change_percentage":"-3.5"}}""",
+        81513.7m,
+        "/api/v4/spot/candlesticks?currency_pair=BTC_USDT&interval=1m&limit=60",
+        """[["1792683480","1","81641.1","1","1","1","1","true"]]""",
+        "/api/v4/spot/currency_pairs",
+        """[{"id":"BTC_USDT","base":"BTC","quote":"USDT","trade_status":"tradable"},{"id":"ETH_USDT","base":"ETH","quote":"USDT","trade_status":"tradable"}]"""));
 
     /// <summary>
     /// Verifies the Binance provider.
