@@ -18,6 +18,7 @@ using FluxTick.Providers.Okx;
 using FluxTick.Providers.Simulated;
 using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
+using FluxTick.Providers.TwelveData;
 using FluxTick.Providers.Yahoo;
 using GitHubReleaseUpdater.Versioning;
 using Microsoft.Extensions.DependencyInjection;
@@ -180,6 +181,7 @@ public static class AppHost
         services.AddMarketDataProvider<KuCoinProviderFactory>();
         services.AddMarketDataProvider<EastmoneyProviderFactory>();
         services.AddMarketDataProvider<EulerpoolProviderFactory>();
+        services.AddMarketDataProvider<TwelveDataProviderFactory>();
         // The simulated source only exists for the offline demo mode; a normal install does not list it.
         if (demo)
         {

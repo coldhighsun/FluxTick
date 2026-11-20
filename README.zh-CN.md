@@ -89,6 +89,7 @@
 | **Sina Finance（新浪财经）** | A 股、ETF、指数、外汇、国际商品期货 | WebSocket 推送 | 非官方 API，可能被限流、延迟或无通知变更。无需 API Key。代码格式与腾讯相同（如 `sh600000`），但自选标的会固定在添加时的数据源。可搜索股票、主要指数和常用外汇、期货；ETF 需直接输入代码，其他外汇（`fx_seurusd`）和期货（`hf_GC`）输入新浪的代码。走势图历史覆盖 A 股、基金和外汇。默认关闭。 |
 | **Eastmoney（东方财富）** | A 股、港股、美股、ETF、指数 | 轮询（默认 5 秒） | 非官方接口，可能延迟或随时变动。无需 API Key。代码写作 `市场.代码`（`1.600519`、`116.00700`、`105.AAPL`），可通过名称、代码或拼音搜索自动填入。默认关闭。 |
 | **Eulerpool** | 全球股票和 ETF（代码带交易所后缀，如 `AAPL`、`SAP.DE`） | WebSocket 推送 | 需要 API Key（在 eulerpool.com/developers 免费申请，详见 [API Key](#api-key)）。免费 Key 只能收到延迟的 1 秒行情，实时成交需要付费套餐。支持按名称、代码或 ISIN 搜索。默认关闭。 |
+| **Twelve Data** | 全球股票、ETF 和指数 | 轮询（默认 60 秒） | 需要 API Key（在 twelvedata.com 免费申请，详见 [API Key](#api-key)）。免费 Key 每分钟 8 点、每天 800 点，每次刷新每个代码耗 1 点，适合较短的自选列表；行情可能有延迟。支持按名称或代码搜索。默认关闭。 |
 | **OKX** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
 | **Coinbase** | 加密货币现货交易对 | WebSocket 推送 | Coinbase Exchange。无需 API Key。默认关闭。 |
 | **Kraken** | 加密货币现货交易对 | WebSocket 推送 | 无需 API Key。默认关闭。 |
@@ -244,6 +245,7 @@ src/FluxTick.Providers.Tencent   腾讯财经轮询数据源
 src/FluxTick.Providers.Sina      新浪财经 WebSocket 数据源
 src/FluxTick.Providers.Eastmoney 东方财富轮询数据源
 src/FluxTick.Providers.Eulerpool  Eulerpool WebSocket 数据源（需 API Key）
+src/FluxTick.Providers.TwelveData Twelve Data 轮询数据源（需 API Key）
 src/FluxTick.Providers.Simulated 确定性的演示数据源
 src/FluxTick.App                 Avalonia 桌面应用（FluxTick.exe），组合根
 tests/                           xUnit v3 + AwesomeAssertions

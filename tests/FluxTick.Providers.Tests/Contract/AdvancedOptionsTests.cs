@@ -12,6 +12,7 @@ using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
+using FluxTick.Providers.TwelveData;
 using FluxTick.Providers.Yahoo;
 
 namespace FluxTick.Providers.Tests;
@@ -80,5 +81,6 @@ public class AdvancedOptionsTests
         new CryptoComProviderFactory(),
         new KuCoinProviderFactory(),
         new EulerpoolProviderFactory(),
+        new TwelveDataProviderFactory(),
     ];
 }
