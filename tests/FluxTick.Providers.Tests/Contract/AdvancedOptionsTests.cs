@@ -7,6 +7,7 @@ using FluxTick.Providers.Coinbase;
 using FluxTick.Providers.CryptoCom;
 using FluxTick.Providers.Eulerpool;
 using FluxTick.Providers.Kraken;
+using FluxTick.Providers.KuCoin;
 using FluxTick.Providers.Okx;
 using FluxTick.Providers.Sina;
 using FluxTick.Providers.Tencent;
@@ -75,6 +76,7 @@ public class AdvancedOptionsTests
         new GateIoProviderFactory(),
         new BitgetProviderFactory(),
         new CryptoComProviderFactory(),
+        new KuCoinProviderFactory(),
         new EulerpoolProviderFactory(),
     ];
 }
