@@ -107,6 +107,46 @@ public class TwelveDataTests
     }
 
     /// <summary>
+    /// Verifies the subscribe message lists the symbols in one request.
+    /// </summary>
+    [Fact]
+    public void ControlMessages_Symbols_AreListedInOneRequest()
+    {
+        var messages = TwelveDataParser.ControlMessages("subscribe", ["AAPL", "BTC/USD", "aapl"]).ToList();
+
+        messages.Should().ContainSingle().Which.Should().Be("""{"action":"subscribe","params":{"symbols":"AAPL,BTC/USD"}}""");
+    }
+
+    /// <summary>
+    /// Verifies a price event captured from the stream is read.
+    /// </summary>
+    [Fact]
+    public void TryParsePrice_PriceEvent_ReturnsPrice()
+    {
+        const string json = """{"event":"price","symbol":"BTC/USD","currency_base":"Bitcoin","currency_quote":"US Dollar","exchange":"Binance","type":"Digital Currency","timestamp":1795155120,"price":61902.01}""";
+
+        TwelveDataParser.TryParsePrice(json, out var price).Should().BeTrue();
+
+        price.Symbol.Should().Be("BTC/USD");
+        price.Price.Should().Be(61902.01m);
+        price.Time.Should().Be(DateTimeOffset.FromUnixTimeSeconds(1795155120));
+    }
+
+    /// <summary>
+    /// Verifies heartbeats and subscribe replies are not prices, and a refused symbol is reported.
+    /// </summary>
+    [Fact]
+    public void TryParsePrice_OtherEvents_AreNotPrices()
+    {
+        TwelveDataParser.TryParsePrice("""{"event":"heartbeat","status":"ok"}""", out _).Should().BeFalse();
+        const string refused = """{"event":"subscribe-status","status":"error","success":[],"fails":[{"symbol":"ZZZZ"}]}""";
+
+        TwelveDataParser.TryParsePrice(refused, out _).Should().BeFalse();
+        TwelveDataParser.TryParseStreamError(refused).Should().Be("cannot subscribe to ZZZZ");
+        TwelveDataParser.TryParseStreamError("""{"event":"subscribe-status","status":"ok","success":[{"symbol":"AAPL"}],"fails":null}""").Should().BeNull();
+    }
+
+    /// <summary>
     /// Verifies the key goes in a header and never in the address.
     /// </summary>
     [Fact]
@@ -159,6 +199,7 @@ public class TwelveDataTests
         new(
             new TwelveDataProviderFactory().Descriptor,
             new Uri("https://api.example.test"),
+            new Uri("ws://127.0.0.1:1/"),
             "secret-key",
             TimeSpan.FromSeconds(60),
             new HttpClient(handler),

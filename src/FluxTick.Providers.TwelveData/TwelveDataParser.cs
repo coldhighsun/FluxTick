@@ -11,6 +11,92 @@ namespace FluxTick.Providers.TwelveData;
 internal static class TwelveDataParser
 {
     /// <summary>
+    /// The keep-alive message the stream expects every few seconds; it answers with a heartbeat event.
+    /// </summary>
+    public const string Heartbeat = """{"action":"heartbeat"}""";
+
+    /// <summary>
+    /// The most symbols sent in one subscribe message.
+    /// </summary>
+    private const int MaxSymbolsPerMessage = 50;
+
+    /// <summary>
+    /// Builds subscribe or unsubscribe messages, <c>{"action":"subscribe","params":{"symbols":"AAPL,BTC/USD"}}</c>.
+    /// </summary>
+    /// <param name="action">
+    /// <c>subscribe</c> or <c>unsubscribe</c>.
+    /// </param>
+    /// <param name="symbols">
+    /// The symbols.
+    /// </param>
+    /// <returns>
+    /// The JSON texts to send.
+    /// </returns>
+    public static IEnumerable<string> ControlMessages(string action, IEnumerable<string> symbols) =>
+        symbols
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Chunk(MaxSymbolsPerMessage)
+            .Select(chunk => JsonSerializer.Serialize(new { action, @params = new { symbols = string.Join(',', chunk) } }));
+
+    /// <summary>
+    /// Parses a price event of the stream.
+    /// </summary>
+    /// <param name="json">
+    /// The received text.
+    /// </param>
+    /// <param name="price">
+    /// The price.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the message was a price event.
+    /// </returns>
+    public static bool TryParsePrice(string json, out StreamPrice price)
+    {
+        price = null!;
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("event", out var kind) || kind.GetString() != "price"
+            || !root.TryGetProperty("symbol", out var symbolElement) || symbolElement.GetString() is not { Length: > 0 } symbol
+            || !JsonValues.TryGetDecimal(root, "price", out var value) || value <= 0)
+        {
+            return false;
+        }
+
+        price = new StreamPrice(symbol, value, TryGetUnixSeconds(root, "timestamp"));
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the symbols a subscribe reply refused, or the error an error event reports.
+    /// </summary>
+    /// <param name="json">
+    /// The received text.
+    /// </param>
+    /// <returns>
+    /// A description of the problem, or <see langword="null"/> when the message reports none.
+    /// </returns>
+    public static string? TryParseStreamError(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("event", out var kind))
+        {
+            return null;
+        }
+
+        if (kind.GetString() == "subscribe-status" && root.TryGetProperty("fails", out var fails) && fails.ValueKind == JsonValueKind.Array)
+        {
+            var names = fails.EnumerateArray()
+                .Select(f => f.ValueKind == JsonValueKind.Object && f.TryGetProperty("symbol", out var n) ? n.GetString() : f.ToString())
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToArray();
+            return names.Length == 0 ? null : $"cannot subscribe to {string.Join(", ", names)}";
+        }
+
+        return kind.GetString() == "error" && root.TryGetProperty("message", out var message) ? message.GetString() : null;
+    }
+    /// <summary>
     /// Parses the answer of the quote service. A request for one symbol is answered with the quote itself, a request for
     /// several with an object that holds one quote per symbol; a symbol that failed carries an error in its place.
     /// </summary>
@@ -243,3 +329,17 @@ internal static class TwelveDataParser
         }
     }
 }
+
+/// <summary>
+/// One price of the stream.
+/// </summary>
+/// <param name="Symbol">
+/// The symbol the price is of.
+/// </param>
+/// <param name="Price">
+/// The price.
+/// </param>
+/// <param name="Time">
+/// When it was traded, or <see langword="null"/> when the event carries no time.
+/// </param>
+internal sealed record StreamPrice(string Symbol, decimal Price, DateTimeOffset? Time);
