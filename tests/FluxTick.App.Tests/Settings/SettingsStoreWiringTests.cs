@@ -41,7 +41,9 @@ public sealed class SettingsStoreWiringTests : IDisposable
 
         provider.GetRequiredService<ISettingsStore>().Should().BeOfType<ProtectedSettingsStore>();
         provider.GetRequiredService<ISecretProtector>().Should().BeOfType(
-            OperatingSystem.IsWindows() ? typeof(DpapiSecretProtector) : typeof(NoSecretProtector));
+            OperatingSystem.IsWindows() ? typeof(DpapiSecretProtector)
+            : OperatingSystem.IsMacOS() ? typeof(KeychainSecretProtector)
+            : typeof(NoSecretProtector));
     }
 
     /// <summary>
@@ -63,7 +65,7 @@ public sealed class SettingsStoreWiringTests : IDisposable
 
         var file = await File.ReadAllTextAsync(Path.Combine(_directory, "settings.json"));
         file.Should().Contain("https://api.example.test");
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
             file.Should().NotContain(Key).And.Contain(ProtectedSettingsStore.Prefix);
         }
@@ -82,5 +84,6 @@ public sealed class SettingsStoreWiringTests : IDisposable
         .AddLogging()
         .AddMarketDataProvider<EulerpoolProviderFactory>()
         .AddSettingsStore(Path.Combine(_directory, "settings.json"))
+        .AddSingleton<IMasterKeyStore>(new KeychainSecretProtectorTests.MemoryKeyStore()) // never the real Keychain of the machine
         .BuildServiceProvider();
 }
