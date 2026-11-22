@@ -1151,20 +1151,21 @@ public class ChartRangeTests
         var service = new MarketDataService(new ProviderRegistry([factory]), NullLoggerFactory.Instance, _time);
         await service.ApplyAsync(SettingsFor(Btc));
 
-        // The history of the last hour arrives in the background and raises a snapshot of its own; on a slow machine that
-        // would land after the handler below is attached and be counted as the answer of the range load.
+        // Let the history of the last hour arrive first, so that only the range load is still outstanding.
         await WaitUntilAsync(() => service.GetSnapshots().Single().Sparkline.Count > 0);
         service.SetChartRange(HistoryRange.Day);
         var token = await loadToken.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var raised = 0;
-        service.SnapshotChanged += (_, _) => Interlocked.Increment(ref raised);
+        var before = service.GetSnapshots().Single().Sparkline.ToArray();
 
         await service.DisposeAsync();
         release.SetResult();
-        await Task.Delay(100);
+
+        // What the load answers after disposal must not reach the chart. Counting raised events would also count unrelated
+        // start-up refreshes, so compare what is shown; waiting longer can only let a late leak show, never fail by itself.
+        await Task.Delay(200);
 
         token.IsCancellationRequested.Should().BeTrue();
-        Volatile.Read(ref raised).Should().Be(0);
+        service.GetSnapshots().Single().Sparkline.Should().Equal(before);
     }
 
     /// <summary>
