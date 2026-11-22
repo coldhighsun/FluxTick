@@ -166,7 +166,7 @@ xattr -dr com.apple.quarantine /Applications/FluxTick.app
 Things to know on macOS:
 
 - Only Apple Silicon (M1 and later) is built, there is no Intel build. macOS 12 or later is required.
-- The boss-key hotkey and *Launch at startup* are Windows-only and not available. Clicking the menu bar icon opens the
+- The boss-key hotkey works as on Windows, with *Win* meaning the Command key and *Alt* the Option key (stored as `Win` and `Alt` in the settings file); it needs no extra permission. Clicking the menu bar icon opens the
   instrument list; its *Show / hide*, *Settings* and *Exit* entries sit at the bottom of the list, as
   the icon has no menu of its own.
 - There is no Keychain integration yet: API keys are stored as plain text (file mode 600) in `~/.config/FluxTick`, which
@@ -228,7 +228,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Price roll | Off by default; *Roll the price on change* in the right-click menu or Settings → Appearance. Only the price number rolls; the flashing card or row marks an alert that fired and does not depend on this setting |
 | Edge auto-hide | On by default (needs always-on-top; unavailable where the system does not let a window leave the screen); Settings → General. Drop the window at the left, right or top screen edge and it slides away, leaving a thin strip; point at the strip or double-click the tray icon to bring it back. It hides again once you move away, unless it was brought out with the tray icon |
 | Hide / show | While a tray icon is available the window has no taskbar button (and is not in Alt+Tab). **×** hides to the tray (or exits, see *Close button*); double-click the tray icon to bring it back (a single click where the tray cannot list instruments); *Exit* in the tray menu quits. Prices keep updating while hidden, so the sources with an instrument on your watchlist stay connected |
-| Boss key | A global hotkey (default **Ctrl+Alt+H**) hides every window and the tray icon at once; the same key brings them back. Change it in Settings → General: click the box and press the new keys (at least one of Ctrl, Alt, Shift or Win plus a letter, digit, F key, arrow, navigation or punctuation key; Backspace turns it off). Prices keep updating while hidden, but alert notifications and update prompts wait. Windows only |
+| Boss key | A global hotkey (default **Ctrl+Alt+H**) hides every window and the tray icon at once; the same key brings them back. Change it in Settings → General: click the box and press the new keys (at least one of Ctrl, Alt, Shift or Win (Command on macOS) plus a letter, digit, F key, arrow, navigation or punctuation key; Backspace turns it off). Prices keep updating while hidden, but alert notifications and update prompts wait. Windows and macOS only |
 
 Settings and logs live in `%APPDATA%\FluxTick` on Windows and `~/.config/FluxTick` on Linux and macOS; Settings → General has buttons that open the folders. Logs are one file per day (split at 10 MB), and only the newest 5 files are kept. A problem that repeats with every price update is logged at most once a minute.
 Options at their built-in default are not written to `settings.json`. Before each save the previous file is kept as `settings.json.bak`, and a settings file that is missing or damaged is restored from it. To reset everything, quit the app and delete both `settings.json` and `settings.json.bak`.

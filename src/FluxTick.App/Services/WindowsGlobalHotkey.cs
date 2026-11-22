@@ -9,7 +9,7 @@ namespace FluxTick.App.Services;
 /// that thread runs a message loop of its own; <see cref="Pressed"/> is raised on it, not on the UI thread.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class WindowsGlobalHotkey : IDisposable
+public sealed class WindowsGlobalHotkey : IGlobalHotkey
 {
     /// <summary>
     /// Keeps a held key from raising the hotkey again and again.
