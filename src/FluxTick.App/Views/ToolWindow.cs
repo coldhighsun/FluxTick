@@ -82,6 +82,36 @@ public class ToolWindow : Window
     }
 
     /// <summary>
+    /// Shows the window without an owner in the middle of the screen the pointer is on (the primary one when that is not
+    /// known), for when the main window is hidden and cannot own it. The window is not modal and has a taskbar button so
+    /// it can be found again, and the application is brought to the front, which a hidden Dock icon does not do by itself.
+    /// </summary>
+    /// <returns>
+    /// A task that completes when the window is closed.
+    /// </returns>
+    public Task ShowStandaloneAsync()
+    {
+        var closed = new TaskCompletionSource();
+        Closed += (_, _) => closed.TrySetResult();
+        ShowInTaskbar = true;
+
+        var screen = TrayCursor.TryGetPosition(Screens, out var pointer)
+            ? Screens.ScreenFromPoint(pointer) ?? Screens.Primary
+            : Screens.Primary;
+        if (screen is not null)
+        {
+            LimitToScreen(screen);
+            PlaceInMiddle(screen, new Size(Width, PlacementHeight()));
+            Opened += (_, _) => PlaceInMiddle(screen, FrameSize ?? Bounds.Size);
+        }
+
+        MacStatusItem.ActivateApp();
+        Show();
+        Activate();
+        return closed.Task;
+    }
+
+    /// <summary>
     /// Limits the height of the window to the screen. The limit wins over the preferred minimum so a small display never
     /// pushes the window off-screen.
     /// </summary>

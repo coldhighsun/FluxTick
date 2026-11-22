@@ -86,7 +86,10 @@
       <!-- Where the tray icon has no menu (macOS), the entries of the menu are here. -->
       <StackPanel x:Name="MenuBar" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="14" Margin="0,8,0,0" IsVisible="False">
         <Button Classes="status" HorizontalAlignment="Right" Click="OnShowWindowClicked">
-          <TextBlock Text="{loc:T Tray_ShowHide}" Classes="muted" FontSize="11" />
+          <Panel>
+            <TextBlock Text="{loc:T Tray_Hide}" Classes="muted" FontSize="11" IsVisible="{Binding IsWindowShown}" />
+            <TextBlock Text="{loc:T Tray_Show}" Classes="muted" FontSize="11" IsVisible="{Binding !IsWindowShown}" />
+          </Panel>
         </Button>
         <Button Classes="status" HorizontalAlignment="Right" Click="OnSettingsClicked">
           <TextBlock Text="{loc:T Tray_Settings}" Classes="muted" FontSize="11" />

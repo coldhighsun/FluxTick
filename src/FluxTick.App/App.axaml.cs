@@ -265,6 +265,7 @@ public sealed partial class App : Application
             };
             ApplyTaskbarButton();
             _window.GeometryChanged += OnGeometryChanged;
+            _window.SightChanged += (_, _) => ApplyToggleHeader();
             _window.FullScreenChanged += OnFullScreenChanged;
             _window.Closed += OnWindowClosed;
 
@@ -668,10 +669,19 @@ public sealed partial class App : Application
                 _trayToggle.Click += OnToggleWindow;
                 _traySettings.Click += OnTraySettingsClicked;
                 _trayExit.Click += OnExit;
-                tray.Menu = [_trayToggle, _traySettings, new NativeMenuItemSeparator(), _trayExit];
+                var menu = new NativeMenu();
+                menu.Items.Add(_trayToggle);
+                menu.Items.Add(_traySettings);
+                menu.Items.Add(new NativeMenuItemSeparator());
+                menu.Items.Add(_trayExit);
+
+                // The entry names what it will do, which depends on whether the window is in sight; it is kept current
+                // when that changes, and checked again as the menu opens.
+                menu.Opening += (_, _) => ApplyToggleHeader();
+                tray.Menu = menu;
             }
 
-            _trayToggle.Header = Loc.Get("Tray_ShowHide");
+            ApplyToggleHeader();
             _traySettings.Header = Loc.Get("Tray_Settings");
             _trayExit.Header = Loc.Get("Tray_Exit");
             ApplyUpdateTray();
@@ -714,6 +724,17 @@ public sealed partial class App : Application
     }
 
     /// <summary>
+    /// Names the show or hide entry of the tray menu after what it does now.
+    /// </summary>
+    private void ApplyToggleHeader()
+    {
+        if (_trayToggle is not null)
+        {
+            _trayToggle.Header = Loc.Get(_window is { IsOutOfSight: false } ? "Tray_Hide" : "Tray_Show");
+        }
+    }
+
+    /// <summary>
     /// Opens the tray popup next to the pointer, which is on the tray icon right after the click.
     /// </summary>
     /// <returns>
@@ -728,7 +749,13 @@ public sealed partial class App : Application
         }
 
         MacStatusItem.ActivateApp();
-        var shown = EnsureTrayPopup().ShowAt(new PixelRect(cursor, new PixelSize(1, 1)), _window?.Screens);
+        var popup = EnsureTrayPopup();
+        if (popup.DataContext is TrayPopupViewModel popupModel)
+        {
+            popupModel.IsWindowShown = _window is { IsOutOfSight: false };
+        }
+
+        var shown = popup.ShowAt(new PixelRect(cursor, new PixelSize(1, 1)), _window?.Screens);
         _services?.GetService<ILogger<App>>()?.LogDebug("Tray list at {Cursor}: {Shown}", cursor, shown ? "shown" : "no screen to place it on");
         return shown;
     }
@@ -821,7 +848,7 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(SettingsTab.About), replaceToolWindow: true);
+    private void OnTrayUpdateClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(SettingsTab.About), replaceToolWindow: true, showWindow: false);
 
     /// <summary>
     /// Opens the settings window.
@@ -832,7 +859,7 @@ public sealed partial class App : Application
     /// <param name="e">
     /// The event data.
     /// </param>
-    private void OnTraySettingsClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true);
+    private void OnTraySettingsClicked(object? sender, EventArgs e) => ShowFromTray(viewModel => viewModel.ShowSettings(), replaceToolWindow: true, showWindow: false);
 
     /// <summary>
     /// Gives the main window a taskbar button only where there is a tray icon to bring it back with. The window keeps
@@ -1050,20 +1077,26 @@ public sealed partial class App : Application
     /// Whether a tool window that is already open is closed first. The view model ignores a request while one is open, so
     /// without this a choice from the tray menu would do nothing; a plain activation must leave the open window alone.
     /// </param>
-    private void ShowFromTray(Action<MainViewModel> open, bool replaceToolWindow = false)
+    /// <param name="showWindow">
+    /// Whether a hidden main window is shown first. Settings do not need it: they open on their own.
+    /// </param>
+    private void ShowFromTray(Action<MainViewModel> open, bool replaceToolWindow = false, bool showWindow = true)
     {
         if (_window is null || _services is null)
         {
             return;
         }
 
-        if (!_window.IsVisible)
+        if (showWindow)
         {
-            _window.ToggleVisibility();
-        }
-        else
-        {
-            _window.RestoreIfMinimized();
+            if (!_window.IsVisible)
+            {
+                _window.ToggleVisibility();
+            }
+            else
+            {
+                _window.RestoreIfMinimized();
+            }
         }
 
         var viewModel = _services.GetRequiredService<MainViewModel>();
