@@ -124,7 +124,7 @@ public sealed partial class App : Application
     /// <summary>
     /// The listener for the boss key, or <see langword="null"/> where the platform has none.
     /// </summary>
-    private WindowsGlobalHotkey? _bossHotkey;
+    private IGlobalHotkey? _bossHotkey;
 
     /// <summary>
     /// The hotkey the settings asked for last.
@@ -303,10 +303,7 @@ public sealed partial class App : Application
             desktop.Exit += (_, _) =>
             {
                 IsExiting = true;
-                if (OperatingSystem.IsWindows())
-                {
-                    _bossHotkey?.Dispose();
-                }
+                _bossHotkey?.Dispose();
 
                 _macStatusItem?.Dispose();
 
@@ -937,12 +934,12 @@ public sealed partial class App : Application
     /// </summary>
     private void ApplyBossKey()
     {
-        if (_settings is null || !OperatingSystem.IsWindows())
+        if (_settings is null || !GlobalHotkeyAvailability.IsSupported)
         {
             return;
         }
 
-        // While the box records keys the boss key is let go of, or Windows would take the combination for it. A settings
+        // While the box records keys the boss key is let go of, or the system would take the combination for it. A settings
         // window that is closed records nothing, whatever the box last reported.
         var main = _services?.GetService<MainViewModel>();
         var recording = main is { IsSettingsOpen: true } && main.Settings.IsRecordingBossKey;
@@ -960,14 +957,22 @@ public sealed partial class App : Application
 
         if (_bossHotkey is null)
         {
-            _bossHotkey = new WindowsGlobalHotkey();
-            _bossHotkey.Pressed += (_, _) => Dispatcher.UIThread.Post(ToggleBossKey);
+            _bossHotkey = GlobalHotkeyAvailability.Create();
+            if (_bossHotkey is not null)
+            {
+                _bossHotkey.Pressed += (_, _) => Dispatcher.UIThread.Post(ToggleBossKey);
+            }
+        }
+
+        if (_bossHotkey is null)
+        {
+            return;
         }
 
         if (!_bossHotkey.Register(next))
         {
             _services?.GetService<ILogger<App>>()?.LogWarning("The boss key {Hotkey} is taken by another program", next);
-            _toasts?.Show(Loc.Get("BossKey_FailedTitle"), Loc.Get("BossKey_FailedBody", next));
+            _toasts?.Show(Loc.Get("BossKey_FailedTitle"), Loc.Get("BossKey_FailedBody", HotkeyDisplay.Format(next.ToString())));
         }
         else
         {
@@ -1009,6 +1014,12 @@ public sealed partial class App : Application
                     if (w == _window)
                     {
                         _window.ToggleVisibility(showOnly: true);
+
+                        // The hotkey works while another app is in front, and a window shown then stays behind it.
+                        if (OperatingSystem.IsMacOS())
+                        {
+                            MacStatusItem.ActivateApp();
+                        }
                     }
                     else
                     {

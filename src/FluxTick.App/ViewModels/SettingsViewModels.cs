@@ -1553,7 +1553,7 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     /// <summary>
     /// Gets a value indicating whether this platform has the boss key.
     /// </summary>
-    public bool IsBossKeySupported => OperatingSystem.IsWindows();
+    public bool IsBossKeySupported => GlobalHotkeyAvailability.IsSupported;
 
     /// <summary>
     /// Gets or sets the boss key as the user typed it; the box hands it over when it loses the focus, so a half-typed key

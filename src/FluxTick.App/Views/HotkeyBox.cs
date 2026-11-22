@@ -291,7 +291,7 @@ public sealed class HotkeyBox : Border
     {
         var hint = _hasFocus && RecordingText.Length > 0 ? RecordingText : EmptyText;
         var isHint = _preview is null && Value.Length == 0;
-        _text.Text = _preview ?? (isHint ? hint : Value);
+        _text.Text = isHint && _preview is null ? hint : HotkeyDisplay.Format(_preview ?? Value);
         _text.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable(isHint ? "TextControlPlaceholderForeground" : "TextControlForeground"));
     }
 }
