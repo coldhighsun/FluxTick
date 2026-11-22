@@ -169,8 +169,8 @@ Things to know on macOS:
 - The boss-key hotkey works as on Windows, with *Win* meaning the Command key and *Alt* the Option key (stored as `Win` and `Alt` in the settings file); it needs no extra permission. Clicking the menu bar icon opens the
   instrument list; its *Show / hide*, *Settings* and *Exit* entries sit at the bottom of the list, as
   the icon has no menu of its own.
-- There is no Keychain integration yet: API keys are stored as plain text (file mode 600) in `~/.config/FluxTick`, which
-  also holds the settings and logs.
+- API keys are encrypted with a key kept in the macOS Keychain (see *API keys* below); the settings and logs live in
+  `~/.config/FluxTick`.
 - The app is a single self-extracting file, so the very first launch can take a few seconds longer.
 - Updates are not installed automatically: FluxTick downloads and verifies the new `.dmg` and tells you; replace the app
   in `Applications` yourself.
@@ -239,8 +239,9 @@ Some data sources need an API key (Eulerpool, Twelve Data, Finnhub and Massive; 
 
 - **Where they are kept:** in `settings.json`, in the same folder as the other settings, and in the copies of it in that folder (`settings.json.bak`, the file before the last save, and `settings.json.bad`, a damaged file set aside). They are not kept anywhere else, never written to the logs and never put in a URL; they are only sent to the data source they belong to.
 - **Windows:** keys are encrypted with the Windows Data Protection API (DPAPI) for your user account and written as `protected:v1:…`. Only the same user on the same machine can open them, and each one is bound to its own data source and option, so it cannot be moved to another. A key from an older version that was stored as plain text is encrypted the first time the app starts. Older copies of the settings file may still hold it as plain text: `settings.json.bak` until the next change of the settings replaces it, and `settings.json.bad` until you delete it.
-- **Linux and macOS:** there is no built-in protection yet, so keys are stored as plain text. The file is created readable and writable by your user only (mode `600`), so it is as private as your user account.
-- **Limits:** DPAPI does not stop other programs running as your user from reading a key, and a key is visible in memory while the app runs. Do not share `settings.json` or paste it into an issue; remove the key first.
+- **macOS:** a random 256-bit key is kept in your login Keychain (item `FluxTick` / `SecretMasterKey`), and each API key is encrypted with it (AES-256-GCM) and written as `protected:v1:…`. Each one is bound to its own data source and option, so it cannot be moved to another. A key from an older version that was stored as plain text is encrypted the first time the app starts; older copies of the settings file (`settings.json.bak`, `settings.json.bad`) may still hold it as plain text. macOS may ask you to allow access to the Keychain item; if the Keychain cannot be used, keys are stored as plain text (file mode `600`) and the log says so. Unsigned development builds can be asked again after each rebuild.
+- **Linux:** there is no built-in protection yet, so keys are stored as plain text. The file is created readable and writable by your user only (mode `600`), so it is as private as your user account.
+- **Limits:** DPAPI and the Keychain do not stop other programs running as your user from reading a key, and a key is visible in memory while the app runs. Do not share `settings.json` or paste it into an issue; remove the key first.
 - **If a key cannot be opened** (the file was copied to another account or machine, or is damaged), the data source asks for the key again. The old text stays in the file while the source is on, so an unrelated change does not lose it; entering a new key replaces it, and switching the source off lets go of it.
 - **Restore defaults** on a data source keeps its keys.
 

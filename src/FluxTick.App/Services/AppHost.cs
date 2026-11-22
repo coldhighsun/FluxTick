@@ -66,7 +66,8 @@ public static class AppHost
 
     /// <summary>
     /// Registers the settings store. Secret options such as API keys are protected where the settings are written;
-    /// everything above works with the plain values. Only Windows has protection built in (DPAPI, for the current user).
+    /// everything above works with the plain values. Windows protects them with DPAPI (for the current user) and macOS with a key
+    /// in the Keychain; other systems have no protection built in.
     /// </summary>
     /// <param name="services">
     /// The services.
@@ -82,6 +83,11 @@ public static class AppHost
         if (OperatingSystem.IsWindows())
         {
             services.AddSingleton<ISecretProtector, DpapiSecretProtector>();
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            services.AddSingleton<IMasterKeyStore, KeychainMasterKeyStore>();
+            services.AddSingleton<ISecretProtector, KeychainSecretProtector>();
         }
         else
         {
