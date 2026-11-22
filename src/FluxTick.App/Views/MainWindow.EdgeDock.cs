@@ -291,6 +291,7 @@ public sealed partial class MainWindow
         }
 
         _dock.SetHidden(false);
+        SightChanged?.Invoke(this, EventArgs.Empty);
         MoveDock(_dock.ShownPosition(CurrentPixelBounds()));
     }
 
@@ -602,7 +603,7 @@ public sealed partial class MainWindow
             && WindowState == WindowState.Normal
             && !_dock.Dragging
             && _dockSettle is null
-            && _toolWindow is null
+            && (_toolWindow is null || _toolWindowStandalone)
             && OpenMenus.Count == 0
             && !GroupNamePrompt.IsOpen
             && !DockFlyoutButtons().Any(button => button.Flyout is { IsOpen: true });
@@ -641,6 +642,7 @@ public sealed partial class MainWindow
         }
 
         _dock.SetHidden(hide);
+        SightChanged?.Invoke(this, EventArgs.Empty);
         var window = CurrentPixelBounds();
         var target = hide ? _dock.HiddenPosition(window, ScaledPixels(EdgeDockRules.Sliver)) : _dock.ShownPosition(window);
         SlideDockTo(target, hide ? () => VerifyHidden(target) : RaiseGeometryChanged);

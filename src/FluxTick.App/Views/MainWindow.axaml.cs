@@ -54,6 +54,11 @@ public sealed partial class MainWindow : Window
     private ToolWindow? _toolWindow;
 
     /// <summary>
+    /// Whether the open tool window has no owner because the main window was out of sight when it was opened.
+    /// </summary>
+    private bool _toolWindowStandalone;
+
+    /// <summary>
     /// The view model whose window requests are being observed.
     /// </summary>
     private MainViewModel? _observed;
@@ -321,7 +326,7 @@ public sealed partial class MainWindow : Window
             case TrayToggle.SlideIn:
                 // Hiding the window to the tray closes the tool window; sliding it away does the same, so none is left
                 // open beside a window that is gone, and neither is a menu or pop-up.
-                _toolWindow?.Close();
+                CloseOwnedToolWindow();
                 CloseDockPopups();
                 SlideDock(hide: true, explicitRequest: true);
                 break;
@@ -344,6 +349,28 @@ public sealed partial class MainWindow : Window
         WindowState = _stateBeforeMinimize;
         Activate();
         return true;
+    }
+
+    /// <summary>
+    /// Occurs when the window goes in or out of sight: shown, hidden, minimized, restored or slid at a screen edge.
+    /// </summary>
+    public event EventHandler? SightChanged;
+
+    /// <summary>
+    /// Gets a value indicating whether the main window is out of sight (hidden, minimized or slid away at a screen edge),
+    /// so a tool window opened now has no owner to be modal to.
+    /// </summary>
+    public bool IsOutOfSight => !IsVisible || WindowState == WindowState.Minimized || _dock.Hidden;
+
+    /// <summary>
+    /// Closes the tool window that is open unless it stands alone, which does not depend on this window being shown.
+    /// </summary>
+    private void CloseOwnedToolWindow()
+    {
+        if (!_toolWindowStandalone)
+        {
+            _toolWindow?.Close();
+        }
     }
 
     /// <summary>
@@ -449,9 +476,14 @@ public sealed partial class MainWindow : Window
             EndGripDrag();
         }
 
+        if (change.Property == IsVisibleProperty || change.Property == WindowStateProperty)
+        {
+            SightChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         if (change.Property == IsVisibleProperty && !IsVisible)
         {
-            _toolWindow?.Close();
+            CloseOwnedToolWindow();
         }
         else if (change.Property == WindowStateProperty)
         {
@@ -1358,18 +1390,22 @@ public sealed partial class MainWindow : Window
 
             cleanedUp = true;
             _toolWindow = null;
+            _toolWindowStandalone = false;
             viewModel.EndToolWindow();
             onClosed?.Invoke();
             ResumeDockLeave();
         }
 
+        // Only settings stand alone; the other tool windows work on the rows of a main window that is in sight.
+        var standalone = kind == ToolWindowKind.Settings && IsOutOfSight;
         _toolWindow = window;
+        _toolWindowStandalone = standalone;
         viewModel.BeginToolWindow(kind);
         window.Closed += (_, _) => CleanUp();
 
         try
         {
-            await window.ShowCenteredAsync(this);
+            await (standalone ? window.ShowStandaloneAsync() : window.ShowCenteredAsync(this));
         }
         catch (Exception ex)
         {

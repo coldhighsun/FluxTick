@@ -94,6 +94,13 @@ public sealed partial class TrayPopupViewModel : ObservableObject
     public ObservableCollection<AssetRowViewModel> Items { get; } = [];
 
     /// <summary>
+    /// Gets or sets a value indicating whether the main window is in sight, so the entry offers to hide it rather than
+    /// to show it.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsWindowShown { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether the tray list is empty.
     /// </summary>
     [ObservableProperty]
