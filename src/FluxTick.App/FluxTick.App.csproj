@@ -8,6 +8,8 @@
     <ApplicationIcon>Assets\fluxtick.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Dynamic PGO instruments hot methods and keeps the extra code and tables resident; a widget gains nothing from it. -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <PropertyGroup>
