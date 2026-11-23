@@ -21,14 +21,15 @@ public sealed record MarketDataServiceOptions
     public TimeSpan StaleAfter { get; init; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// Gets the number of points kept per sparkline.
+    /// Gets the number of points kept per sparkline. With the default bucket this is the last hour. History from the
+    /// sources is still asked for at one point per minute; the finer points come from the quotes that arrive live.
     /// </summary>
-    public int SparklineCapacity { get; init; } = 60;
+    public int SparklineCapacity { get; init; } = 360;
 
     /// <summary>
-    /// Gets the time covered by one sparkline point.
+    /// Gets the time covered by one sparkline point; a later price in the same bucket replaces the earlier one.
     /// </summary>
-    public TimeSpan SparklineBucket { get; init; } = TimeSpan.FromMinutes(1);
+    public TimeSpan SparklineBucket { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Gets how often health is re-evaluated.

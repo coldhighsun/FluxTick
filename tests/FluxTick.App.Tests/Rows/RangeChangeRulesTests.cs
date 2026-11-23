@@ -157,6 +157,8 @@ public class RangeChangeRulesTests
 
         SparklineHover.TimeLabel(AsOf.AddHours(-2), HistoryRange.Day, AsOf, zone).Should().Be("10:00");
         SparklineHover.TimeLabel(AsOf.AddHours(-20), HistoryRange.Day, AsOf, zone).Should().Be("01-09 16:00");
+        SparklineHover.TimeLabel(AsOf.AddMinutes(-5).AddSeconds(-20), HistoryRange.Hour, AsOf, zone).Should().Be("11:54:40");
+        SparklineHover.TimeLabel(AsOf.AddHours(-20), HistoryRange.Hour, AsOf, zone).Should().Be("01-09 16:00:00");
         SparklineHover.TimeLabel(AsOf.AddHours(-2), HistoryRange.FiveDays, AsOf, zone).Should().Be("01-10 10:00");
         SparklineHover.TimeLabel(AsOf.AddHours(-2), HistoryRange.Month, AsOf, zone).Should().Be("01-10");
         SparklineHover.TimeLabel(AsOf.AddHours(-2), HistoryRange.HalfYear, AsOf, zone).Should().Be("2026-01-10");

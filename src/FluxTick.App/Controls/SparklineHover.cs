@@ -53,10 +53,10 @@ public static class SparklineHover
 
     /// <summary>
     /// Writes the time of a price the way the range needs it: the clock for a short range (with the date when it is not
-    /// today), the date and the clock for five days and the date alone for the longer ones. A point of a month stands for
-    /// four hours, whose start need not be a time the market traded at, so it has no clock. A point of a half year or a year
-    /// stands for a day that starts at midnight UTC, so that date is written as it is: moved to a zone west of UTC it would
-    /// be the day before.
+    /// today; the hour has points of ten seconds, so its clock has seconds), the date and the clock for five days and the
+    /// date alone for the longer ones. A point of a month stands for four hours, whose start need not be a time the market
+    /// traded at, so it has no clock. A point of a half year or a year stands for a day that starts at midnight UTC, so
+    /// that date is written as it is: moved to a zone west of UTC it would be the day before.
     /// </summary>
     /// <param name="time">
     /// When the price was traded.
@@ -81,11 +81,13 @@ public static class SparklineHover
         }
 
         var local = TimeZoneInfo.ConvertTime(time, zone);
+        var today = local.Date == TimeZoneInfo.ConvertTime(now, zone).Date;
         var format = range switch
         {
             HistoryRange.Month => "MM-dd",
             HistoryRange.FiveDays => "MM-dd HH:mm",
-            _ => local.Date == TimeZoneInfo.ConvertTime(now, zone).Date ? "HH:mm" : "MM-dd HH:mm",
+            HistoryRange.Hour => today ? "HH:mm:ss" : "MM-dd HH:mm:ss",
+            _ => today ? "HH:mm" : "MM-dd HH:mm",
         };
         return local.ToString(format, CultureInfo.InvariantCulture);
     }
