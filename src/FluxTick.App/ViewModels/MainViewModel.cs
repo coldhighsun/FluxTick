@@ -138,6 +138,16 @@ public sealed partial class MainViewModel : LocalizedViewModel
     private readonly ExchangeRateService _rates;
 
     /// <summary>
+    /// Gives memory back after instruments were added or removed.
+    /// </summary>
+    private readonly MemoryTrimmer _memory;
+
+    /// <summary>
+    /// Whether a change of the rows asks for memory to be given back; false until the saved watchlist is on screen.
+    /// </summary>
+    private bool _trimOnRowChange;
+
+    /// <summary>
     /// The holdings of the total being worked out, kept to avoid building a list for every price.
     /// </summary>
     private readonly List<(HoldingPnl Pnl, string Currency)> _holdings = [];
@@ -210,6 +220,9 @@ public sealed partial class MainViewModel : LocalizedViewModel
     /// <param name="rates">
     /// The exchange rates, which the portfolio total is converted with.
     /// </param>
+    /// <param name="memory">
+    /// Gives memory back after instruments were added or removed.
+    /// </param>
     /// <param name="logger">
     /// The logger.
     /// </param>
@@ -223,9 +236,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
         AlertsViewModel alerts,
         HoldingViewModel holding,
         ExchangeRateService rates,
+        MemoryTrimmer memory,
         ILogger<MainViewModel> logger)
         : base(ui)
     {
+        _memory = memory;
         _settings = settings;
         _market = market;
         _registry = registry;
@@ -616,6 +631,9 @@ public sealed partial class MainViewModel : LocalizedViewModel
         _rates.RatesChanged += OnRatesChanged;
         _logger.LogInformation("FluxTick started with {Count} instruments", _settings.Current.Watchlist.Count);
         await ApplySettingsAsync();
+
+        // The rows of the saved watchlist are what the app starts with, not a change to give memory back for.
+        _trimOnRowChange = true;
     }
 
     /// <inheritdoc />
@@ -1676,12 +1694,14 @@ public sealed partial class MainViewModel : LocalizedViewModel
         var snapshots = _market.GetSnapshots().ToDictionary(s => s.Asset.Id);
         var entries = _settings.Current.Watchlist;
         var wanted = entries.Select(e => e.ToAsset()).ToList();
+        var rowsChanged = false;
 
         for (var i = Rows.Count - 1; i >= 0; i--)
         {
             if (!wanted.Any(a => a.Id == Rows[i].Asset.Id))
             {
                 Rows.RemoveAt(i);
+                rowsChanged = true;
             }
         }
 
@@ -1697,6 +1717,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
                     CardSize = CardSize,
                 };
                 Rows.Insert(i, row);
+                rowsChanged = true;
             }
             else
             {
@@ -1731,6 +1752,12 @@ public sealed partial class MainViewModel : LocalizedViewModel
         RefreshPortfolioTip();
         RefreshPortfolio();
         OnPropertyChanged(nameof(IsEmpty));
+
+        // Instruments that came or went leave memory the collector keeps until the process is short of it.
+        if (rowsChanged && _trimOnRowChange)
+        {
+            _memory.Schedule();
+        }
     }
 
     /// <summary>
