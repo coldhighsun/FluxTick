@@ -60,5 +60,8 @@ public static class Program
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // The GPU paths (ANGLE/WGL) keep 100+ MB of driver memory resident for a window of text and sparklines, so
+            // draw on the CPU instead.
+            .With(new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software] })
             .LogToTrace();
 }
