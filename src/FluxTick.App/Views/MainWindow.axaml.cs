@@ -64,6 +64,11 @@ public sealed partial class MainWindow : Window
     private MainViewModel? _observed;
 
     /// <summary>
+    /// The screen-filling view of an instrument that is open, if any.
+    /// </summary>
+    private AssetFocusWindow? _assetFocus;
+
+    /// <summary>
     /// The ids of the assets the watchlist had when the window last looked, to tell added assets from removed ones.
     /// </summary>
     private HashSet<AssetId> _rowIds = [];
@@ -417,6 +422,7 @@ public sealed partial class MainWindow : Window
             _observed.AddAssetRequested -= OnAddAssetRequested;
             _observed.AlertsRequested -= OnAlertsRequested;
             _observed.HoldingRequested -= OnHoldingRequested;
+            _observed.AssetFocusRequested -= OnAssetFocusRequested;
             _observed.FullScreenExitRequested -= OnFullScreenExitRequested;
             _observed.PropertyChanged -= OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged -= OnLayoutPropertyChanged;
@@ -435,6 +441,7 @@ public sealed partial class MainWindow : Window
             _observed.AddAssetRequested += OnAddAssetRequested;
             _observed.AlertsRequested += OnAlertsRequested;
             _observed.HoldingRequested += OnHoldingRequested;
+            _observed.AssetFocusRequested += OnAssetFocusRequested;
             _observed.FullScreenExitRequested += OnFullScreenExitRequested;
             _observed.PropertyChanged += OnLayoutPropertyChanged;
             _observed.Settings.PropertyChanged += OnLayoutPropertyChanged;
@@ -826,6 +833,12 @@ public sealed partial class MainWindow : Window
     /// </param>
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // The screen-filling view of an asset that was removed (or replaced by another source) has nothing left to follow.
+        if (_assetFocus is { DataContext: AssetRowViewModel focused } && _observed is { } observed && !observed.Rows.Contains(focused))
+        {
+            _assetFocus.Close();
+        }
+
         if (_rowCountCheckPending)
         {
             return;
@@ -1347,6 +1360,32 @@ public sealed partial class MainWindow : Window
         }
 
         await ShowToolWindowAsync(viewModel, ToolWindowKind.Alerts, new AlertEditorWindow { DataContext = viewModel.AlertEditor });
+    }
+
+    /// <summary>
+    /// Shows one instrument on a window that fills the screen, in place of the one shown before.
+    /// </summary>
+    /// <param name="sender">The view model.</param>
+    /// <param name="row">The instrument.</param>
+    private void OnAssetFocusRequested(object? sender, AssetRowViewModel row)
+    {
+        _assetFocus?.Close();
+        var window = new AssetFocusWindow { DataContext = row };
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_assetFocus, window))
+            {
+                _assetFocus = null;
+            }
+        };
+        _assetFocus = window;
+        if (Screens.ScreenFromWindow(this) is { } screen)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Position = screen.Bounds.Position;
+        }
+
+        window.Show();
     }
 
     /// <summary>

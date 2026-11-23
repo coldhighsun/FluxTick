@@ -31,6 +31,7 @@ public sealed class BossKeyRolesTests
         BossKeyRoles.Of(typeof(MainWindow)).Should().Be(BossKeyRole.Remember);
         BossKeyRoles.Of(typeof(AlertToastWindow)).Should().Be(BossKeyRole.Drop);
         BossKeyRoles.Of(typeof(ToolWindow)).Should().Be(BossKeyRole.Close);
+        BossKeyRoles.Of(typeof(AssetFocusWindow)).Should().Be(BossKeyRole.Close);
         BossKeyRoles.Of(typeof(Window)).Should().Be(BossKeyRole.Drop);
     }
 }

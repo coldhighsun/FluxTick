@@ -607,6 +607,11 @@ public sealed partial class MainViewModel : LocalizedViewModel
     public event EventHandler? HoldingRequested;
 
     /// <summary>
+    /// Raised when one instrument should be shown on a window of its own that fills the screen; the event data is the instrument.
+    /// </summary>
+    public event EventHandler<AssetRowViewModel>? AssetFocusRequested;
+
+    /// <summary>
     /// Raised when the window should leave full screen, because the list layout was chosen: the list does not fill a
     /// screen, so it is shown in the normal window.
     /// </summary>
@@ -938,6 +943,22 @@ public sealed partial class MainViewModel : LocalizedViewModel
         // A price that is not coming in any more is no price to suggest as the threshold.
         AlertEditor.Begin(row.Asset, row.IsPriceOutdated ? null : row.CurrentPrice);
         AlertsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Requests the screen-filling view of an instrument, which is shown by the view. It does not use the tool window
+    /// state: the view is not modal and does not hold up the other windows.
+    /// </summary>
+    /// <param name="row">The instrument.</param>
+    [RelayCommand]
+    public void ShowAssetFocus(AssetRowViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        AssetFocusRequested?.Invoke(this, row);
     }
 
     /// <summary>
