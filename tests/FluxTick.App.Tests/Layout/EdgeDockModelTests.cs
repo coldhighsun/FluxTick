@@ -505,6 +505,43 @@ public sealed class EdgeDockModelTests
     }
 
     /// <summary>
+    /// A hidden window that became smaller goes to the hidden position of its new size, which keeps the sliver in sight.
+    /// </summary>
+    /// <param name="edge">
+    /// The name of the edge the window is docked to.
+    /// </param>
+    [Theory]
+    [InlineData("Left", 0, 300, -196, 300)]
+    [InlineData("Right", 1580, 300, 1916, 300)]
+    [InlineData("Top", 800, 40, 800, -206)]
+    public void RepinHidden_HiddenWindowShrunk_ReturnsTheHiddenPositionOfTheNewSize(string edge, int x, int y, int hiddenX, int hiddenY)
+    {
+        var model = new EdgeDockModel();
+        model.Settle(new PixelRect(x, y, 340, 420), Area, [], 8, 4);
+        model.Edge.Should().Be(Enum.Parse<DockEdge>(edge));
+        model.SetHidden(true);
+
+        var hidden = model.RepinHidden(new PixelRect(model.HiddenPosition(new PixelRect(x, y, 340, 420), 4), new PixelSize(200, 250)), 4);
+
+        hidden.Should().Be(new PixelPoint(hiddenX, hiddenY));
+    }
+
+    /// <summary>
+    /// A window in sight or one that is not docked has nothing to repin.
+    /// </summary>
+    [Fact]
+    public void RepinHidden_ShownOrNotDocked_ReturnsNull()
+    {
+        var model = new EdgeDockModel();
+        var window = new PixelRect(800, 300, 200, 250);
+
+        model.RepinHidden(window, 4).Should().BeNull();
+
+        model.Settle(new PixelRect(0, 300, 340, 420), Area, [], 8, 4);
+        model.RepinHidden(window, 4).Should().BeNull();
+    }
+
+    /// <summary>
     /// A docked window that was made smaller keeps its edge and is moved flush with it again.
     /// </summary>
     [Fact]

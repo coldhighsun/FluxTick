@@ -19,6 +19,11 @@ internal sealed class StepAnimation
     private EventHandler _step = (_, _) => { };
 
     /// <summary>
+    /// Gets a value indicating whether an animation is running.
+    /// </summary>
+    public bool IsRunning => _timer.IsEnabled;
+
+    /// <summary>
     /// Starts an animation.
     /// </summary>
     /// <param name="duration">

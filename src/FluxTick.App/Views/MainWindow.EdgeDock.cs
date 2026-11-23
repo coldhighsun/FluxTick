@@ -23,7 +23,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// How long the pointer has to be away before a shown window slides back to its edge.
     /// </summary>
-    private static readonly TimeSpan DockLeaveDelay = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan DockLeaveDelay = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// How long after a window was sent beyond its edge the system gets to put it there.
@@ -603,6 +603,7 @@ public sealed partial class MainWindow
             && WindowState == WindowState.Normal
             && !_dock.Dragging
             && _dockSettle is null
+            && !_widthAnimation.IsRunning
             && (_toolWindow is null || _toolWindowStandalone)
             && OpenMenus.Count == 0
             && !GroupNamePrompt.IsOpen
@@ -690,6 +691,36 @@ public sealed partial class MainWindow
         {
             _dock.EndSlide();
         }
+    }
+
+    /// <summary>
+    /// Sends a window that rests hidden beyond its edge to the hidden position for its current size, after the size
+    /// changed. The hidden position depends on the size: left alone, a window that became smaller lies entirely beyond
+    /// the edge, with no sliver left for the pointer to reach.
+    /// </summary>
+    /// <param name="newSize">
+    /// The client size the window is given, in device independent pixels, when the system has not reported it yet; or
+    /// <see langword="null"/> to use the current one.
+    /// </param>
+    private void RepinHidden(Size? newSize = null)
+    {
+        if (!_dock.Hidden || !EnsureDockArea())
+        {
+            return;
+        }
+
+        var window = newSize is { } size ? new PixelRect(Position, PixelSize.FromSize(size, ScreenUnitScale)) : CurrentPixelBounds();
+        if (_dock.RepinHidden(window, ScaledPixels(EdgeDockRules.Sliver)) is not { } hiddenAt)
+        {
+            return;
+        }
+
+        // A slide that still runs would carry the window to its old target; stopping it skips its completion, so the
+        // window is checked afresh at the new one.
+        _dockSlide.Stop();
+        MoveDock(hiddenAt);
+        RaiseGeometryChanged();
+        VerifyHidden(hiddenAt);
     }
 
     /// <summary>

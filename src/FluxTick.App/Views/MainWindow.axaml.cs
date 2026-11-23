@@ -795,7 +795,13 @@ public sealed partial class MainWindow : Window
         // The width follows from the remembered one; the window goes there through the width rule's animation, or by the
         // animation below when it is in the card layout already and the rule has nothing to change.
         _cardsWidth = fit.Width;
-        Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+
+        // A window hidden beyond its edge lies outside the work area on purpose: clamping would pull it into sight.
+        if (!_dock.Hidden)
+        {
+            Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+        }
+
         if (animateWidth)
         {
             var anchor = _dock.Edge == DockEdge.Right ? DockEdge.Right : DockEdge.Left;
@@ -805,6 +811,7 @@ public sealed partial class MainWindow : Window
         }
 
         Height = height;
+        RepinHidden(new Size(ClientSize.Width, height));
     }
 
     /// <summary>
@@ -942,8 +949,14 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+        // A window hidden beyond its edge lies outside the work area on purpose: clamping would pull it into sight.
+        if (!_dock.Hidden)
+        {
+            Position = new PixelPoint(Position.X, WindowFitRules.ClampTop(Position.Y, height * scale, area.Y, area.Bottom));
+        }
+
         Height = height;
+        RepinHidden(new Size(ClientSize.Width, height));
         return true;
     }
 
@@ -1064,18 +1077,7 @@ public sealed partial class MainWindow : Window
 
         // The hidden position depends on the height: beyond the top edge it lies above the window, at the sides the
         // window is kept inside the work area on the other axis.
-        if (_dock.Hidden && EnsureDockArea())
-        {
-            var size = PixelSize.FromSize(new Size(ClientSize.Width, height), ScreenUnitScale);
-            var hiddenAt = _dock.HiddenPosition(new PixelRect(Position, size), ScaledPixels(EdgeDockRules.Sliver));
-
-            // A slide that still runs would carry the window to its old target; stopping it skips its completion, so the
-            // window is checked afresh at the new one.
-            _dockSlide.Stop();
-            MoveDock(hiddenAt);
-            RaiseGeometryChanged();
-            VerifyHidden(hiddenAt);
-        }
+        RepinHidden(new Size(ClientSize.Width, height));
     }
 
     /// <summary>
@@ -1200,6 +1202,31 @@ public sealed partial class MainWindow : Window
     /// </param>
     private void AnimateWidth(double from, double to, WidthRule rule, DockEdge? anchor = null, double? toHeight = null)
     {
+        // Nobody sees a window hidden beyond its edge, and the steps of the animation, like those of a slide that is still
+        // running, would write its position and fight over it, so it takes the size at once and is sent to the position
+        // for that size: the hidden one, or the shown one when it is on its way out.
+        if (_dock.Hidden || _dock.Sliding)
+        {
+            _widthAnimation.Stop();
+            _dockSlide.Stop();
+            _dock.EndSlide();
+            Width = to;
+            if (toHeight is { } newHeight)
+            {
+                Height = newHeight;
+            }
+
+            var size = new Size(to, toHeight ?? ClientSize.Height);
+            if (!_dock.Hidden && _dock.IsDocked && EnsureDockArea())
+            {
+                MoveDock(_dock.ShownPosition(new PixelRect(Position, PixelSize.FromSize(size, ScreenUnitScale))));
+                RaiseGeometryChanged();
+            }
+
+            FinishWidthChange(rule, size);
+            return;
+        }
+
         var fromHeight = ClientSize.Height;
         var scale = ScreenUnitScale;
         var startLeft = Position.X;
@@ -1232,11 +1259,18 @@ public sealed partial class MainWindow : Window
     /// <param name="rule">
     /// The limits to apply.
     /// </param>
-    private void FinishWidthChange(WidthRule rule)
+    /// <param name="newSize">
+    /// The client size the window was given, when the system has not reported it yet; or <see langword="null"/> to use the
+    /// current one.
+    /// </param>
+    private void FinishWidthChange(WidthRule rule, Size? newSize = null)
     {
         _widthAnimationEnd = null;
         MinWidth = rule.Min;
         MaxWidth = rule.Max;
+
+        // A window that rests hidden has a new size, and with it a new hidden position.
+        RepinHidden(newSize);
 
         // A docked window kept its edge while the width changed; it is put flush with the edge again and hides once the
         // pointer is away.

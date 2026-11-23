@@ -446,6 +446,22 @@ internal sealed class EdgeDockModel
     }
 
     /// <summary>
+    /// Gets where a window that rests hidden has to go after its size changed. The hidden position depends on the size,
+    /// so a window that became smaller and stayed where it was would lie entirely beyond the edge, with no sliver left for
+    /// the pointer to reach.
+    /// </summary>
+    /// <param name="window">
+    /// The window bounds in screen pixels, with the new size.
+    /// </param>
+    /// <param name="sliver">
+    /// The width of the strip that stays visible, in screen pixels.
+    /// </param>
+    /// <returns>
+    /// The hidden position for the new size, or <see langword="null"/> when the window is not hidden.
+    /// </returns>
+    public PixelPoint? RepinHidden(PixelRect window, int sliver) => Hidden && IsDocked ? HiddenPosition(window, sliver) : null;
+
+    /// <summary>
     /// Gets the position the window rests at when shown.
     /// </summary>
     /// <param name="window">
