@@ -263,6 +263,7 @@ public static class AppHost
             sp.GetRequiredService<ILogger<ExchangeRateService>>(),
             sp.GetRequiredService<TimeProvider>(),
             new ExchangeRateOptions { CachePath = demo ? null : AppPaths.ExchangeRatesFile }));
+        services.AddSingleton(sp => new MemoryTrimmer(sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton<MainViewModel>();
 
         return services.BuildServiceProvider();

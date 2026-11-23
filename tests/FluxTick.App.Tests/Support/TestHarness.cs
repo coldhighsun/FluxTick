@@ -272,7 +272,8 @@ public sealed class Harness : IAsyncDisposable
         Alerts = new AlertsViewModel(Settings, registry, ui);
         Holding = new HoldingViewModel(Settings, ui);
         Rates = new ExchangeRateService(new FixedRates(), NullLogger<ExchangeRateService>.Instance, Time, new ExchangeRateOptions());
-        Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, Alerts, Holding, Rates, NullLogger<MainViewModel>.Instance);
+        Memory = new MemoryTrimmer(Time, () => Interlocked.Increment(ref _trims));
+        Main = new MainViewModel(Settings, Market, registry, ui, AddAsset, SettingsPage, Alerts, Holding, Rates, Memory, NullLogger<MainViewModel>.Instance);
     }
 
     /// <summary>
@@ -294,6 +295,21 @@ public sealed class Harness : IAsyncDisposable
     /// Gets the fake that stands in for the file dialogs.
     /// </summary>
     public FakeFilePicker FilePicker { get; }
+
+    /// <summary>
+    /// The number of times the memory trimmer of the main window gave memory back.
+    /// </summary>
+    private int _trims;
+
+    /// <summary>
+    /// Gets the memory trimmer of the main window; it counts its trims instead of collecting.
+    /// </summary>
+    public MemoryTrimmer Memory { get; }
+
+    /// <summary>
+    /// Gets the number of times the memory trimmer of the main window gave memory back.
+    /// </summary>
+    public int TrimCount => Volatile.Read(ref _trims);
 
     /// <summary>
     /// Gets the clock.
