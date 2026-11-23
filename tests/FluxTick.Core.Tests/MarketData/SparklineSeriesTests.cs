@@ -43,6 +43,64 @@ public class SparklineSeriesTests
     }
 
     /// <summary>
+    /// Verifies the default series keeps a price for every ten seconds of the last hour, not only one for every minute.
+    /// </summary>
+    [Fact]
+    public void DefaultSeries_QuotesEveryTenSeconds_KeepsEachOfThem()
+    {
+        var options = new MarketDataServiceOptions();
+        var series = new SparklineSeries(options.SparklineCapacity, options.SparklineBucket);
+
+        for (var i = 0; i < 12; i++)
+        {
+            series.Add(i, T0.AddSeconds(i * 10));
+        }
+
+        series.Snapshot(T0.AddSeconds(110)).Should().HaveCount(12);
+        series.Window.Should().Be(TimeSpan.FromHours(1));
+    }
+
+    /// <summary>
+    /// Verifies a price older than the last hour drops out of the default series, and a quote in the same ten seconds
+    /// still replaces the one before it.
+    /// </summary>
+    [Fact]
+    public void DefaultSeries_OldPriceAndSameBucket_FollowTheWindowAndTheBucket()
+    {
+        var options = new MarketDataServiceOptions();
+        var series = new SparklineSeries(options.SparklineCapacity, options.SparklineBucket);
+
+        series.Add(1m, T0);
+        series.Add(2m, T0.AddSeconds(4));
+        series.Add(3m, T0.AddMinutes(30));
+
+        series.Snapshot(T0.AddMinutes(30)).Should().Equal(2m, 3m);
+        series.Snapshot(T0.AddMinutes(61)).Should().Equal(3m);
+    }
+
+    /// <summary>
+    /// Verifies the history of the sources, one point for every minute, is not drawn with gaps once the finer prices
+    /// that arrive live follow it.
+    /// </summary>
+    [Fact]
+    public void DefaultSeries_MinuteHistoryThenLivePrices_HasNoGap()
+    {
+        var options = new MarketDataServiceOptions();
+        var series = new SparklineSeries(options.SparklineCapacity, options.SparklineBucket);
+        series.Seed(Enumerable.Range(0, 30).Select(i => new PricePoint(T0.AddMinutes(i), i)));
+        var now = T0.AddMinutes(30);
+        for (var i = 0; i < 12; i++)
+        {
+            series.Add(100 + i, now.AddSeconds(i * 10));
+        }
+
+        var asOf = now.AddSeconds(110);
+        var timeline = new SparklineTimeline(series.Times(asOf), asOf, series.Window);
+
+        Enumerable.Range(0, timeline.Times.Count).Where(timeline.IsGapAt).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Verifies the oldest points are dropped once the capacity is exceeded.
     /// </summary>
     [Fact]
