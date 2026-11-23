@@ -169,6 +169,9 @@ Things to know on macOS:
 - The boss-key hotkey works as on Windows, with *Win* meaning the Command key and *Alt* the Option key (stored as `Win` and `Alt` in the settings file); it needs no extra permission. Clicking the menu bar icon opens the
   instrument list; its *Show / hide*, *Settings* and *Exit* entries sit at the bottom of the list, as
   the icon has no menu of its own.
+- *Launch at startup* adds a launch agent (`~/Library/LaunchAgents/io.github.coldhighsun.FluxTick.plist`) that starts
+  the app at login. It is available only when FluxTick runs from a fixed location such as `Applications`, not from the
+  mounted `.dmg` or a quarantined download, and the entry is repointed at the running app if you move it.
 - API keys are encrypted with a key kept in the macOS Keychain (see *API keys* below); the settings and logs live in
   `~/.config/FluxTick`.
 - The app is a single self-extracting file, so the very first launch can take a few seconds longer.
@@ -212,7 +215,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Remove, change source | Right-click a row |
 | Move the Settings / Add window | Drag its header; **Esc** closes it |
 | Settings | The gear icon in the header, *Settings* in the tray menu, or at the bottom of the right-click menu of the empty area. Tabs: *General*, *Appearance*, *Groups*, *Tray* (Windows only), *Alerts*, *Sources* and *About* (which also holds the update settings). Expand a data source to edit its options; drag data sources to set their priority |
-| Launch at startup | Windows only, off by default; Settings → General |
+| Launch at startup | Windows and macOS, off by default; Settings → General. On macOS it needs the app to run from a fixed location such as `Applications` |
 | Start in the tray | Off by default; Settings → General (or the `--minimized` option) keeps the window hidden at startup until you double-click the tray icon (a single click where the system cannot list the instruments, i.e. anywhere but Windows) |
 | Single instance | Only one copy runs per user; starting FluxTick again brings the running window forward, even when it is hidden in the tray |
 | Close button | Hides the window to the tray by default; turn off *Close button hides to tray* in Settings → General to exit instead |
