@@ -80,6 +80,34 @@ public sealed class EdgeDockRulesTests
     }
 
     /// <summary>
+    /// A window that gets smaller while it rests hidden has to be sent to the hidden position of its new size: left where
+    /// it was, it lies entirely beyond the edge and the pointer cannot reach it.
+    /// </summary>
+    /// <param name="edge">
+    /// The name of the edge the window is docked to.
+    /// </param>
+    [Theory]
+    [InlineData("Left")]
+    [InlineData("Right")]
+    [InlineData("Top")]
+    public void HiddenPosition_WindowShrunkWhileHidden_KeepsTheSliverOnlyAtTheNewPosition(string edge)
+    {
+        var dockEdge = Enum.Parse<DockEdge>(edge);
+        var big = new PixelRect(edge == "Right" ? 1580 : 0, edge == "Top" ? 40 : 300, 340, 420);
+        var small = new PixelRect(big.X, big.Y, 200, 250);
+        var oldHiddenAt = EdgeDockRules.HiddenPosition(big, Area, dockEdge, 4);
+
+        // The window keeps the edge it is docked to while it shrinks: the right edge moves the left one.
+        var shrunkAt = dockEdge == DockEdge.Right ? new PixelPoint(oldHiddenAt.X + big.Width - small.Width, oldHiddenAt.Y) : oldHiddenAt;
+        var newHidden = new PixelRect(EdgeDockRules.HiddenPosition(small, Area, dockEdge, 4), small.Size);
+
+        Area.Intersects(new PixelRect(shrunkAt, small.Size)).Should().BeFalse("nothing of the shrunk window is left in sight");
+        Area.Intersects(newHidden).Should().BeTrue("the sliver is in sight at the new position");
+        var visible = Area.Intersect(newHidden);
+        (dockEdge == DockEdge.Top ? visible.Height : visible.Width).Should().Be(4);
+    }
+
+    /// <summary>
     /// The work area does not have to start at the origin, as on a second screen or beside a taskbar.
     /// </summary>
     [Fact]
