@@ -396,6 +396,8 @@
   "Watch_SwitchedToCustom": "已切換到自訂群組",
   "Watch_Undo": "復原",
   "Watch_Holding": "持倉成本…",
+  "Watch_AssetFocus": "全螢幕展示",
+  "AssetFocus_Close": "關閉（Esc）",
   "WatchlistLayout_Cards": "卡片",
   "WatchlistLayout_List": "清單",
   "Transfer_Title": "備份與遷移",

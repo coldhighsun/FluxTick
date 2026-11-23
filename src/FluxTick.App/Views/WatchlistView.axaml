@@ -77,6 +77,9 @@
                   <MenuItem Header="{loc:T Watch_RemoveFromTray}" IsVisible="{Binding CanRemoveFromTray}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.ToggleCommand}"
                             CommandParameter="{Binding}" />
+                  <MenuItem Header="{loc:T Watch_AssetFocus}"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ShowAssetFocusCommand}"
+                            CommandParameter="{Binding}" />
                   <Separator />
                   <MenuItem Header="{loc:T Watch_Remove}"
                             Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveCommand}"
@@ -163,6 +166,9 @@
                                     CommandParameter="{Binding}" />
                           <MenuItem Header="{loc:T Watch_RemoveFromTray}" IsVisible="{Binding CanRemoveFromTray}"
                                     Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).Tray.ToggleCommand}"
+                                    CommandParameter="{Binding}" />
+                          <MenuItem Header="{loc:T Watch_AssetFocus}"
+                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ShowAssetFocusCommand}"
                                     CommandParameter="{Binding}" />
                           <Separator />
                           <MenuItem Header="{loc:T Watch_Remove}"

@@ -17,7 +17,7 @@ internal static class BossKeyRoles
     /// <summary>
     /// Gets the windows that are only there for a moment and are not brought back.
     /// </summary>
-    public static IReadOnlyList<Type> Momentary { get; } = [typeof(AlertToastWindow), typeof(TrayPopupWindow)];
+    public static IReadOnlyList<Type> Momentary { get; } = [typeof(AlertToastWindow), typeof(TrayPopupWindow), typeof(AssetFocusWindow)];
 
     /// <summary>
     /// Tells what the boss key does to a window.
@@ -30,7 +30,9 @@ internal static class BossKeyRoles
     /// </returns>
     public static BossKeyRole Of(Type window)
     {
-        if (typeof(ToolWindow).IsAssignableFrom(window))
+        // The screen-filling view of an instrument is closed, not hidden: a hidden one would go on following the row with
+        // nothing to bring it back or close it.
+        if (typeof(ToolWindow).IsAssignableFrom(window) || window == typeof(AssetFocusWindow))
         {
             return BossKeyRole.Close;
         }
