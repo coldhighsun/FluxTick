@@ -417,17 +417,31 @@ public class MarketDataServiceTests
         await using var service = NewService();
         await service.ApplyAsync(SettingsFor(Btc));
         var provider = _crypto.Created.Single();
-        provider.ChangeStatus(ProviderConnectionState.Connected);
+        var connected = new TaskCompletionSource();
         var handled = new TaskCompletionSource();
         var nested = 0;
         service.ProviderStatusChanged += (_, e) =>
         {
-            if (e.ProviderId == "crypto" && e.Status.State == ProviderConnectionState.Idle && Interlocked.Exchange(ref nested, 1) == 0)
+            if (e.ProviderId != "crypto")
+            {
+                return;
+            }
+
+            if (e.Status.State == ProviderConnectionState.Connected)
+            {
+                connected.TrySetResult();
+            }
+            else if (e.Status.State == ProviderConnectionState.Idle && connected.Task.IsCompleted && Interlocked.Exchange(ref nested, 1) == 0)
             {
                 service.ApplyAsync(SettingsFor()).GetAwaiter().GetResult();
                 handled.TrySetResult();
             }
         };
+
+        // The service raises the status a provider has when its event is read and raises nothing for a status it raised
+        // already, so the change to Idle is only seen as a change once the Connected one was delivered.
+        provider.ChangeStatus(ProviderConnectionState.Connected);
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         await service.ApplyAsync(SettingsFor());
 
