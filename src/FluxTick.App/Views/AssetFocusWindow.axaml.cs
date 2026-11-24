@@ -1,17 +1,50 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.VisualTree;
+using FluxTick.App.Services;
 
 namespace FluxTick.App.Views;
 
 /// <summary>
 /// Shows one instrument on a window that fills the screen. The window shares the row of the list, so it is live without
-/// a feed of its own; Esc, a double-click or the close button ends it.
+/// a feed of its own; Esc or a double-click ends it. Dragging it from any free spot shrinks it to a smaller window that
+/// follows the pointer, and on release it fills the monitor it was dropped on.
 /// </summary>
 public sealed partial class AssetFocusWindow : Window
 {
+    /// <summary>
+    /// Gets how long after a drop a double-click does not close the window.
+    /// </summary>
+    private static readonly TimeSpan DropGrace = TimeSpan.FromMilliseconds(600);
+
+    /// <summary>
+    /// Whether the left button is down and may turn into a drag.
+    /// </summary>
+    private bool _pressed;
+
+    /// <summary>
+    /// Where the pointer was pressed, relative to the window.
+    /// </summary>
+    private Point _pressPoint;
+
+    /// <summary>
+    /// Whether the window is being carried to another monitor.
+    /// </summary>
+    private bool _dragging;
+
+    /// <summary>
+    /// Where the pointer is held on the carried window, in screen pixels from its top-left corner.
+    /// </summary>
+    private PixelPoint _grab;
+
+    /// <summary>
+    /// When the window was last dropped.
+    /// </summary>
+    private DateTimeOffset _lastDrop = DateTimeOffset.MinValue;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AssetFocusWindow"/> class.
     /// </summary>
@@ -20,6 +53,12 @@ public sealed partial class AssetFocusWindow : Window
         InitializeComponent();
         KeyDown += OnWindowKeyDown;
         DoubleTapped += OnWindowDoubleTapped;
+
+        // Handled events count too, so that a control that takes the pointer does not stop a drag.
+        AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, true);
+        AddHandler(PointerMovedEvent, OnWindowPointerMoved, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, true);
+        AddHandler(PointerReleasedEvent, OnWindowPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, true);
+        PointerCaptureLost += OnWindowPointerCaptureLost;
         ApplySizes(Height);
     }
 
@@ -101,6 +140,149 @@ public sealed partial class AssetFocusWindow : Window
     /// <param name="e">The event data.</param>
     private void OnWindowDoubleTapped(object? sender, TappedEventArgs e)
     {
+        if (_dragging || DateTimeOffset.UtcNow - _lastDrop < DropGrace)
+        {
+            return;
+        }
+
         Close();
+    }
+
+    /// <summary>
+    /// Remembers a left press, which becomes a drag once the pointer moves far enough.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The event data.</param>
+    private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_dragging || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        _pressed = true;
+        _pressPoint = e.GetPosition(this);
+    }
+
+    /// <summary>
+    /// Starts the drag when the pointer has moved far enough from the press, and carries the window while it goes on.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The event data.</param>
+    private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragging)
+        {
+            var pointer = ScreenPointer(e);
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                Position = pointer - _grab;
+            }
+            else
+            {
+                // The release was missed; drop the window where it is.
+                FinishDrag(pointer);
+            }
+
+            return;
+        }
+
+        if (!_pressed || WindowState != WindowState.FullScreen)
+        {
+            return;
+        }
+
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            _pressed = false;
+            return;
+        }
+
+        if (AssetFocusDragRules.ExceedsThreshold(_pressPoint, e.GetPosition(this)))
+        {
+            StartDrag(e);
+        }
+    }
+
+    /// <summary>
+    /// Drops the window where the button was released.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The event data.</param>
+    private void OnWindowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _pressed = false;
+        if (_dragging)
+        {
+            FinishDrag(ScreenPointer(e));
+        }
+    }
+
+    /// <summary>
+    /// Takes the pointer back when the change of state of the window took it, so that the drag goes on.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The event data.</param>
+    private void OnWindowPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (_dragging)
+        {
+            e.Pointer.Capture(this);
+        }
+    }
+
+    /// <summary>
+    /// Shrinks the window to a carried size under the pointer and keeps it there while the pointer moves.
+    /// </summary>
+    /// <param name="e">The event of the pointer move.</param>
+    private void StartDrag(PointerEventArgs e)
+    {
+        _pressed = false;
+        if (Screens.ScreenFromWindow(this) is not { } screen)
+        {
+            return;
+        }
+
+        var pointer = ScreenPointer(e);
+        var size = AssetFocusDragRules.CarriedSize(screen.Bounds, screen.Scaling);
+        var origin = AssetFocusDragRules.CarriedOrigin(pointer, screen.Bounds, size, screen.Scaling);
+
+        _dragging = true;
+        _grab = pointer - origin;
+        WindowState = WindowState.Normal;
+        Width = size.Width;
+        Height = size.Height;
+        Position = origin;
+
+        // The change of state may have taken the pointer from the window; keep receiving its moves.
+        e.Pointer.Capture(this);
+    }
+
+    /// <summary>
+    /// Gets where the pointer is on the desktop. While the window follows the pointer, a position worked out from the event
+    /// lags behind the window and makes it flicker, so the position of the cursor itself is read where the platform gives it.
+    /// </summary>
+    /// <param name="e">The pointer event.</param>
+    /// <returns>The position, in screen pixels.</returns>
+    private PixelPoint ScreenPointer(PointerEventArgs e)
+    {
+        return CursorPosition.TryGet(out var position) ? position : this.PointToScreen(e.GetPosition(this));
+    }
+
+    /// <summary>
+    /// Fills the monitor the window was dropped on.
+    /// </summary>
+    /// <param name="pointer">Where the window was dropped, in screen pixels.</param>
+    private void FinishDrag(PixelPoint pointer)
+    {
+        _dragging = false;
+        _lastDrop = DateTimeOffset.UtcNow;
+        var screen = Screens.ScreenFromPoint(pointer) ?? Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is not null)
+        {
+            Position = screen.Bounds.Position;
+        }
+
+        WindowState = WindowState.FullScreen;
     }
 }
