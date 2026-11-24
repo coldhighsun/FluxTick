@@ -42,9 +42,10 @@ public sealed class Loc : INotifyPropertyChanged
     };
 
     /// <summary>
-    /// The culture of the operating system, captured before the application overrides the UI culture.
+    /// The UI culture of the process, captured before the application overrides it; the fallback when the platform does
+    /// not tell the preferred language.
     /// </summary>
-    private static readonly CultureInfo SystemCulture = Services.MacSystemLanguage.TryGetPreferred() ?? CultureInfo.CurrentUICulture;
+    private static readonly CultureInfo SystemCulture = CultureInfo.CurrentUICulture;
 
     /// <summary>
     /// The table of the active language.
@@ -211,6 +212,45 @@ public sealed class Loc : INotifyPropertyChanged
     /// The configured language.
     /// </param>
     public void Apply(LanguageMode mode) => Apply(mode, SystemCulture);
+
+    /// <summary>
+    /// Switches to the language a setting stands for, taking the system language from the preferred language that the
+    /// platform reports (<c>IPlatformSettings.PreferredApplicationLanguage</c>), which unlike the process culture follows
+    /// the operating system setting even when a terminal or an IDE sets <c>LANG</c>.
+    /// </summary>
+    /// <param name="mode">
+    /// The configured language.
+    /// </param>
+    /// <param name="preferredLanguage">
+    /// The culture name the platform reports, or <see langword="null"/> when it reports none.
+    /// </param>
+    public void Apply(LanguageMode mode, string? preferredLanguage) => Apply(mode, ParseCulture(preferredLanguage));
+
+    /// <summary>
+    /// Turns the culture name of the platform into a culture.
+    /// </summary>
+    /// <param name="name">
+    /// The culture name, or <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// The culture, or the UI culture of the process when the name is empty or not a culture.
+    /// </returns>
+    internal static CultureInfo ParseCulture(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return SystemCulture;
+        }
+
+        try
+        {
+            return CultureInfo.GetCultureInfo(name);
+        }
+        catch (CultureNotFoundException)
+        {
+            return SystemCulture;
+        }
+    }
 
     /// <summary>
     /// Switches to the language a setting stands for, with an explicit system culture.

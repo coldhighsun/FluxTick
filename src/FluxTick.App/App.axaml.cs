@@ -647,7 +647,7 @@ public sealed partial class App : Application
         }
 
         _appliedLanguage = language;
-        Loc.Instance.Apply(language);
+        Loc.Instance.Apply(language, PlatformSettings?.PreferredApplicationLanguage);
         if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } tray)
         {
             tray.ToolTipText = TrayTooltip();
