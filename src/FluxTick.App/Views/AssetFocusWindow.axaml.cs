@@ -10,7 +10,7 @@ namespace FluxTick.App.Views;
 
 /// <summary>
 /// Shows one instrument on a window that fills the screen. The window shares the row of the list, so it is live without
-/// a feed of its own; Esc or a double-click ends it. Dragging it from any free spot shrinks it to a smaller window that
+/// a feed of its own; Esc or a double-click ends it. Dragging it from any free spot makes it half transparent while it
 /// follows the pointer, and on release it fills the monitor it was dropped on.
 /// </summary>
 public sealed partial class AssetFocusWindow : Window
@@ -232,7 +232,7 @@ public sealed partial class AssetFocusWindow : Window
     }
 
     /// <summary>
-    /// Shrinks the window to a carried size under the pointer and keeps it there while the pointer moves.
+    /// Makes the window half transparent and keeps it under the pointer while the pointer moves.
     /// </summary>
     /// <param name="e">The event of the pointer move.</param>
     private void StartDrag(PointerEventArgs e)
@@ -249,6 +249,7 @@ public sealed partial class AssetFocusWindow : Window
 
         _dragging = true;
         _grab = pointer - origin;
+        Opacity = AssetFocusDragRules.CarriedOpacity;
         WindowState = WindowState.Normal;
         Width = size.Width;
         Height = size.Height;
@@ -276,6 +277,7 @@ public sealed partial class AssetFocusWindow : Window
     private void FinishDrag(PixelPoint pointer)
     {
         _dragging = false;
+        Opacity = 1;
         _lastDrop = DateTimeOffset.UtcNow;
         var screen = Screens.ScreenFromPoint(pointer) ?? Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen is not null)
