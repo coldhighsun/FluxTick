@@ -48,6 +48,9 @@ commodities side by side, from the data sources *you* choose.
   <img src="docs/images/en/chart-range.png" alt="Large cards with a one-day chart" width="420" />
   <img src="docs/images/en/settings-sources.png" alt="Data sources in Settings" width="250" />
 </p>
+<p align="center">
+  <img src="docs/images/en/asset-focus.png" alt="One instrument shown full screen" width="640" />
+</p>
 
 > Screenshots use the built-in simulated data source (`--demo`).
 
@@ -62,6 +65,10 @@ commodities side by side, from the data sources *you* choose.
 - **Chart time span**: the sparkline shows the last hour by default; the header's *View* button (two sliders) switches it to one day,
   five days, one month, six months or one year, with a percentage axis, a hover tooltip and the change over the span.
   A source that cannot serve a longer span keeps showing its last hour.
+- **Full-screen instrument**: right-click an instrument and choose **Show full screen** to give it a whole monitor: the
+  price in large type, the change, a large chart (with a hover tooltip and the chart time span you picked), the reference
+  price, the range low and high, and your holding. It follows every tick, and with several monitors each instrument can
+  fill one of its own.
 - **Sort the list**: order the list layout by daily change or holding profit/loss %; rows whose market is shut follow
   the open ones.
 - **Market state**: rows show pre-market, after hours, break and closed, judged by the exchange's trading hours.
@@ -224,6 +231,7 @@ Use `linux-x64`, `osx-arm64` and so on for other platforms. The result is a self
 | Restore a data source | *Restore defaults* in its expanded card resets its options (secret values such as keys are kept) |
 | Data source status | The footer shows one dot per data source in use (green connected, orange off or failing, grey idle or reconnecting), problems first, with a **+N** chip when not all fit. Click the footer for every source's state and error message |
 | Full screen | Double-click the header (or choose *Full screen* in the header's *View* menu, card layout only) to fill the screen; double-click again or press Esc to go back to the previous size and position. Dragging the header in full screen leaves it and carries on dragging. If you quit in full screen, the next start is full screen again |
+| Show an instrument full screen | Right-click an instrument and choose *Show full screen*. The view fills the monitor of the main window and follows every tick; the text grows with the screen height. Esc or a double-click closes it. Each instrument opens only once (choosing it again brings its view forward), and a new one goes to a monitor that has no view yet; only when every monitor has one does it replace the view on the main window's monitor. Drag a view from any free spot to another monitor: it turns half transparent while carried and fills the monitor it is dropped on, or goes back to its own when another view has that one. The boss key hides these views and brings them back with the other windows |
 | Card layout | The grid button in the header switches between list and cards (also in the right-click menu and Settings → Appearance) |
 | Card size | In card layout, pick *Small*, *Medium* or *Large* from the header's *View* menu, the right-click menu or Settings → Appearance. Small shows only symbol and price (the rest is in the tooltip); large adds a taller chart, the change in amount and percent, the reference price and the 60-minute low and high |
 | Group cards | In card layout the header's grouping button (or the right-click menu, or Settings → Appearance) picks *No grouping*, *By type*, *By data source* or *Custom groups*. Click a group header to collapse or expand it; drag a type or custom group header to reorder |
