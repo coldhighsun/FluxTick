@@ -169,6 +169,31 @@ public class LocalizationTests
     }
 
     /// <summary>
+    /// Verifies the culture name the platform reports becomes the culture, and an empty or unknown one falls back to the
+    /// UI culture of the process.
+    /// </summary>
+    /// <param name="name">
+    /// The reported name.
+    /// </param>
+    /// <param name="expected">
+    /// The expected culture name, or <see langword="null"/> for the fallback.
+    /// </param>
+    [Theory]
+    [InlineData("zh-Hant-TW", "zh-Hant-TW")]
+    [InlineData("en-US", "en-US")]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("not a culture!", null)]
+    public void ParseCulture_PlatformName_ReturnsCultureOrFallback(string? name, string? expected)
+    {
+        var fallback = CultureInfo.CurrentUICulture.Name;
+
+        var culture = Loc.ParseCulture(name);
+
+        culture.Name.Should().Be(expected ?? fallback);
+    }
+
+    /// <summary>
     /// Verifies applying a setting also sets the UI culture, and leaves the thread as it found it afterwards.
     /// </summary>
     [Fact]
