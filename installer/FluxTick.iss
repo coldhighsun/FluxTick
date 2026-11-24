@@ -39,6 +39,10 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern dynamic
 CloseApplications=yes
+; Setup registers every file it replaces with the Restart Manager, whose lookup costs tens of milliseconds per file; the
+; default filter (*.exe,*.dll,*.chm) means ~260 libraries and a wait of 10+ seconds before the old program is asked to
+; close. Only the executable identifies the running program, and nothing else loads the libraries.
+CloseApplicationsFilter=*.exe
 RestartApplications=no
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputName}
