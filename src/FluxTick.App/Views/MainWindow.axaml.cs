@@ -80,6 +80,12 @@ public sealed partial class MainWindow : Window
     private bool _rowsSettled;
 
     /// <summary>
+    /// Whether the portfolio line was shown the last time its visibility was looked at, so that only a change of it, and
+    /// not every new total, refits the height of the window.
+    /// </summary>
+    private bool _hadPortfolio;
+
+    /// <summary>
     /// Whether a look at the number of assets is already waiting to run.
     /// </summary>
     private bool _rowCountCheckPending;
@@ -744,6 +750,18 @@ public sealed partial class MainWindow : Window
             ApplyHeightRule();
         }
 
+        // The portfolio line comes and goes after the first prices arrive, and it takes its height from the list: what the
+        // window needs around the list is measured again once the layout pass that shows or hides it is done.
+        if (e.PropertyName == nameof(MainViewModel.HasPortfolio) && IsLoaded && _observed is { } portfolioOwner
+            && portfolioOwner.HasPortfolio != _hadPortfolio)
+        {
+            _hadPortfolio = portfolioOwner.HasPortfolio;
+
+            // Only a line that went away leaves empty space to take back.
+            var narrow = !_hadPortfolio;
+            Dispatcher.UIThread.Post(() => RefitHeight(narrow), DispatcherPriority.Loaded);
+        }
+
         // A new card size or grouping changes the rows the cards take; the empty space is taken away once the sections are rebuilt.
         if (e.PropertyName is nameof(MainViewModel.CardSize) or nameof(MainViewModel.Grouping) && IsLoaded && IsVisible)
         {
@@ -1152,7 +1170,10 @@ public sealed partial class MainWindow : Window
     /// Keeps the window high enough for one whole card of the shown size in the card layout. What the window needs around
     /// the list is measured, since the portfolio line comes and goes.
     /// </summary>
-    private void ApplyHeightRule()
+    /// <param name="retried">
+    /// Whether this is the second try after the rows were not laid out yet, which is not repeated.
+    /// </param>
+    private void ApplyHeightRule(bool retried = false)
     {
         // Nothing is measured before the XAML is loaded and the first layout pass is done. The window needs no extra height
         // while it fills the screen, but the limit is kept up to date so that the window is high enough when it goes back
@@ -1176,6 +1197,13 @@ public sealed partial class MainWindow : Window
             // Rows that are not laid out yet say nothing; the list reports its height when it has one.
             if (Watchlist.ListContentHeight is not { } content)
             {
+                // The list reports its height when it has one, but a change that does not resize the rows (the portfolio
+                // line appearing) would never say so: look again once the layout pass is done.
+                if (!retried)
+                {
+                    Dispatcher.UIThread.Post(() => ApplyHeightRule(retried: true), DispatcherPriority.Loaded);
+                }
+
                 return;
             }
 
@@ -1443,6 +1471,24 @@ public sealed partial class MainWindow : Window
         void Finish(object? s, EventArgs a) => window.Close();
         viewModel.HoldingEditor.Completed += Finish;
         await ShowToolWindowAsync(viewModel, ToolWindowKind.Holding, window, () => viewModel.HoldingEditor.Completed -= Finish);
+    }
+
+    /// <summary>
+    /// Fits the height of the window again after the portfolio line came or went: the list layout follows its rows, the
+    /// card layout grows to show every row of cards and, when the line went away, takes the empty space below them back.
+    /// The window of the card layout is never made lower otherwise, since its height is the user's.
+    /// </summary>
+    /// <param name="narrow">
+    /// Whether the empty space below the cards is taken away when the window does not need to grow.
+    /// </param>
+    private void RefitHeight(bool narrow)
+    {
+        ApplyHeightRule();
+        if (_observed is { IsCardLayout: true } viewModel && _rowsSettled && IsLoaded && IsVisible && WindowState == WindowState.Normal
+            && !FillsScreen && Watchlist is { Bounds.Height: > 0 } && !GrowCardsHeight(viewModel) && narrow)
+        {
+            NarrowCardsToContent();
+        }
     }
 
     /// <summary>
