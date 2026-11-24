@@ -5,7 +5,7 @@ namespace FluxTick.App.Views;
 
 /// <summary>
 /// Decides how the screen-filling view of one instrument is dragged to another monitor: when a press becomes a drag, how
-/// large the window is while it is carried, and where it appears under the pointer.
+/// the window looks while it is carried, and where it appears under the pointer.
 /// </summary>
 internal static class AssetFocusDragRules
 {
@@ -15,19 +15,9 @@ internal static class AssetFocusDragRules
     public const double DragThreshold = 6;
 
     /// <summary>
-    /// Gets the share of the screen the window takes while it is carried.
+    /// Gets how opaque the window is while it is carried, so that what is behind it shows through.
     /// </summary>
-    public const double CarriedShare = 0.6;
-
-    /// <summary>
-    /// Gets the smallest width of the window while it is carried, in device independent pixels.
-    /// </summary>
-    public const double MinCarriedWidth = 640;
-
-    /// <summary>
-    /// Gets the smallest height of the window while it is carried, in device independent pixels.
-    /// </summary>
-    public const double MinCarriedHeight = AssetFocusRules.MinHeight;
+    public const double CarriedOpacity = 0.3;
 
     /// <summary>
     /// Tells whether the pointer has moved far enough from where it was pressed to start a drag.
@@ -45,8 +35,8 @@ internal static class AssetFocusDragRules
     }
 
     /// <summary>
-    /// Gets the size of the window while it is carried: a share of the screen, never smaller than a floor and never larger
-    /// than the screen.
+    /// Gets the size of the window while it is carried: the size of the screen it was on, so that it only leaves full screen
+    /// and does not change in size.
     /// </summary>
     /// <param name="screenBounds">The bounds of the screen, in pixels.</param>
     /// <param name="scaling">The scaling of the screen.</param>
@@ -54,11 +44,7 @@ internal static class AssetFocusDragRules
     public static Size CarriedSize(PixelRect screenBounds, double scaling)
     {
         var perPixel = ScreenUnits.PerPixel(scaling);
-        var screenWidth = screenBounds.Width / perPixel;
-        var screenHeight = screenBounds.Height / perPixel;
-        var width = Math.Min(screenWidth, Math.Max(MinCarriedWidth, screenWidth * CarriedShare));
-        var height = Math.Min(screenHeight, Math.Max(MinCarriedHeight, screenHeight * CarriedShare));
-        return new Size(width, height);
+        return new Size(screenBounds.Width / perPixel, screenBounds.Height / perPixel);
     }
 
     /// <summary>

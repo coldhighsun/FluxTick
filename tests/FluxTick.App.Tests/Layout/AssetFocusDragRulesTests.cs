@@ -22,29 +22,14 @@ public class AssetFocusDragRulesTests
     }
 
     /// <summary>
-    /// Verifies the carried window is a share of a large screen.
+    /// Verifies the carried window keeps the size of the screen.
     /// </summary>
     [Fact]
-    public void CarriedSize_LargeScreen_TakesAShare()
+    public void CarriedSize_Screen_KeepsScreenSize()
     {
         var size = AssetFocusDragRules.CarriedSize(new PixelRect(0, 0, 2560, 1440), 1);
 
-        size.Width.Should().BeApproximately(2560 * AssetFocusDragRules.CarriedShare, 0.01);
-        size.Height.Should().BeApproximately(1440 * AssetFocusDragRules.CarriedShare, 0.01);
-    }
-
-    /// <summary>
-    /// Verifies the carried window keeps a floor on a small screen but never exceeds the screen.
-    /// </summary>
-    [Fact]
-    public void CarriedSize_SmallScreen_KeepsFloorWithinScreen()
-    {
-        var floor = AssetFocusDragRules.CarriedSize(new PixelRect(0, 0, 1024, 768), 1);
-        var tiny = AssetFocusDragRules.CarriedSize(new PixelRect(0, 0, 500, 400), 1);
-
-        floor.Width.Should().Be(AssetFocusDragRules.MinCarriedWidth);
-        floor.Height.Should().Be(AssetFocusDragRules.MinCarriedHeight);
-        tiny.Should().Be(new Size(500, 400));
+        size.Should().Be(new Size(2560, 1440));
     }
 
     /// <summary>
@@ -60,8 +45,7 @@ public class AssetFocusDragRulesTests
 
         var size = AssetFocusDragRules.CarriedSize(new PixelRect(0, 0, 3840, 2160), 2);
 
-        size.Width.Should().BeApproximately(1920 * AssetFocusDragRules.CarriedShare, 0.01);
-        size.Height.Should().BeApproximately(1080 * AssetFocusDragRules.CarriedShare, 0.01);
+        size.Should().Be(new Size(1920, 1080));
     }
 
     /// <summary>
