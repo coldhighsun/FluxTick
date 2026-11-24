@@ -64,9 +64,9 @@ public sealed partial class MainWindow : Window
     private MainViewModel? _observed;
 
     /// <summary>
-    /// The screen-filling view of an instrument that is open, if any.
+    /// The screen-filling views of instruments that are open, each on a monitor of its own.
     /// </summary>
-    private AssetFocusWindow? _assetFocus;
+    private readonly List<AssetFocusWindow> _assetFocusWindows = [];
 
     /// <summary>
     /// The ids of the assets the watchlist had when the window last looked, to tell added assets from removed ones.
@@ -834,9 +834,12 @@ public sealed partial class MainWindow : Window
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         // The screen-filling view of an asset that was removed (or replaced by another source) has nothing left to follow.
-        if (_assetFocus is { DataContext: AssetRowViewModel focused } && _observed is { } observed && !observed.Rows.Contains(focused))
+        if (_observed is { } observed)
         {
-            _assetFocus.Close();
+            foreach (var window in _assetFocusWindows.Where(w => w.DataContext is AssetRowViewModel row && !observed.Rows.Contains(row)).ToList())
+            {
+                window.Close();
+            }
         }
 
         if (_rowCountCheckPending)
@@ -1363,29 +1366,61 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Shows one instrument on a window that fills the screen, in place of the one shown before.
+    /// Shows one instrument on a window that fills a monitor. An instrument that is already shown is only brought forward;
+    /// a new one goes to a monitor that has no such window, and only when every monitor has one does it take the place of
+    /// the one on the monitor of the main window.
     /// </summary>
     /// <param name="sender">The view model.</param>
     /// <param name="row">The instrument.</param>
     private void OnAssetFocusRequested(object? sender, AssetRowViewModel row)
     {
-        _assetFocus?.Close();
-        var window = new AssetFocusWindow { DataContext = row };
-        window.Closed += (_, _) =>
+        var existing = _assetFocusWindows.FirstOrDefault(w => ReferenceEquals(w.DataContext, row));
+        if (existing is not null)
         {
-            if (ReferenceEquals(_assetFocus, window))
+            // A minimized view is not brought back by activating it.
+            if (existing.WindowState == WindowState.Minimized)
             {
-                _assetFocus = null;
+                existing.WindowState = WindowState.FullScreen;
             }
-        };
-        _assetFocus = window;
-        if (Screens.ScreenFromWindow(this) is { } screen)
-        {
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Position = screen.Bounds.Position;
+
+            existing.Activate();
+            return;
         }
 
+        var screens = Screens.All.Select(s => s.Bounds).ToList();
+        var preferred = Screens.ScreenFromWindow(this)?.Bounds ?? Screens.Primary?.Bounds;
+        var window = new AssetFocusWindow { DataContext = row };
+        if (preferred is { } home && screens.Count > 0)
+        {
+            var (bounds, replace) = AssetFocusPlacement.PickScreen(screens, home, _assetFocusWindows.Select(w => w.ScreenBounds).ToList());
+            if (replace)
+            {
+                foreach (var old in _assetFocusWindows.Where(w => w.ScreenBounds == bounds).ToList())
+                {
+                    old.Close();
+                }
+            }
+
+            window.PlaceOn(bounds);
+        }
+
+        window.ResolveDrop = ResolveAssetFocusDrop;
+        window.Closed += (_, _) => _assetFocusWindows.Remove(window);
+        _assetFocusWindows.Add(window);
         window.Show();
+    }
+
+    /// <summary>
+    /// Settles where a dragged screen-filling view lands: on the monitor it was dropped on, or back on its own when another
+    /// view already fills that one.
+    /// </summary>
+    /// <param name="window">The view that was dragged.</param>
+    /// <param name="target">The bounds of the monitor it was dropped on.</param>
+    /// <returns>The bounds of the monitor it fills.</returns>
+    private PixelRect ResolveAssetFocusDrop(AssetFocusWindow window, PixelRect target)
+    {
+        var others = _assetFocusWindows.Where(w => !ReferenceEquals(w, window)).Select(w => w.ScreenBounds).ToList();
+        return AssetFocusPlacement.ResolveDrop(target, window.ScreenBounds, others);
     }
 
     /// <summary>

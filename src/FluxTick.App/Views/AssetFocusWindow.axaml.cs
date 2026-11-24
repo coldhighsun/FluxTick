@@ -11,7 +11,7 @@ namespace FluxTick.App.Views;
 /// <summary>
 /// Shows one instrument on a window that fills the screen. The window shares the row of the list, so it is live without
 /// a feed of its own; Esc or a double-click ends it. Dragging it from any free spot makes it half transparent while it
-/// follows the pointer, and on release it fills the monitor it was dropped on.
+/// follows the pointer, and on release it fills the monitor it was dropped on, unless another view has that monitor.
 /// </summary>
 public sealed partial class AssetFocusWindow : Window
 {
@@ -44,6 +44,46 @@ public sealed partial class AssetFocusWindow : Window
     /// When the window was last dropped.
     /// </summary>
     private DateTimeOffset _lastDrop = DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// The bounds of the monitor the window last filled, in screen pixels.
+    /// </summary>
+    private PixelRect _screenBounds;
+
+    /// <summary>
+    /// Gets the bounds of the monitor the window fills, in screen pixels. While the window fills a monitor this is read from
+    /// the system each time, so that it follows a window the system moved when monitors were plugged or rearranged; while it
+    /// is carried or minimized it is the monitor it last filled.
+    /// </summary>
+    public PixelRect ScreenBounds
+    {
+        get
+        {
+            if (WindowState == WindowState.FullScreen && Screens.ScreenFromWindow(this) is { } screen)
+            {
+                _screenBounds = screen.Bounds;
+            }
+
+            return _screenBounds;
+        }
+    }
+
+    /// <summary>
+    /// Puts the window on a monitor, to fill it once it is shown.
+    /// </summary>
+    /// <param name="bounds">The bounds of the monitor, in screen pixels.</param>
+    public void PlaceOn(PixelRect bounds)
+    {
+        _screenBounds = bounds;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Position = bounds.Position;
+    }
+
+    /// <summary>
+    /// Gets or sets how a drop is settled: given this window and the bounds of the monitor it was dropped on, it returns the
+    /// bounds of the monitor to fill. When it is not set the window fills the monitor it was dropped on.
+    /// </summary>
+    public Func<AssetFocusWindow, PixelRect, PixelRect>? ResolveDrop { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AssetFocusWindow"/> class.
@@ -282,7 +322,9 @@ public sealed partial class AssetFocusWindow : Window
         var screen = Screens.ScreenFromPoint(pointer) ?? Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen is not null)
         {
-            Position = screen.Bounds.Position;
+            var bounds = ResolveDrop?.Invoke(this, screen.Bounds) ?? screen.Bounds;
+            _screenBounds = bounds;
+            Position = bounds.Position;
         }
 
         WindowState = WindowState.FullScreen;
