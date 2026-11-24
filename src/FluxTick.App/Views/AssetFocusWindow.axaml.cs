@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.VisualTree;
 
@@ -101,16 +100,6 @@ public sealed partial class AssetFocusWindow : Window
     /// <param name="sender">The window.</param>
     /// <param name="e">The event data.</param>
     private void OnWindowDoubleTapped(object? sender, TappedEventArgs e)
-    {
-        Close();
-    }
-
-    /// <summary>
-    /// Closes the window.
-    /// </summary>
-    /// <param name="sender">The close button.</param>
-    /// <param name="e">The event data.</param>
-    private void OnCloseClicked(object? sender, RoutedEventArgs e)
     {
         Close();
     }

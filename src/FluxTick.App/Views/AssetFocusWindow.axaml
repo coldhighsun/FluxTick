@@ -15,7 +15,7 @@
        sizes come from the height of the window (AssetFocusRules), set by the code behind. Double-click or Esc closes it. -->
   <Grid Name="Root" Classes.stopped="{Binding IsDimmed}" Margin="48,36" RowDefinitions="Auto,Auto,*,Auto">
 
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+    <Grid Grid.Row="0">
       <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
         <TextBlock Name="NameText" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
         <TextBlock Name="SymbolText" Classes="muted" Text="{Binding Symbol}" VerticalAlignment="Center" />
@@ -27,8 +27,6 @@
         </Border>
         <TextBlock Name="ProviderText" Classes="muted" Text="{Binding ProviderName}" VerticalAlignment="Center" />
       </StackPanel>
-      <Button Name="CloseButton" Grid.Column="1" Content="✕" Padding="14,6" VerticalAlignment="Center"
-              ToolTip.Tip="{loc:T AssetFocus_Close}" Click="OnCloseClicked" />
     </Grid>
 
     <!-- The price, the change beside it (or the status when the price cannot be trusted), and the profit or loss. -->
