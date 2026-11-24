@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Media;
 using Avalonia.Platform;
 using FluxTick.App.Services;
 
@@ -10,7 +9,7 @@ namespace FluxTick.App.Views;
 /// <summary>
 /// The base of the windows that open modally in the middle of the screen of the main window, such as settings and add
 /// instrument.
-/// They have a fixed width, a resizable height and only a close button.
+/// They have a fixed width, a resizable height and the title bar of the platform.
 /// </summary>
 public class ToolWindow : Window
 {
@@ -50,10 +49,9 @@ public class ToolWindow : Window
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        // No system title bar and a see-through window: ToolWindowFrame draws the rounded, themed frame itself.
-        WindowDecorations = WindowDecorations.None;
-        Background = Brushes.Transparent;
-        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+        // The title bar and frame are the ones of the platform, so the window looks native everywhere; only the
+        // content area takes the app theme.
+        this.Bind(BackgroundProperty, this.GetResourceObservable("WindowBgBrush"));
     }
 
     /// <summary>

@@ -9,7 +9,5 @@
                   Icon="/Assets/fluxtick.png"
                   Topmost="{Binding AlwaysOnTop}">
 
-  <views:ToolWindowFrame Title="{loc:T Main_Settings}">
-    <views:SettingsView />
-  </views:ToolWindowFrame>
+  <views:SettingsView />
 </views:ToolWindow>

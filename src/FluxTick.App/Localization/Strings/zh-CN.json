@@ -96,7 +96,6 @@
   "ColorConvention_GreenUp": "绿涨红跌",
   "ColorConvention_RedUp": "红涨绿跌",
   "Common_Close": "关闭",
-  "Common_CloseEsc": "关闭 (Esc)",
   "Common_LabelValue": "{0}：{1}",
   "Group_NamePlaceholder": "分组名称",
   "Group_NewPlaceholder": "＋ 新建分组",
