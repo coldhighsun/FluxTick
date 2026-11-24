@@ -37,6 +37,10 @@ Things that span several files:
 - **Platform-specific pieces** (Windows tray popup, autostart, installer-based updater) are Windows-only, and the global boss-key hotkey exists on Windows (`RegisterHotKey`) and macOS (Carbon `RegisterEventHotKey`, `IGlobalHotkey`); they are gated by availability classes (`TrayAvailability`, `TrayPopupAvailability`); the app must still run on Linux/macOS.
 - Settings and logs live in `%APPDATA%\FluxTick` (`~/.config/FluxTick` elsewhere).
 
+## Dependency updates
+
+- When the Avalonia packages are updated (including a Dependabot bump), read the release notes and breaking-change list of every version crossed, and check whether a new feature or API could replace a workaround or improve the app (windowing, input, rendering, controls, platform integration, compiled bindings, performance). Report the candidates to the user with the version that introduced each; adopt one only after the user agrees, and not in the same commit as the version bump.
+
 ## Tests
 
 `tests/` has `FluxTick.Core.Tests`, `FluxTick.Providers.Tests` (a new provider adds a project reference and a contract test there) and `FluxTick.App.Tests`. In the App tests the whole assembly is one xUnit collection (`AssemblyInfo.cs`) because tests switch the shared `Loc` language; do not enable parallelism there.
