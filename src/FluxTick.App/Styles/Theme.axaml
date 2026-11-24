@@ -639,43 +639,6 @@
     <Setter Property="OffContent" Value="" />
   </Style>
 
-  <!-- The frame of the settings and add windows; it replaces the system title bar and matches the main window. -->
-  <Style Selector="views|ToolWindowFrame">
-    <Setter Property="Template">
-      <ControlTemplate>
-        <Grid>
-          <Border Background="{DynamicResource WindowBgBrush}"
-                  BorderBrush="{DynamicResource BorderBrush}"
-                  BorderThickness="1"
-                  CornerRadius="12" />
-          <Grid RowDefinitions="Auto,*,Auto" Margin="1">
-            <Border Name="PART_Header" Grid.Row="0" Background="Transparent" Padding="14,8,8,4">
-              <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                  <Image Source="/Assets/fluxtick.png" Width="16" Height="16" />
-                  <TextBlock Text="{TemplateBinding Title}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                </StackPanel>
-                <Button Name="PART_Close" Grid.Column="1" Classes="icon"
-                        AutomationProperties.Name="{loc:T Common_Close}" ToolTip.Tip="{loc:T Common_CloseEsc}">
-                  <Path Data="M3 3l8 8M11 3l-8 8" />
-                </Button>
-              </Grid>
-            </Border>
-            <ContentPresenter Grid.Row="1"
-                              Content="{TemplateBinding Content}"
-                              ContentTemplate="{TemplateBinding ContentTemplate}" />
-            <!-- Its own row, so the grip never covers the content or its scroll bar. -->
-            <Border Name="PART_Grip" Grid.Row="2" Width="16" Height="16" Margin="0,0,4,4"
-                    HorizontalAlignment="Right"
-                    Background="Transparent" Cursor="BottomRightCorner">
-              <Path Data="M12 4L4 12M12 8l-4 4" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.2" StrokeLineCap="Round" />
-            </Border>
-          </Grid>
-        </Grid>
-      </ControlTemplate>
-    </Setter>
-  </Style>
-
   <Style Selector="TabControl.settings">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Padding" Value="0" />

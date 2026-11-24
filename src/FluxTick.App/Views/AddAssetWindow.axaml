@@ -7,7 +7,5 @@
                   Title="{Binding Title}"
                   Icon="/Assets/fluxtick.png">
 
-  <views:ToolWindowFrame Title="{Binding Title}">
-    <views:AddAssetView />
-  </views:ToolWindowFrame>
+  <views:AddAssetView />
 </views:ToolWindow>
