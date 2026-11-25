@@ -164,6 +164,17 @@ public sealed class MarketDataService : IAsyncDisposable
     private readonly ILogger<MarketDataService> _logger;
 
     /// <summary>
+    /// Keeps the prices that came in and gives them back to the charts.
+    /// </summary>
+    private readonly IQuoteHistoryStore _history;
+
+    /// <summary>
+    /// Whether stored prices are read by the charts: the user keeps history, and the store is not the empty one. It is set
+    /// when settings are applied.
+    /// </summary>
+    private volatile bool _historyEnabled;
+
+    /// <summary>
     /// Guards the mutable state below.
     /// </summary>
     private readonly Lock _gate = new();
@@ -239,16 +250,21 @@ public sealed class MarketDataService : IAsyncDisposable
     /// <param name="options">
     /// Optional tuning options.
     /// </param>
+    /// <param name="history">
+    /// Where prices are kept between runs; none keeps nothing.
+    /// </param>
     public MarketDataService(
         ProviderRegistry registry,
         ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
-        MarketDataServiceOptions? options = null)
+        MarketDataServiceOptions? options = null,
+        IQuoteHistoryStore? history = null)
     {
         _registry = registry;
         _loggerFactory = loggerFactory;
         _timeProvider = timeProvider;
         _options = options ?? new MarketDataServiceOptions();
+        _history = history ?? NullQuoteHistoryStore.Instance;
         _logger = loggerFactory.CreateLogger<MarketDataService>();
         _healthTimer = timeProvider.CreateTimer(
             _ => OnHealthTick(),
@@ -394,6 +410,8 @@ public sealed class MarketDataService : IAsyncDisposable
                 return;
             }
 
+            ConfigureHistory(settings.History);
+
             var desired = new Dictionary<string, IReadOnlyDictionary<string, string>>();
             foreach (var descriptor in _registry.Descriptors.Where(settings.IsProviderEnabled))
             {
@@ -428,6 +446,19 @@ public sealed class MarketDataService : IAsyncDisposable
         RaiseSnapshots(snapshots);
         EnqueueStatus(announced);
         routingFailure?.Throw();
+    }
+
+    /// <summary>
+    /// Applies the user's choice of whether prices are stored for the charts and for how long. It takes effect for the
+    /// prices that come in and the charts that are loaded from now on; a chart that is already on screen stays as it is.
+    /// </summary>
+    /// <param name="settings">
+    /// The history settings.
+    /// </param>
+    public void ConfigureHistory(HistorySettings settings)
+    {
+        _history.Configure(settings.Enabled, settings.Retention);
+        _historyEnabled = settings.Enabled && _history is not NullQuoteHistoryStore;
     }
 
     /// <inheritdoc />
@@ -849,20 +880,21 @@ public sealed class MarketDataService : IAsyncDisposable
     /// </param>
     private void SeedEmptySeries(bool failedOnly = false)
     {
-        List<(AssetState State, IHistoryProvider History)> work = [];
+        List<(AssetState State, IHistoryProvider? History)> work = [];
         var now = _timeProvider.GetUtcNow();
         lock (_gate)
         {
             foreach (var state in _assets.Values)
             {
+                // A source without history of its own still has the prices that were stored, if the user keeps them.
                 if (state is { Seeded: false, Seeding: false }
                     && (!failedOnly || state.SeedFailures is > 0 and < MaxTimerSeedRetries)
                     && state.NextSeedAttempt <= now
                     && _slots.TryGetValue(state.Asset.ProviderId, out var slot)
-                    && slot.Provider is IHistoryProvider history)
+                    && (slot.Provider is IHistoryProvider || _historyEnabled))
                 {
                     state.Seeding = true;
-                    work.Add((state, history));
+                    work.Add((state, slot.Provider as IHistoryProvider));
                 }
             }
         }
@@ -880,32 +912,67 @@ public sealed class MarketDataService : IAsyncDisposable
     /// The instrument state.
     /// </param>
     /// <param name="history">
-    /// The provider to load from.
+    /// The provider to load from, or <see langword="null"/> for a source that has none; the stored prices are still used.
+    /// The source is asked only for what the stored prices of the last hour do not cover.
     /// </param>
     /// <returns>
     /// A task that completes when seeding is done.
     /// </returns>
-    private async Task SeedAsync(AssetState state, IHistoryProvider history)
+    private async Task SeedAsync(AssetState state, IHistoryProvider? history)
     {
         AssetSnapshot? snapshot = null;
+        IReadOnlyList<PricePoint> remote = [];
         try
         {
-            var points = await history.GetHistoryAsync(state.Asset).ConfigureAwait(false);
+            var now = _timeProvider.GetUtcNow();
+            var from = now - state.Series.Window;
+            var local = _historyEnabled
+                ? await ReadStoredAsync(state.Asset.Id, from, now).ConfigureAwait(false)
+                : [];
+            Exception? failure = null;
+            if (history is not null && !HistoryCoverage.IsComplete(local, from, now, HistoryCoverage.GapThreshold(HistoryRangeSpec.For(HistoryRange.Hour).Bucket)))
+            {
+                try
+                {
+                    remote = await history.GetHistoryAsync(state.Asset).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // What was stored still makes a chart while the source is out of reach.
+                    failure = ex;
+                    _logger.LogWarning(ex, "Could not load history for {AssetId}", state.Asset.Id);
+                }
+            }
+
+            // Of two prices in the same bucket the later one wins, and of two at the same time the stored one, which was seen.
+            IReadOnlyList<PricePoint> points = local.Count == 0 ? remote : [.. remote, .. local];
             lock (_gate)
             {
-                state.SeedFailures = 0;
-                state.NextSeedAttempt = default;
-                if (points.Count == 0 && ++state.EmptyHistoryAnswers >= MaxEmptyHistoryAnswers)
+                if (failure is null)
                 {
-                    // A source without history, or a market without data today, would otherwise be asked again with every
-                    // settings change; a few empty answers in a row are taken as the answer.
-                    state.Seeded = true;
+                    state.SeedFailures = 0;
+                    state.NextSeedAttempt = default;
+                    if (points.Count == 0 && ++state.EmptyHistoryAnswers >= MaxEmptyHistoryAnswers)
+                    {
+                        // A source without history, or a market without data today, would otherwise be asked again with every
+                        // settings change; a few empty answers in a row are taken as the answer.
+                        state.Seeded = true;
+                    }
+                }
+                else
+                {
+                    // Asking again with every route and every tick of the health timer would hammer a source that keeps
+                    // failing: wait longer after each failure, up to a cap.
+                    state.SeedFailures++;
+                    state.NextSeedAttempt = now + SeedRetryWait(state.SeedFailures);
                 }
 
                 if (points.Count > 0 && _assets.ContainsKey(state.Asset.Id))
                 {
                     var latest = state.Latest;
-                    state.Seeded = true;
+
+                    // Seeded from what was stored alone, the chart is asked for again when the source answers.
+                    state.Seeded = failure is null;
                     state.Series.Seed(points);
                     if (latest is not null)
                     {
@@ -941,6 +1008,67 @@ public sealed class MarketDataService : IAsyncDisposable
         if (snapshot is not null)
         {
             RaiseSnapshot(snapshot);
+        }
+
+        await StoreFetchedAsync(state.Asset.Id, remote).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads the stored prices of an instrument. A store that cannot be read is logged and counts as empty, so that a
+    /// chart still gets what the source has.
+    /// </summary>
+    /// <param name="assetId">
+    /// The instrument.
+    /// </param>
+    /// <param name="from">
+    /// The start of the time range.
+    /// </param>
+    /// <param name="to">
+    /// The end of the time range.
+    /// </param>
+    /// <returns>
+    /// The prices, oldest first; empty when there are none.
+    /// </returns>
+    private async Task<IReadOnlyList<PricePoint>> ReadStoredAsync(AssetId assetId, DateTimeOffset from, DateTimeOffset to)
+    {
+        try
+        {
+            return await _history.ReadAsync(assetId, from, to, _rangeLoadsCancellation.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogWarning(ex, "Could not read the stored history of {AssetId}", assetId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Adds what a source answered to the stored prices, so that the same time range is not asked for again next time.
+    /// A store that cannot take it is logged and the answer is still used for the chart.
+    /// </summary>
+    /// <param name="assetId">
+    /// The instrument.
+    /// </param>
+    /// <param name="points">
+    /// The prices the source answered with.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the prices are stored.
+    /// </returns>
+    private async Task StoreFetchedAsync(AssetId assetId, IReadOnlyList<PricePoint> points)
+    {
+        if (!_historyEnabled || points.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _history.MergeAsync(assetId, points, _rangeLoadsCancellation.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogWarning(ex, "Could not store the history of {AssetId}", assetId);
         }
     }
 
@@ -1252,29 +1380,48 @@ public sealed class MarketDataService : IAsyncDisposable
     private async Task SeedRangeAsync(AssetState state, RangeSeed seed, IRangeHistoryProvider history, SemaphoreSlim gate)
     {
         AssetSnapshot? snapshot = null;
+        IReadOnlyList<PricePoint> remote = [];
         var superseded = false;
         try
         {
             IReadOnlyList<PricePoint> points;
             var cancellationToken = _rangeLoadsCancellation.Token;
-            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+
+            // The stored prices come first: when they reach across the whole window, the source is not asked at all.
+            var spec = HistoryRangeSpec.For(seed.Range);
+            var now = _timeProvider.GetUtcNow();
+            var from = now - spec.Window;
+            var local = _historyEnabled
+                ? await ReadStoredAsync(state.Asset.Id, from, now).ConfigureAwait(false)
+                : [];
+            if (HistoryCoverage.IsComplete(local, from, now, HistoryCoverage.GapThreshold(spec.Bucket)))
             {
-                // The range may have changed while the load waited for its turn; there is nothing to ask for then.
-                lock (_gate)
+                points = local;
+            }
+            else
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
                 {
-                    if (_range != seed.Range || !ReferenceEquals(state.Range, seed))
+                    // The range may have changed while the load waited for its turn; there is nothing to ask for then.
+                    lock (_gate)
                     {
-                        superseded = true;
-                        return;
+                        if (_range != seed.Range || !ReferenceEquals(state.Range, seed))
+                        {
+                            superseded = true;
+                            return;
+                        }
                     }
+
+                    remote = await history.GetHistoryAsync(state.Asset, seed.Range, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    gate.Release();
                 }
 
-                points = await history.GetHistoryAsync(state.Asset, seed.Range, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                gate.Release();
+                // Of two prices in the same bucket the later one wins, and of two at the same time the stored one.
+                points = local.Count == 0 ? remote : [.. remote, .. local];
             }
 
             lock (_gate)
@@ -1373,6 +1520,8 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             RaiseSnapshot(snapshot);
         }
+
+        await StoreFetchedAsync(state.Asset.Id, remote).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1496,6 +1645,7 @@ public sealed class MarketDataService : IAsyncDisposable
             // dropped as older until that time came.
             var pointTime = quote.Timestamp - received > MaxTradeTimeAhead ? received : quote.Timestamp;
             state.Series.Add(quote.Price, pointTime);
+            _history.Record(quote.AssetId, quote.Price, pointTime);
             foreach (var seed in state.RangeSeeds.Values)
             {
                 seed.Series.Add(quote.Price, pointTime);
