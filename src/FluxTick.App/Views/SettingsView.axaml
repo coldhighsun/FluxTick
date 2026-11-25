@@ -161,6 +161,25 @@
                 </Grid>
               </StackPanel>
             </Border>
+            <TextBlock Text="{loc:T Settings_SectionHistory}" Classes="section" Margin="2,6,0,6" />
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_HistoryEnabled}" />
+                    <TextBlock Text="{loc:T Settings_HistoryEnabledHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ToggleSwitch Grid.Column="1" IsChecked="{Binding HistoryEnabled}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" Classes="dependent" IsEnabled="{Binding HistoryEnabled}">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:T Settings_HistoryRetention}" />
+                    <TextBlock Text="{loc:T Settings_HistoryRetentionHint}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" ItemTemplate="{DynamicResource EnumLabelTemplate}" ItemsSource="{Binding HistoryRetentions}" SelectedItem="{Binding SelectedHistoryRetention}" Width="140" />
+                </Grid>
+              </StackPanel>
+            </Border>
             <TextBlock Text="{loc:T Settings_SectionWindow}" Classes="section" Margin="2,6,0,6" />
             <Border Classes="card">
               <StackPanel Spacing="8">

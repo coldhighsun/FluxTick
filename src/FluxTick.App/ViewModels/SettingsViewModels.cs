@@ -1570,6 +1570,23 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
     public partial bool IsRecordingBossKey { get; set; }
 
     /// <summary>
+    /// Gets the times stored prices can be kept for.
+    /// </summary>
+    public IReadOnlyList<HistoryRetention> HistoryRetentions { get; } = Enum.GetValues<HistoryRetention>();
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the prices that come in are stored, so that charts can start from them.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HistoryEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how long stored prices are kept.
+    /// </summary>
+    [ObservableProperty]
+    public partial HistoryRetention SelectedHistoryRetention { get; set; } = HistoryRetention.Year;
+
+    /// <summary>
     /// Gets the currencies the total of the holdings can be shown in.
     /// </summary>
     public IReadOnlyList<string> BaseCurrencies { get; } = CurrencyCodes.Supported;
@@ -1826,6 +1843,8 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             CloseToTray = current.General.CloseToTray;
             ShowDockIcon = current.General.ShowDockIcon;
             AlertSound = current.General.AlertSound;
+            HistoryEnabled = current.History.Enabled;
+            SelectedHistoryRetention = HistoryRetentionChoices.Nearest(current.History.RetentionDays);
             BossKey = _settings.Current.General.BossKey;
             IsRecordingBossKey = false;
             BaseCurrency = CurrencyCodes.EffectiveBase(current.General.BaseCurrency, Loc.IsChinese(Loc.Instance.Language));
@@ -1912,6 +1931,22 @@ public sealed partial class SettingsViewModel : LocalizedViewModel
             }
         }
     }
+
+    /// <summary>
+    /// Saves whether prices are stored.
+    /// </summary>
+    /// <param name="value">
+    /// The new value.
+    /// </param>
+    partial void OnHistoryEnabledChanged(bool value) => SaveSetting(s => s.History.Enabled = value);
+
+    /// <summary>
+    /// Saves how long stored prices are kept.
+    /// </summary>
+    /// <param name="value">
+    /// The new choice.
+    /// </param>
+    partial void OnSelectedHistoryRetentionChanged(HistoryRetention value) => SaveSetting(s => s.History.RetentionDays = (int)value);
 
     /// <summary>
     /// Saves the start-minimized flag.

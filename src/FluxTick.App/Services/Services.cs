@@ -66,6 +66,11 @@ public static class AppPaths
     public static string ExchangeRatesFile => Path.Combine(DataDirectory, "rates.json");
 
     /// <summary>
+    /// Gets the directory that the stored prices of the charts are kept in.
+    /// </summary>
+    public static string HistoryDirectory => Path.Combine(DataDirectory, "history");
+
+    /// <summary>
     /// Gets the directory that the log files are kept in.
     /// </summary>
     public static string LogDirectory => Path.Combine(DataDirectory, "logs");

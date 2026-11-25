@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using FluxTick.Abstractions;
 using FluxTick.App.ViewModels;
 using FluxTick.Core.Application;
+using FluxTick.Core.Domain;
 using FluxTick.Core.Infrastructure;
 using FluxTick.Providers.Binance;
 using FluxTick.Providers.Bitget;
@@ -173,6 +174,15 @@ public static class AppHost
 
         services.AddFluxTickCore();
         services.AddSettingsStore(AppPaths.SettingsFile(demo));
+
+        // The demo mode keeps nothing on disk besides its own settings: its prices are simulated and would only fill the
+        // folder of the real history.
+        services.AddSingleton<IQuoteHistoryStore>(sp => demo
+            ? NullQuoteHistoryStore.Instance
+            : new FileQuoteHistoryStore(
+                AppPaths.HistoryDirectory,
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILogger<FileQuoteHistoryStore>>()));
 
         // Data sources: add one line per provider. Nothing else in the app needs to change.
         services.AddMarketDataProvider<BinanceProviderFactory>();

@@ -1666,6 +1666,7 @@ public sealed partial class MainViewModel : LocalizedViewModel
             // as they were; applying those again would route every source and raise every card for nothing.
             var settings = _settings.Current;
             var key = MarketKeyOf(settings);
+            _market.ConfigureHistory(settings.History);
             _market.SetChartRange(settings.Appearance.ChartRange);
             if (key != _appliedMarketKey)
             {
