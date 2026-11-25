@@ -275,6 +275,11 @@ dotnet test --solution FluxTick.slnx
 歡迎提交 Issue 和 Pull Request。請隨變更一併新增或更新測試。新增資料來源是最有價值的貢獻，
 請從 [docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md)（英文）開始。
 
+## 支持本專案
+
+FluxTick 免費且開源。如果它對你有幫助，歡迎透過
+[GitHub Sponsors](https://github.com/sponsors/coldhighsun) 支持專案的開發。為儲存庫點個 Star、提交 Issue 同樣是很大的幫助。
+
 ## 授權條款
 
 [MIT](LICENSE)
