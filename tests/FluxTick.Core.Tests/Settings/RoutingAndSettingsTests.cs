@@ -32,6 +32,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
         [typeof(AppearanceSettings)] = typeof(AppearanceFile),
         [typeof(GeneralSettings)] = typeof(GeneralFile),
         [typeof(UpdateSettings)] = typeof(UpdatesFile),
+        [typeof(HistorySettings)] = typeof(HistoryFile),
         [typeof(WindowSettings)] = typeof(WindowFile),
     };
 
@@ -958,6 +959,7 @@ public sealed class RoutingAndSettingsTests : IDisposable
     [InlineData(typeof(AppearanceSettings), typeof(AppearanceFile))]
     [InlineData(typeof(GeneralSettings), typeof(GeneralFile))]
     [InlineData(typeof(UpdateSettings), typeof(UpdatesFile))]
+    [InlineData(typeof(HistorySettings), typeof(HistoryFile))]
     [InlineData(typeof(WindowSettings), typeof(WindowFile))]
     public void SettingsFile_HasEveryWrittenSetting(Type settingsType, Type fileType)
     {

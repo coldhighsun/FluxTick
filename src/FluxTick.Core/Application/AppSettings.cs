@@ -427,6 +427,40 @@ public sealed class UpdateSettings
 }
 
 /// <summary>
+/// Persisted settings of the stored price history that the charts start from.
+/// </summary>
+public sealed class HistorySettings
+{
+    /// <summary>
+    /// The fewest days prices can be kept for.
+    /// </summary>
+    public const int MinRetentionDays = 1;
+
+    /// <summary>
+    /// The most days prices can be kept for.
+    /// </summary>
+    public const int MaxRetentionDays = 3650;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the prices that come in are stored on disk, and the charts read what was
+    /// stored. Turning it off leaves the files in place until their retention is over.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many days a stored price is kept, from <see cref="MinRetentionDays"/> to
+    /// <see cref="MaxRetentionDays"/>.
+    /// </summary>
+    public int RetentionDays { get; set; } = 365;
+
+    /// <summary>
+    /// Gets how long a stored price is kept.
+    /// </summary>
+    [JsonIgnore]
+    public TimeSpan Retention => TimeSpan.FromDays(RetentionDays);
+}
+
+/// <summary>
 /// Persisted general settings.
 /// </summary>
 public sealed class GeneralSettings
@@ -557,6 +591,11 @@ public sealed class AppSettings
     public UpdateSettings Updates { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the stored price history settings.
+    /// </summary>
+    public HistorySettings History { get; set; } = new();
+
+    /// <summary>
     /// Gets or sets the window geometry.
     /// </summary>
     public WindowSettings Window { get; set; } = new();
@@ -652,6 +691,13 @@ public sealed class AppSettings
                 General.BossKey = spelled;
                 changed = true;
             }
+        }
+
+        var retentionDays = Math.Clamp(History.RetentionDays, HistorySettings.MinRetentionDays, HistorySettings.MaxRetentionDays);
+        if (retentionDays != History.RetentionDays)
+        {
+            History.RetentionDays = retentionDays;
+            changed = true;
         }
 
         return changed;
