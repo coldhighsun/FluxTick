@@ -48,6 +48,11 @@ internal sealed class SettingsFile
     public UpdatesFile? Updates { get; init; }
 
     /// <summary>
+    /// Gets or sets the stored price history settings.
+    /// </summary>
+    public HistoryFile? History { get; init; }
+
+    /// <summary>
     /// Gets or sets the window geometry.
     /// </summary>
     public WindowFile? Window { get; init; }
@@ -87,6 +92,7 @@ internal sealed class SettingsFile
         settings.Appearance = (Appearance ?? new()).ToSettings(ref repaired);
         settings.General = (General ?? new()).ToSettings(ref repaired);
         settings.Updates = (Updates ?? new()).ToSettings();
+        settings.History = (History ?? new()).ToSettings();
         settings.Window = (Window ?? new()).ToSettings();
         settings.Repaired = repaired;
         return settings;
@@ -580,6 +586,38 @@ internal sealed class UpdatesFile
     /// The update settings.
     /// </returns>
     public UpdateSettings ToSettings() => new() { AutoCheck = AutoCheck ?? new UpdateSettings().AutoCheck };
+}
+
+/// <summary>
+/// The stored price history settings as they are read.
+/// </summary>
+internal sealed class HistoryFile
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether prices are stored.
+    /// </summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets how many days a price is kept.
+    /// </summary>
+    public int? RetentionDays { get; set; }
+
+    /// <summary>
+    /// Converts what was read to history settings.
+    /// </summary>
+    /// <returns>
+    /// The history settings.
+    /// </returns>
+    public HistorySettings ToSettings()
+    {
+        var defaults = new HistorySettings();
+        return new HistorySettings
+        {
+            Enabled = Enabled ?? defaults.Enabled,
+            RetentionDays = RetentionDays ?? defaults.RetentionDays,
+        };
+    }
 }
 
 /// <summary>
