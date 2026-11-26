@@ -183,6 +183,17 @@ dotnet run --project src/FluxTick.App
 dotnet run --project src/FluxTick.App -- --demo
 ```
 
+### 檢視已儲存的歷史報價
+
+歷史報價以二進位檔案儲存在 `%APPDATA%\FluxTick\history`（其他系統為 `~/.config/FluxTick/history`）。`--dump-history` 會把其中一個檔案以 CSV（`time_utc,price`）輸出並結束，不會啟動應用程式；不帶檔案參數時，列出歷史檔案及其記錄數。檔案參數可以是路徑，也可以是相對歷史資料夾的路徑。
+
+```bash
+dotnet run --project src/FluxTick.App -- --dump-history
+dotnet run --project src/FluxTick.App -- --dump-history binance/q-BTCUSDT.bin > btc.csv
+```
+
+已安裝的版本同樣支援：`FluxTick.exe --dump-history <檔案>`。
+
 ### 建置單檔可執行程式
 
 ```bash
