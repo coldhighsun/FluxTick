@@ -201,6 +201,28 @@ public class StoredHistoryTests
     }
 
     /// <summary>
+    /// Verifies that a range whose source fails is still drawn from the stored prices.
+    /// </summary>
+    [Fact]
+    public async Task SetChartRange_SourceFailsWithStoredPrices_DrawsStoredPrices()
+    {
+        var store = new MemoryStore();
+        var now = _time.GetUtcNow();
+        store.Stored.AddRange([new PricePoint(now.AddHours(-23), 5m), new PricePoint(now.AddHours(-22), 6m)]);
+        var factory = new StoreFactory(now, supportsDay: true) { RangeHook = () => throw new HttpRequestException("offline") };
+        await using var service = CreateService(factory, store);
+        service.SetChartRange(HistoryRange.Day);
+
+        await service.ApplyAsync(SettingsFor());
+        await WaitUntilAsync(() => service.GetSnapshots().Single().Timeline?.CoversRange == true);
+
+        var snapshot = service.GetSnapshots().Single();
+        snapshot.Sparkline.Should().Equal(5m, 6m);
+        snapshot.Timeline!.CoversRange.Should().BeTrue();
+        store.MergedPrices().Any(p => p.SequenceEqual([10m, 20m, 30m])).Should().BeFalse();
+    }
+
+    /// <summary>
     /// Creates the service under test.
     /// </summary>
     /// <param name="factory">

@@ -4,6 +4,7 @@ using System.Text;
 using FluxTick.Abstractions;
 using FluxTick.Core.Domain;
 using Microsoft.Extensions.Logging;
+using ThrottledLogging;
 
 namespace FluxTick.Core.Infrastructure;
 
@@ -40,6 +41,12 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
     /// The longest name of a file made from a symbol; a longer symbol is named by its hash.
     /// </summary>
     private const int MaxFileNameLength = 100;
+
+    /// <summary>
+    /// The shortest time between two log messages about a file that could not be written; a disk that is full or locked
+    /// fails with every flush, for every instrument.
+    /// </summary>
+    private static readonly TimeSpan WriteFailureLogInterval = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// How often waiting prices are written.
@@ -212,7 +219,7 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.LogWarning(ex, "Could not store history for {Asset}.", assetId);
+            logger.LogWarningThrottled("history:write", WriteFailureLogInterval, ex, "Could not store history for {Asset}.", assetId);
         }
         finally
         {
@@ -267,7 +274,7 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    logger.LogWarning(ex, "Could not write history for {Asset}.", group.Key);
+                    logger.LogWarningThrottled("history:write", WriteFailureLogInterval, ex, "Could not write history for {Asset}.", group.Key);
                 }
             }
         }
@@ -431,8 +438,10 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
         => Path.Combine(directory, FileNamePart(assetId.ProviderId), $"q-{FileNamePart(assetId.Symbol)}.bin");
 
     /// <summary>
-    /// Turns an identifier into text that is safe in a file name on every platform: letters, digits, <c>-</c> and
-    /// <c>_</c> stay, everything else becomes <c>%XX</c> per UTF-8 byte; a long result is replaced by a hash.
+    /// Turns an identifier into text that is safe in a file name on every platform, including those whose file system
+    /// ignores the case of letters: lower-case letters, digits, <c>-</c> and <c>_</c> stay, an upper-case letter becomes
+    /// <c>~</c> and its lower-case form, and everything else becomes <c>%XX</c> per UTF-8 byte, so that two identifiers
+    /// that differ only in case never share a file. A long result is replaced by a hash.
     /// </summary>
     /// <param name="value">
     /// The identifier.
@@ -445,7 +454,11 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
         var builder = new StringBuilder(value.Length);
         foreach (var b in Encoding.UTF8.GetBytes(value))
         {
-            if (b is (>= (byte)'a' and <= (byte)'z') or (>= (byte)'A' and <= (byte)'Z') or (>= (byte)'0' and <= (byte)'9') or (byte)'-' or (byte)'_')
+            if (b is >= (byte)'A' and <= (byte)'Z')
+            {
+                builder.Append('~').Append((char)(b + ('a' - 'A')));
+            }
+            else if (b is (>= (byte)'a' and <= (byte)'z') or (>= (byte)'0' and <= (byte)'9') or (byte)'-' or (byte)'_')
             {
                 builder.Append((char)b);
             }

@@ -1035,6 +1035,12 @@ public sealed class MarketDataService : IAsyncDisposable
         {
             return await _history.ReadAsync(assetId, from, to, _rangeLoadsCancellation.Token).ConfigureAwait(false);
         }
+        catch (Exception ex) when (ex is not OutOfMemoryException && (_disposed || _rangeLoadsCancellation.IsCancellationRequested))
+        {
+            // The service is closing, and so is the store; there is nothing to report.
+            _logger.LogDebug(ex, "Dropped the read of the stored history of {AssetId} on shutdown", assetId);
+            return [];
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _logger.LogWarning(ex, "Could not read the stored history of {AssetId}", assetId);
@@ -1381,6 +1387,7 @@ public sealed class MarketDataService : IAsyncDisposable
     {
         AssetSnapshot? snapshot = null;
         IReadOnlyList<PricePoint> remote = [];
+        Exception? failure = null;
         var superseded = false;
         try
         {
@@ -1415,6 +1422,12 @@ public sealed class MarketDataService : IAsyncDisposable
 
                     remote = await history.GetHistoryAsync(state.Asset, seed.Range, cancellationToken).ConfigureAwait(false);
                 }
+                catch (Exception ex) when (ex is not OutOfMemoryException && local.Count >= 2 && !_disposed)
+                {
+                    // What was stored still makes a chart while the source is out of reach; the load is tried again later.
+                    failure = ex;
+                    _logger.LogWarning(ex, "Could not load the {Range} history for {AssetId}", seed.Range, state.Asset.Id);
+                }
                 finally
                 {
                     gate.Release();
@@ -1431,8 +1444,17 @@ public sealed class MarketDataService : IAsyncDisposable
                     return;
                 }
 
-                seed.Failures = 0;
-                seed.NextAttempt = default;
+                if (failure is null)
+                {
+                    seed.Failures = 0;
+                    seed.NextAttempt = default;
+                }
+                else
+                {
+                    seed.Failures++;
+                    seed.NextAttempt = _timeProvider.GetUtcNow() + SeedRetryWait(seed.Failures);
+                }
+
                 if (points.Count < 2 && ++seed.EmptyAnswers >= MaxEmptyHistoryAnswers)
                 {
                     seed.Seeded = true;
@@ -1456,7 +1478,9 @@ public sealed class MarketDataService : IAsyncDisposable
                 if (points.Count >= 2 && _assets.ContainsKey(state.Asset.Id))
                 {
                     var latest = state.Latest;
-                    seed.Seeded = true;
+
+                    // Drawn from what was stored alone, the range is loaded again when the source answers.
+                    seed.Seeded = failure is null;
                     seed.HasHistory = true;
                     seed.HasHole = false;
                     seed.EmptyAnswers = 0;

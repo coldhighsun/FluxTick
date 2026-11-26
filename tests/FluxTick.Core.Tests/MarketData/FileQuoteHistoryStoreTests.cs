@@ -262,6 +262,29 @@ public sealed class FileQuoteHistoryStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Checks that symbols that differ only in case get files that differ in more than case, as a file system that ignores
+    /// case would otherwise give them one file.
+    /// </summary>
+    [Fact]
+    public async Task Record_SymbolsDifferingInCase_StayApart()
+    {
+        await using var store = Create();
+        var upper = new AssetId("p", "ABC");
+        var lower = new AssetId("p", "abc");
+        var t = _time.GetUtcNow().AddMinutes(-2);
+        store.Record(upper, 1m, t);
+        store.Record(lower, 2m, t);
+        await store.FlushAsync(includeOpen: true);
+
+        var files = Directory.GetFiles(_directory, "*.bin", SearchOption.AllDirectories);
+
+        files.Should().HaveCount(2);
+        files.Select(f => f.ToLowerInvariant()).Distinct().Should().HaveCount(2);
+        (await store.ReadAsync(upper, DateTimeOffset.MinValue, DateTimeOffset.MaxValue)).Select(p => p.Price).Should().Equal(1m);
+        (await store.ReadAsync(lower, DateTimeOffset.MinValue, DateTimeOffset.MaxValue)).Select(p => p.Price).Should().Equal(2m);
+    }
+
+    /// <summary>
     /// Checks that a very long symbol is named by a hash.
     /// </summary>
     [Fact]
