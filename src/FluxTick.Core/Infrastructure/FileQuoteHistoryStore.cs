@@ -30,7 +30,7 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
     /// <summary>
     /// The size of one record in a file.
     /// </summary>
-    private const int RecordSize = 24;
+    internal const int RecordSize = 24;
 
     /// <summary>
     /// The most prices waiting to be written; when the disk is unusable for long, the oldest are dropped.
@@ -633,7 +633,7 @@ public sealed class FileQuoteHistoryStore(string directory, TimeProvider timePro
     /// <returns>
     /// <see langword="true"/> when the record holds a time and a price that can be used.
     /// </returns>
-    private static bool TryDecode(ReadOnlySpan<byte> record, out PricePoint point)
+    internal static bool TryDecode(ReadOnlySpan<byte> record, out PricePoint point)
     {
         point = default;
         var millis = BinaryPrimitives.ReadInt64LittleEndian(record);
