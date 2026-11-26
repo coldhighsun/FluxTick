@@ -201,6 +201,17 @@ Try it without network access:
 dotnet run --project src/FluxTick.App -- --demo
 ```
 
+### Inspect stored price history
+
+The price history is kept in binary files under `%APPDATA%\FluxTick\history` (`~/.config/FluxTick/history` elsewhere). `--dump-history` prints one of them as CSV (`time_utc,price`) and exits without starting the app; with no file it lists the history files and their record counts. The file is a path, or relative to the history folder.
+
+```bash
+dotnet run --project src/FluxTick.App -- --dump-history
+dotnet run --project src/FluxTick.App -- --dump-history binance/q-BTCUSDT.bin > btc.csv
+```
+
+An installed copy takes the same option: `FluxTick.exe --dump-history <file>`.
+
 ### Build a single-file executable
 
 ```bash
